@@ -1,0 +1,55 @@
+name: Publica Taifas
+
+on:
+  push:
+    paths:
+      - '**.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publica:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Despacheteaza arhiva
+        run: |
+          ZIP=$(ls *.zip 2>/dev/null | head -n 1 || true)
+          if [ -n "$ZIP" ]; then
+            unzip -o "$ZIP" -d .
+            rm -f "$ZIP"
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add -A
+            git commit -m "Taifas: fisiere despachetate din $ZIP" || echo "nimic nou"
+            git push
+          else
+            echo "Nicio arhiva .zip, public ce e deja in repo."
+          fi
+
+      - name: Pregateste site-ul
+        run: |
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' ./ _site/
+          ls _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
