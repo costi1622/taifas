@@ -1,0 +1,85 @@
+{
+  "name": "Taifas",
+  "short_name": "Taifas",
+  "id": "taifas-app",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0e0c12",
+  "theme_color": "#0e0c12",
+  "description": "Taifas — conversații cu personajele tale.",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ultima conversație",
+      "short_name": "Ultima",
+      "url": "./?go=last",
+      "icons": [
+        {
+          "src": "sc-last.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Favorita",
+      "short_name": "Favorita",
+      "url": "./?go=fav",
+      "icons": [
+        {
+          "src": "sc-fav.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Întreabă-le pe toate",
+      "short_name": "Scrie tuturor",
+      "url": "./?go=bcast",
+      "icons": [
+        {
+          "src": "sc-all.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    },
+    {
+      "name": "Personaj nou",
+      "short_name": "Personaj nou",
+      "url": "./?go=new",
+      "icons": [
+        {
+          "src": "sc-new.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    }
+  ]
+}
