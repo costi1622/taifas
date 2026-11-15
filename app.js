@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.6';
+const APP_VER = '10.6.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1095,10 +1095,26 @@ function exposureMode(text){
   if(/(?:topless|bare breasts|bare chest|without a top|shirtless|f[ăa]r[ăa] sutien|s[âa]nii? goi|ț[âa]țele goale|t[âa]țele goale|bustul gol|pieptul gol|s[âa]nii? la vedere|bustul la vedere|ar[ăa]t[ăa]-?mi s[âa]nii?|arat[ăa]-?mi bustul|poz[ăa][^.!?]{0,30}(?:s[âa]nii?|bustul|pieptul)[^.!?]{0,25}(?:gol|goi|goale|f[ăa]r[ăa] sutien))/i.test(t)) return 'topless';
   return 'clothed';
 }
+// Extrage vârsta explicită din câmpurile personajului; acceptă română și engleză.
+// Este folosită atât de validarea profilului, cât și de verificarea portretului.
+function declaredCharacterAge(c){
+  const direct = Number(c && c.age);
+  if(Number.isFinite(direct) && direct >= 1 && direct <= 120) return direct;
+  const t = [c && c.age, c && c.aspect, c && c.look, c && c.physEn, c && c.persona].filter(Boolean).join(' ');
+  const patterns = [
+    /\b(\d{1,3})\s*(?:de\s*)?(?:ani|years?\s+old)\b/i,
+    /\b(\d{1,3})\s*[- ]year[- ]old\b/i,
+    /\b(?:aged?|around|about|approximately|în\s+vârstă\s+de)\s*(\d{1,3})\b/i,
+    /\b(?:in her|in his)\s+(2[1-9]|[3-9]\d)s\b/i
+  ];
+  for(const re of patterns){ const m = t.match(re); if(m) return Number(m[1]); }
+  return 0;
+}
+function ageProfileKey(c){ return [c && c.age, c && c.aspect, c && c.look, c && c.physEn, c && c.persona].map(x => String(x || '').trim()).join('|'); }
 function clearlyAdultCharacter(c){
-  if(looksYoung(c)) return false;   // 9.94 (D): aspectul contează, nu doar descrierea
-  const t = [c && c.name, c && c.persona, c && c.look, c && c.aspect, c && c.physEn].filter(Boolean).join(' ');
-  return /\b(adult[aă]?|18\s*(?:\+|ani|years? old)|19\s*(?:ani|years? old)|[2-9]\d\s*(?:ani|years? old)|\d{2}\s+(?:de\s+)?ani|(?:18|[2-9]\d)[ -]year[ -]old|(?:in her|in his)\s+(?:20s|30s|40s|50s|60s|70s|80s|90s)|femeie de \d{2} de ani|b[ăa]rbat de \d{2} de ani)\b/i.test(t);
+  if(looksYoung(c)) return false;
+  const t = [c && c.name, c && c.persona, c && c.look, c && c.aspect, c && c.physEn, c && c.age].filter(Boolean).join(' ');
+  return declaredCharacterAge(c) >= AGE_MIN || /\b(adult[aă]?|18\s*(?:\+|ani|years? old)|(?:in her|in his)\s+(?:20s|30s|40s|50s|60s|70s|80s|90s))\b/i.test(t);
 }
 function photoAsk(ch, exclude){
   const ms = ch.msgs.filter(x => x !== exclude && !x.err && !x.pending && !x.pendingImg);
@@ -2027,7 +2043,9 @@ const warnLine = m => { const a = [m.faceWarn != null ? 'fața ' + m.faceWarn + 
 const AGE_MIN = 21;   // estimarea din telefon greșește cu câțiva ani: pragul e mai sus de 18, intenționat
 async function ageLook(c){
   if(!c || !c.photo) return null;
-  if(c.ageLook && c.ageLook.k === c.photo) return c.ageLook;
+  // Cache-ul depinde și de descriere: schimbarea vârstei/înfățișării invalidează rezultatul vechi.
+  const profileKey = ageProfileKey(c);
+  if(c.ageLook && c.ageLook.k === c.photo && c.ageLook.profileKey === profileKey) return c.ageLook;
   let a = null, txt = null;
   try{ const f = await faceApi(); if(!f.nets.ageGenderNet.isLoaded) await f.nets.ageGenderNet.loadFromUri(FA + 'model');
     const b = await DB.get(c.photo); const u = URL.createObjectURL(b);
@@ -2038,20 +2056,24 @@ async function ageLook(c){
   // face-api ageGenderNet estimează vârsta cu erori mari, mai ales la fețe în vârstă;
   // un rezultat lipsă sau sub 21 nu trebuie să anuleze automat un portret evident matur.
   const fb = c.faceBox && c.faceBox.k === c.photo ? c.faceBox : null;
-  const visualText = [fb && fb.phys, c.aspect, c.look, c.physEn].filter(Boolean).join(' ').toLowerCase();
+  const visualText = [fb && fb.phys, c.age, c.aspect, c.look, c.physEn].filter(Boolean).join(' ').toLowerCase();
+  const declaredAge = declaredCharacterAge(c);
   if(/\b(teen|teenage|adolescent|schoolgirl|schoolboy|young girl|young boy|child|kid|minor|underage|minor-looking)\b/.test(visualText)) txt = 'tânăr';
   const m = visualText.match(/\b(?:aged?|around|about|apparent age[: ]*)\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:de\s*)?(?:ani|years? old)\b|\b(\d{1,2})[- ]year[- ]old\b|\b(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\s*years?\b|\b(\d{2})s\b/);
   const ta = m ? +(m[1] || m[2] || m[3] || m[4] || m[6]) : null;
   if(ta != null && ta < 18) txt = 'tânăr';
   // Indicii vizuale maturi din fișa extrasă din fotografie: utili când predictorul numeric
   // nu poate evalua corect ridurile, textura pielii sau trăsăturile unei persoane în vârstă.
-  const matureVisual = (ta != null && ta >= AGE_MIN) || /\b(elderly|senior|older woman|older man|old woman|old man|elderly female|elderly male|aged woman|aged man|middle[- ]aged|mature[- ]looking|advanced age|old age|wrinkled|deep facial lines|pronounced wrinkles|grey[- ]haired|white[- ]haired|femeie in varsta|barbat in varsta|persoana in varsta|femeie în vârstă|bărbat în vârstă|persoană în vârstă|vârstnic[aă]?|varstnic[aă]?|matur[aă]?)\b/.test(visualText);
-  const hardMinor = txt === 'tânăr' || (a != null && a < 18);
+  // Vârsta declarată explicit (ex. „70 de ani”) este folosită ca indiciu de profil
+  // atunci când predictorul facial nu poate estima corect vârsta unei persoane în vârstă.
+  const matureVisual = (declaredAge >= AGE_MIN) || (ta != null && ta >= AGE_MIN) || /\b(elderly|senior|older woman|older man|old woman|old man|elderly female|elderly male|aged woman|aged man|middle[- ]aged|mature[- ]looking|advanced age|old age|wrinkled|deep facial lines|pronounced wrinkles|grey[- ]haired|white[- ]haired|femeie in varsta|barbat in varsta|persoana in varsta|femeie în vârstă|bărbat în vârstă|persoană în vârstă|vârstnic[aă]?|varstnic[aă]?|matur[aă]?)\b/.test(visualText);
+  const hardMinor = txt === 'tânăr' || (declaredAge > 0 && declaredAge < 18);
+  // Estimarea numerică facială este zgomotoasă; nu poate contrazice singură o fișă clară 21+ și indicii maturi.
   const young = hardMinor || (a != null && a < AGE_MIN && !matureVisual);
-  c.ageLook = {k:c.photo, a, ta, matureVisual, visualAdult:(a != null && a >= AGE_MIN) || matureVisual, young}; saveChars();
+  c.ageLook = {k:c.photo, profileKey, declaredAge, a, ta, matureVisual, visualAdult:(a != null && a >= AGE_MIN) || matureVisual, young}; saveChars();
   return c.ageLook;
 }
-const looksYoung = c => !!(c && c.ageLook && c.ageLook.k === c.photo && c.ageLook.young);
+const looksYoung = c => !!(c && c.ageLook && c.ageLook.k === c.photo && c.ageLook.profileKey === ageProfileKey(c) && c.ageLook.young);
 // (C) tenul: culoarea pielii din portret (obraji) față de cea din poza nouă; pielea din poza nouă se aduce spre ea (cel mult 60%)
 async function skinRef(c){
   if(c.skinRef && c.skinRef.k === c.photo) return c.skinRef.v;
@@ -8685,9 +8707,7 @@ async function generateAdultPortfolioImage(c, exposure, button){
   const ac = new AbortController();
   try{
     if(!clearlyAdultCharacter(c)) throw new Error('Completează în fișa personajului o vârstă adultă explicită.');
-    const ageText = [c.name, c.persona, c.look, c.aspect, c.physEn].filter(Boolean).join(' ');
-    const ageMatch = ageText.match(/\b(\d{2})\s*(?:de\s*)?(?:ani|years? old)\b|\b(?:in her|in his)\s+(2[1-9]|[3-9]\d)s\b/i);
-    const declaredAge = ageMatch ? +(ageMatch[1] || ageMatch[2]) : 0;
+    const declaredAge = declaredCharacterAge(c);
     if(declaredAge < AGE_MIN) throw new Error('Fișa trebuie să declare explicit o vârstă de minimum 21 de ani.');
     const age = await ageLook(c);
     // Acceptă fie estimarea numerică de adult, fie o descriere vizuală matură extrasă
