@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '11.1';
+const APP_VER = '11.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1525,6 +1525,50 @@ document.addEventListener('visibilitychange', () => { if(awakeN > 0 && document.
 const refProg = {lbl:'', i:0, n:0};
 let tfBeNow = '';
 const tfBeRO = () => tfBeNow === 'webgl' ? 'placa video (rapid)' : tfBeNow === 'wasm' ? 'procesor (mai lent)' : tfBeNow === 'cpu' ? 'procesor, fără accelerare (lent)' : 'pornește la prima măsurare';
+/* ═════════ 🧿 11.2 ═════════
+   (1) ✕ pe un reper nu-l mai scoate înainte să existe unul nou: se reface; dacă nu iese unul destul de bun, rămâne cel vechi.
+       Un unghi respins de tine se caută întâi mai strict; dacă nu iese așa, intră unul sub pragul obișnuit (înainte, unghiul dispărea
+       și nu mai revenea nici la „Refă fișa”, pentru că pragul strict rămânea).
+   (2) ✕ și pe pozițiile de corp; ¾ cu toleranță 0,16 (la ¾ silueta se scurtează firesc). O poziție care lipsește cu totul primește cea
+       mai apropiată încercare cu fața bună, marcată ⚠️ și nefolosită la poze până o refaci.
+   (3) ↻ pe fiecare poză din setul-etalon: se reface doar ea, iar nota setului se recalculează.
+   (4) Corpul schimbat („Alt corp”, sau „Adaptează reperele la corpul de acum”): fiecare reper ține minte pentru ce corp a fost făcut.
+       Reperele făcute pentru corpul vechi (fișa feței, portretul de aproape, fișa de corp) se refac cu corpul nou; până atunci rămân
+       cele vechi. Fișa feței și portretul de aproape primesc corpul nou și în text (portretul pornește de la poza de profil, cu corpul vechi). */
+const bodyVer = c => c && c.bodyRev ? c.bodyRev.v || 0 : 0;
+const bodyHint = c => c && c.bodyRev && c.bodyRev.txt ? ` The body is now: ${idCut(c.bodyRev.txt, 400)}. Wherever the frame shows the shoulders, chest or waist, show exactly this body, even where image 1 differs.` : '';
+const sheetStale = c => sheetOf(c).filter(x => (x.bv || 0) !== bodyVer(c)).map(x => x.ang);
+const bsheetStale = c => bsheetOf(c).filter(x => (x.bv || 0) !== bodyVer(c)).map(x => x.pose);
+const closeStale = c => !!(c && c.closeRef && c.closeRef.k === c.photo && c.closeRef.img && (c.closeRef.bv || 0) !== bodyVer(c));
+function bodyRevBump(c, txt, change){ c.bodyRev = {v:bodyVer(c) + 1, txt:txt || '', change:change || '', at:Date.now()}; }
+async function bsheetReject(c, pose, onStep){ return await bsheetGen(c, false, onStep, {only:[pose], redo:true}).catch(() => false); }
+function etalonStats(run){
+  const ok = run.rows.filter(x => x.s != null), avg = f => { const a = ok.map(f).filter(v => v != null); return a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length) : null; };
+  run.score = avg(x => x.s); run.face = avg(x => x.fd != null ? idPct(x.fd) : null); run.body = avg(x => x.bd != null ? bodyPct(x.bd) : null); run.look = avg(x => lookPct(x.lk));
+}
+async function etalonRedo(c, key){
+  if(etalonJob) throw new Error('Setul rulează deja.');
+  if(busy) throw new Error('Așteaptă să se termine poza din conversație.');
+  const runs = etalonOf(c), run = runs[runs.length - 1], E = ETALON.find(x => x[0] === key);
+  if(!run || run.set !== 2 || !E) throw new Error('Rulează întâi setul întreg.');
+  const ac = new AbortController(), rw0 = rwDay().usd; etalonJob = {cid:c.id, ac, i:ETALON.indexOf(E), one:key}; keepAwake(true);
+  try{
+    try{ await lookRefOf(c); }catch(e){}
+    const shot = etalonShot(E[2], run.outfit || await outfitOf(c)), row = {k:key}, t0 = performance.now();
+    try{
+      const r = await renderPerson(c, shot, ac.signal, {kind:'etalon', tag:'etalon', tm:{t0, s:{}}});
+      addUsage(c.id, imgPrice(), 'img', null, 'etalon');
+      row.img = await saveImg(r.blob); row.fd = r.fd != null ? r3n(r.fd) : null; row.bd = r.bd != null ? r3n(r.bd) : null; row.lk = lookLite(r.lk);
+      if(r.np > 0) row.np = r.np; if(r.faceWarn != null) row.fw = r.faceWarn; if(r.bodyWarn != null) row.bw = r.bodyWarn;
+    }catch(e){ if(e.name === 'AbortError') return null; row.err = String(e.message || e).slice(0, 160); }
+    row.ms = Math.round(performance.now() - t0); row.s = etalonScore(row); row.redo = 1;
+    const i = run.rows.findIndex(x => x.k === key), old = i >= 0 ? run.rows[i] : null;
+    if(i >= 0) run.rows[i] = row; else run.rows.splice(ETALON.indexOf(E), 0, row);
+    etalonStats(run); run.usd = Math.round(((run.usd || 0) + rwDay().usd - rw0) * 1e4) / 1e4; run.redo = (run.redo || 0) + 1;
+    await saveChars(); if(old && old.img) delImg(old.img).catch(() => {});
+    return row;
+  } finally { etalonJob = null; keepAwake(false); }
+}
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
   const asked = (opt.asked || []).filter(Boolean);
@@ -1689,16 +1733,16 @@ async function sheetGen(c, force, onStep, o = {}){
   if(!sheetOn(c) || sheetBusy) return false;
   const all = Object.keys(SHEET_VIEWS), have = sheetOf(c);
   // 9.99: forțat = toată fișa; altfel doar unghiurile care lipsesc (fișele vechi primesc unghiurile noi); o.only = doar acelea
-  const want = o.only ? o.only.filter(a => SHEET_VIEWS[a]) : force ? all.slice() : all.filter(a => { const h = have.find(x => x.ang === a); return !h || !h.k2; });   // 11.0: și varianta a doua
+  const want = o.only ? o.only.filter(a => SHEET_VIEWS[a]) : force ? all.slice() : all.filter(a => { const h = have.find(x => x.ang === a); return !h || !h.k2 || (h.bv || 0) !== bodyVer(c); });   // 11.2: și cele făcute pentru alt corp   // 11.0: și varianta a doua
   if(!want.length) return false;
   prioSort(want, SHEET_PRIO);   // 11.1 (V6)
-  const tried = (t) => t && t.k === c.photo && (t.set || '') === SHEET_SET() && Date.now() - t.at < 7 * 864e5;   // 11.0: unghiurile noi se încearcă o dată, chiar dacă fișa veche s-a completat de curând
+  const tried = (t) => t && t.k === c.photo && (t.set || '') === SHEET_SET() && (t.bv || 0) === bodyVer(c) && Date.now() - t.at < 7 * 864e5;   // 11.0: unghiurile noi se încearcă o dată, chiar dacă fișa veche s-a completat de curând
   if(!force && !o.only && (have.length ? tried(c.sheetFill) : tried(c.sheetTry))) return false;
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
   let sl = false; { const afford = Math.floor((rwFor(mdl) ? rwCapLeft() / rwPer() : capLeft() / (neurPerPhoto(mdl) || 5000)));   // 11.0: cât permite plafonul de azi
     while(want.length && Math.max(4, want.length * 2) > afford){ want.pop(); sl = true; } }
   if(!want.length) return false;   // nu consumă ultima parte din plafon
-  const k0 = c.photo; sheetBusy = c.id; keepAwake(true); { const at = sl ? Date.now() - 7 * 864e5 + 3600e3 : Date.now(); c.sheetTry = {k:k0, at, set:SHEET_SET()}; c.sheetFill = {k:k0, at, set:SHEET_SET()}; }   // tăiat de plafon: restul, peste o oră await saveChars();
+  const k0 = c.photo; sheetBusy = c.id; keepAwake(true); { const at = sl ? Date.now() - 7 * 864e5 + 3600e3 : Date.now(); c.sheetTry = {k:k0, at, set:SHEET_SET(), bv:bodyVer(c)}; c.sheetFill = {k:k0, at, set:SHEET_SET(), bv:bodyVer(c)}; }   // tăiat de plafon: restul, peste o oră await saveChars();
   try{
     const base = await DB.get(k0); const ref = base ? await profDesc(c).catch(() => null) : null; if(!base || !ref) return false;   // fără față măsurabilă în profil nu se poate verifica
     const crs = closeOf(c), cr = crs ? await DB.get(crs.img).catch(() => null) : null;   // 10.9: portretul de aproape, al doilea reper (fața la rezoluție mare)
@@ -1706,9 +1750,9 @@ async function sheetGen(c, force, onStep, o = {}){
     let doneN = 0; refProg.lbl = 'fața'; refProg.i = 0; refProg.n = want.length;
     const one = async ang => {   // 11.1 (V1, V2): un unghi; două unghiuri în același timp
       if(c.photo !== k0) return;
-      const vw = SHEET_VIEWS[ang], mx = sheetMaxOf(c, ang);
+      const vw = SHEET_VIEWS[ang], mx = sheetMaxOf(c, ang), mxN = sheetMaxOf(null, ang);   // 11.2: mx = pragul tău (mai strict după ✕), mxN = cel obișnuit
       if(onStep) onStep(ang, doneN);
-      const p = `Edit this exact photo: the same person, photographed from ${vw}. Head and shoulders, ${SHEET_LIT[ang] ? 'softly blurred background' : 'plain softly blurred background, even soft light'}. Keep the exact same face and identity, hairstyle, skin and age, and the same clothes. ${STIL_TAG.photo}`;
+      const p = `Edit this exact photo: the same person, photographed from ${vw}. Head and shoulders, ${SHEET_LIT[ang] ? 'softly blurred background' : 'plain softly blurred background, even soft light'}. Keep the exact same face and identity, hairstyle, skin and age, and the same clothes.${bodyHint(c)} ${STIL_TAG.photo}`;
       const p2 = cr ? p + ' Image 2 is a close-up of the same person: use it for the exact face (face shape, eyes, eyebrows, nose, lips, skin, glasses); everything else from image 1.' : p;
       const cands = [], h0 = have.find(y => y.ang === ang), needTwo = !(h0 && h0.k && !force);
       let stop = false;
@@ -1721,29 +1765,30 @@ async function sheetGen(c, force, onStep, o = {}){
           const fs = await faceDescs(b).catch(() => []);
           const best = fs.length ? fs.map(f => ({f, d:fdist(f.d, ref)})).sort((x, y) => x.d - y.d)[0] : null;
           if(!best){ if((ang === 'side' || ang === 'side2') && !cands.length){ cands.push({b, d:null, box:null}); stop = true; break; } continue; }   // din profil, fața de obicei nu se poate măsura: îl păstrăm, dar nu-l folosim la măsurători
-          if(best.d < mx) cands.push({b, d:Math.round(best.d * 1000) / 1000, box:{x:best.f.box.x / best.f.W, y:best.f.box.y / best.f.H, w:best.f.box.w / best.f.W, h:best.f.box.h / best.f.H}});
+          if(best.d < mxN) cands.push({strict:best.d < mx, b, d:Math.round(best.d * 1000) / 1000, box:{x:best.f.box.x / best.f.W, y:best.f.box.y / best.f.H, w:best.f.box.w / best.f.W, h:best.f.box.h / best.f.H}});
         }
-        const okN = cands.filter(x => x.d != null).length, good = cands.filter(x => x.d != null && x.d <= SHEET_GOOD).length;
+        const okN = cands.filter(x => x.d != null && x.strict).length, good = cands.filter(x => x.d != null && x.strict && x.d <= SHEET_GOOD).length;
         if(good >= 2 || (good >= 1 && okN >= (needTwo ? 2 : 1))) stop = true;   // destul de aproape: nu mai plătește alte încercări
       }
-      if(cands.length) out.push({ang, cands});
+      { const st = cands.filter(x => x.strict || x.d == null), use = st.length ? st : cands; if(use.length) out.push({ang, cands:use}); }   // 11.2: întâi cele sub pragul tău, altfel sub cel obișnuit
       doneN++; refProg.i = doneN;
     };
     await pool(want, sheetPar(), one);
     if(c.photo !== k0 || !charById(c.id)) return false;   // ai schimbat poza de profil între timp
     // 10.9 + 11.0: din cele vechi și cele noi rămân cele mai apropiate două (un unghi vechi nu se pierde dacă cel nou e mai slab)
-    let changed = false; const v = have.slice(), dels = [];
+    let changed = false; const v = have.slice(), dels = [], redo = !!o.redo, bvNow = bodyVer(c);
     for(const o of out){
       const h = v.find(y => y.ang === o.ang), pool = [];
-      if(h){ if(h.k) pool.push({k:h.k, d:h.d, box:h.box}); if(h.k2) pool.push({k:h.k2, d:h.d2, box:h.box2}); }
+      const excl = !!h && (redo || (h.bv || 0) !== bvNow);   // 11.2: respins de tine / făcut pentru alt corp: nu mai concurează (dar rămâne dacă nu iese nimic nou)
+      if(h && !excl){ if(h.k) pool.push({k:h.k, d:h.d, box:h.box}); if(h.k2) pool.push({k:h.k2, d:h.d2, box:h.box2}); }
       for(const x of o.cands) pool.push(x);
       pool.sort((a, b) => (a.d ?? 9) - (b.d ?? 9));
       const top = pool.slice(0, 2), drop = pool.slice(2).filter(x => x.k);
-      if(h && top[0].k === h.k && (top[1] ? top[1].k : undefined) === h.k2) continue;   // nimic mai bun
+      if(h && !excl && top[0].k === h.k && (top[1] ? top[1].k : undefined) === h.k2) continue;   // nimic mai bun
       for(const x of top) if(!x.k){ x.k = await saveImg(x.b); changed = true; }
-      const e = {ang:o.ang, k:top[0].k, d:top[0].d, box:top[0].box}; if(top[1]){ e.k2 = top[1].k; e.d2 = top[1].d; e.box2 = top[1].box; }
+      const e = {ang:o.ang, k:top[0].k, d:top[0].d, box:top[0].box, bv:bvNow}; if(top[1]){ e.k2 = top[1].k; e.d2 = top[1].d; e.box2 = top[1].box; }
       if(h) v.splice(v.indexOf(h), 1, e); else v.push(e);
-      dels.push(...drop.map(x => x.k));
+      dels.push(...drop.map(x => x.k)); if(excl){ if(h.k) dels.push(h.k); if(h.k2) dels.push(h.k2); }
     }
     if(!changed) return false;
     v.sort((a, b) => all.indexOf(a.ang) - all.indexOf(b.ang));
@@ -1755,9 +1800,8 @@ async function sheetGen(c, force, onStep, o = {}){
 // 9.99 (5): un unghi care nu-ți place: îl scoți, se reface doar el (mai strict), și ține minte că l-ai respins
 async function sheetReject(c, ang, onStep){
   const v = sheetOf(c), x = v.find(y => y.ang === ang); if(!x) return false;
-  c.sheetRej = c.sheetRej || {}; c.sheetRej[ang] = Math.min(3, (c.sheetRej[ang] || 0) + 1);
-  c.sheet.v = v.filter(y => y !== x); await saveChars(); sheetDel(x);   // 11.0: și varianta a doua
-  return await sheetGen(c, false, onStep, {only:[ang]}).catch(() => false);
+  c.sheetRej = c.sheetRej || {}; c.sheetRej[ang] = Math.min(3, (c.sheetRej[ang] || 0) + 1); await saveChars();   // 11.2: cel vechi rămâne până iese unul nou
+  return await sheetGen(c, false, onStep, {only:[ang], redo:true}).catch(() => false);
 }
 // cele mai potrivite unghiuri pentru scena cerută
 function sheetPick(c, shot, n = 2){
@@ -1869,16 +1913,17 @@ const closeNeeded = c => !(c && c.faceBox && c.faceBox.k === c.photo && !c.faceB
 async function closeGen(c, force){
   if(!sheetOn(c) || sheetBusy) return false;
   if(!closeNeeded(c) && !force){ if(!(c.closeRef && c.closeRef.k === c.photo)){ c.closeRef = {k:c.photo, skip:true, at:Date.now()}; await saveChars(); } return false; }
-  if(!force && (closeOf(c) || (c.closeRef && c.closeRef.k === c.photo && (c.closeRef.off || c.closeRef.skip)))) return false;
-  if(!force && c.closeTry && c.closeTry.k === c.photo && Date.now() - c.closeTry.at < 7 * 864e5) return false;
+  const stale = closeStale(c);   // 11.2: făcut pentru corpul de dinainte
+  if(!force && !stale && (closeOf(c) || (c.closeRef && c.closeRef.k === c.photo && (c.closeRef.off || c.closeRef.skip)))) return false;
+  if(!force && c.closeTry && c.closeTry.k === c.photo && (c.closeTry.bv || 0) === bodyVer(c) && Date.now() - c.closeTry.at < 7 * 864e5) return false;
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
   if(rwFor(mdl) ? rwCapLeft() < rwPer() * (CLOSE_TRIES + 1) : capLeft() < (neurPerPhoto(mdl) || 5000) * (CLOSE_TRIES + 1)) return false;
-  const k0 = c.photo; sheetBusy = c.id; keepAwake(true); c.closeTry = {k:k0, at:Date.now()}; await saveChars();
+  const k0 = c.photo; sheetBusy = c.id; keepAwake(true); c.closeTry = {k:k0, at:Date.now(), bv:bodyVer(c)}; await saveChars();
   try{
     const base = await DB.get(k0), ref = base ? await profDesc(c).catch(() => null) : null; if(!base || !ref) return false;
     let id = null; try{ id = await identityOf(c); }catch(e){}
     const gl = id && !id.none && id.glasses ? ` The same glasses (${idCut(id.glasses, 80)}), the same frames.` : '';
-    const p = `Edit this exact photo: the same person in a close-up portrait, head and shoulders filling the frame, straight front view, eyes towards the camera, relaxed natural expression with the mouth closed, even soft daylight on the face, plain softly blurred background. Keep exactly the same face and identity, the same skin with its texture, freckles and marks, the same age, the same hair (the same color, length, curls, volume and parting, all of it visible) and the same clothes.${gl} Sharp focus on the face, natural skin texture, no retouching. ${STIL_TAG.photo}`;
+    const p = `Edit this exact photo: the same person in a close-up portrait, head and shoulders filling the frame, straight front view, eyes towards the camera, relaxed natural expression with the mouth closed, even soft daylight on the face, plain softly blurred background. Keep exactly the same face and identity, the same skin with its texture, freckles and marks, the same age, the same hair (the same color, length, curls, volume and parting, all of it visible) and the same clothes.${gl}${bodyHint(c)} Sharp focus on the face, natural skin texture, no retouching. ${STIL_TAG.photo}`;
     let keep = null;
     for(let t = 0, stop = false; t < CLOSE_TRIES && !stop; ){   // 11.1 (V1): câte două pe cerere
       let bs; try{ bs = await genMany(p, base, null, {model:mdl, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}, Math.min(2, CLOSE_TRIES - t)); }catch(e){ if(t) break; t++; continue; }
@@ -1898,7 +1943,7 @@ async function closeGen(c, force){
     if(c.photo !== k0 || !charById(c.id)) return false;
     const old = c.closeRef && c.closeRef.img;
     if(!keep || keep.d > CLOSE_MAX){ c.closeRef = {k:k0, fail:true, best:keep ? keep.d : null, at:Date.now(), img:old && c.closeRef.k === k0 && !c.closeRef.fail ? old : undefined}; if(c.closeRef.img) delete c.closeRef.fail; await saveChars(); return false; }
-    c.closeRef = {k:k0, img:await saveImg(keep.b), d:keep.d, at:Date.now()}; await saveChars();
+    c.closeRef = {k:k0, img:await saveImg(keep.b), d:keep.d, at:Date.now(), bv:bodyVer(c)}; await saveChars();
     if(old && old !== c.closeRef.img) delImg(old).catch(() => {});
     headCache.clear();
     return true;
@@ -2019,15 +2064,15 @@ Object.assign(BSHEET_VIEWS, {   // 11.0 (B1–B3)
   fit:'in a straight front view, full body from head to feet, standing upright, arms slightly away from the body'});
 const BSHEET_RO = {'34':'¾', side:'profil', sit:'așezată', back:'din spate', lie:'întinsă', waist:'talie în sus', waist34:'talie în sus ¾', front:'din față', walk:'mergând', lean:'sprijinită', bend:'aplecată', fit:'haine mulate', full:'poza întreagă'};
 const BSHEET_NOBODY = new Set(['side', 'lie', 'waist', 'waist34', 'bend']);   // silueta lor nu se compară cu cea în picioare
-const BSHEET_TOL = {fit:.2, walk:.15, lean:.15};   // hainele mulate / mersul schimbă puțin silueta măsurată
+const BSHEET_TOL = {fit:.2, walk:.15, lean:.15, '34':.16};   // 11.2: la ¾ silueta se scurtează firesc   // hainele mulate / mersul schimbă puțin silueta măsurată
 const BSHEET_CLOTH = {fit:'wearing a plain fitted grey tank top and black full-length leggings instead of the original clothes (the clothes are the only change), so the true body shape and proportions are clearly visible'};
 const bsheetOf = c => c && c.photoFull && c.bsheet && c.bsheet.k === c.photoFull ? c.bsheet.v || [] : [];
 const bsheetMiss = c => Object.keys(BSHEET_VIEWS).filter(p => !bsheetOf(c).some(x => x.pose === p));
-const bsheetTried = (c, pose) => { const t = c.bsheetTry; if(!t || t.k !== c.photoFull) return false; const at = t.p ? t.p[pose] : ((t.n || '').split(',').includes(pose) ? t.at : 0); return !!at && Date.now() - at < 7 * 864e5; };
+const bsheetTried = (c, pose) => { const t = c.bsheetTry; if(!t || t.k !== c.photoFull) return false; const at = t.p ? t.p[pose] : ((t.n || '').split(',').includes(pose) ? t.at : 0); return !!at && Date.now() - at < 7 * 864e5 && at > (c.bodyRev ? c.bodyRev.at || 0 : 0); };   // 11.2: încercările de dinaintea corpului nou nu contează
 // 10.5 (R4): forțat = toată fișa; altfel doar pozițiile lipsă (cele bune rămân); 3 încercări pe poziție, rămâne cea mai apropiată ca siluetă
-async function bsheetGen(c, force, onStep){
+async function bsheetGen(c, force, onStep, o = {}){
   if(!sheetOn(c) || !c.photoFull || sheetBusy || looksYoung(c)) return false;   // 9.94 (D)
-  const all = Object.keys(BSHEET_VIEWS), have = bsheetOf(c), want = (force ? all.slice() : bsheetMiss(c).filter(x => !bsheetTried(c, x)));   // 10.7: pe poziție
+  const all = Object.keys(BSHEET_VIEWS), have = bsheetOf(c), want = (o.only ? o.only.filter(x => BSHEET_VIEWS[x]) : force ? all.slice() : [...new Set([...bsheetMiss(c), ...bsheetStale(c)])].filter(x => !bsheetTried(c, x)));   // 11.2: ✕ pe o poziție; pozițiile făcute pentru alt corp   // 10.7: pe poziție
   if(!want.length) return false;
   prioSort(want, BSHEET_PRIO);   // 11.1 (V6)
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
@@ -2048,7 +2093,7 @@ async function bsheetGen(c, force, onStep){
       const p = `Edit this exact photo: the same person photographed ${vw}. Keep exactly the same person: the same face, the same body (build, weight and proportions), ${BSHEET_CLOTH[pose] ? 'the same hairstyle; ' + BSHEET_CLOTH[pose] : 'the same clothes and hairstyle'}. Plain neutral background, even soft light. ${STIL_TAG.photo}`;
       const p2 = cr ? p + ' Image 2 is a close-up of the same person: use it only for the exact face, hair and glasses; the body, clothes and everything else from image 1.' : p;   // 10.9
       const noFace = pose === 'side' || pose === 'back', noBody = BSHEET_NOBODY.has(pose), tol = BSHEET_TOL[pose] || BODY_SHEET_OK;   // 11.0
-      let keep = null, loose = null, stop = false;
+      let keep = null, loose = null, weak = null, stop = false;
       for(let t = 0; t < 3 && !stop; ){
         let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, t === 0 ? 2 : 3 - t); }catch(e){ if(t) break; t++; continue; }
         t += Math.max(1, bs.length);
@@ -2058,6 +2103,7 @@ async function bsheetGen(c, force, onStep){
           const fd = (await localFace(b, c).catch(() => ({d:null}))).d, sig = noBody ? null : await bodySig(b).catch(() => null);
           const bd = sig && ref ? bodyDist2(sig, ref) : null;
           const faceOk = fd == null ? noFace : fd < .55, bodyOk = noBody || !ref ? true : bd != null && bd <= tol;
+          if(faceOk && !noBody && (!weak || (bd ?? 9) < (weak.bd ?? 9))) weak = {pose, b, bd:bd == null ? null : Math.round(bd * 1000) / 1000, sig, sc:9, weak:true};   // 11.2: ultima rezervă
           if(faceOk && !noBody && bd != null && bd <= BODY_SHEET_LOOSE && (!loose || bd < loose.bd)) loose = {pose, b, bd:Math.round(bd * 1000) / 1000, sig, sc:bd};   // 10.9: rezerva, dacă poziția lipsește cu totul
           if(!faceOk || !bodyOk) continue;
           const sc = (bd ?? .06) + (fd ?? .4) * .2;
@@ -2065,7 +2111,8 @@ async function bsheetGen(c, force, onStep){
           if(noBody || (bd != null && bd <= tol * .6)) stop = true;   // destul de aproape: nu mai plătește alte încercări
         }
       }
-      if(!keep && loose && !have.some(x => x.pose === pose)) keep = loose;   // 10.9: mai bine o poziție aproape decât deloc
+      if(!keep && loose && !have.some(x => x.pose === pose)) keep = loose;
+      if(!keep && weak && !have.some(x => x.pose === pose)) keep = weak;   // 11.2: lipsea cu totul: rămâne, marcată ⚠️, nefolosită la poze   // 10.9: mai bine o poziție aproape decât deloc
       if(keep && noBody) keep.bd = null;   // întinsă / profil: silueta nu se compară (afișa 0%)
       if(keep) out.push(keep);
       doneN++; refProg.i = doneN;
@@ -2073,10 +2120,10 @@ async function bsheetGen(c, force, onStep){
     await pool(want, sheetPar(), one);
     if(c.photoFull !== k0 || !charById(c.id)) return false;
     // 10.9: o poziție veche rămâne până iese una nouă mai bună (înainte, „Refă fișa” le scotea pe toate)
-    for(let i = out.length - 1; i >= 0; i--){ const x = out[i], h = have.find(y => y.pose === x.pose); if(h && h.bd != null && x.bd != null && x.bd > h.bd) out.splice(i, 1); }
+    for(let i = out.length - 1; i >= 0; i--){ const x = out[i], h = have.find(y => y.pose === x.pose); if(h && ((x.weak && !h.weak) || (!o.redo && (h.bv || 0) === bodyVer(c) && !h.weak && h.bd != null && x.bd != null && x.bd > h.bd))) out.splice(i, 1); }   // 11.2: ✕ / corp nou: cea nouă câștigă; una slabă nu înlocuiește una bună
     if(!out.length) return false;
     const old = have.filter(x => out.some(y => y.pose === x.pose)), v = have.filter(x => !old.includes(x));
-    for(const o of out) v.push({pose:o.pose, k:await saveImg(o.b), bd:o.bd, sig:o.sig});
+    for(const o of out) v.push({pose:o.pose, k:await saveImg(o.b), bd:o.bd, sig:o.sig, bv:bodyVer(c), ...(o.weak ? {weak:true} : {})});
     v.sort((a, b) => all.indexOf(a.pose) - all.indexOf(b.pose));
     c.bsheet = {k:k0, v, at:Date.now()}; await saveChars();   // 11.1: în paralel, ordinea de sosire nu contează
     for(const o of old) delImg(o.k).catch(() => {});
@@ -2100,7 +2147,7 @@ function bodyPoseOf(shot){
 }
 async function bodyRefFor(c, shot){
   if(!c.photoFull || looksYoung(c)) return null;   // 9.94 (D)
-  const want = bodyPoseOf(shot), pick = want === 'full' ? null : bsheetOf(c).find(x => x.pose === want);
+  const want = bodyPoseOf(shot), pick = want === 'full' ? null : bsheetOf(c).find(x => x.pose === want && !x.weak);
   const k = pick ? pick.k : c.photoFull, b = await DB.get(k).catch(() => null); if(!b) return null;
   let full2 = null; if(pick){ const fb = await DB.get(c.photoFull).catch(() => null); if(fb) full2 = (await personCrop(fb, c.photoFull)) || await wholeRef(fb); }   // 9.89 (b): și poza întreagă, pentru proporții
   return {blob:(await personCrop(b, k)) || await wholeRef(b), pose:pick ? pick.pose : 'full', full2};   // 9.86: decupat pe siluetă
@@ -2122,7 +2169,7 @@ function bodyDist2(a, b){
 async function refBodySigs(c){
   const full = await refBodySig(c); if(!full) return [];
   const out = [{pose:'full', sig:full}];
-  for(const x of bsheetOf(c).filter(x => !['waist', 'waist34', 'bend'].includes(x.pose))){   // 11.0: talia în sus / aplecată nu sunt siluete întregi
+  for(const x of bsheetOf(c).filter(x => !x.weak && !['waist', 'waist34', 'bend'].includes(x.pose))){   // 11.0: talia în sus / aplecată nu sunt siluete întregi
     if(x.sig === undefined || (x.sig === null && x.sigV !== APP_VER)){ const b = await DB.get(x.k).catch(() => null); x.sig = b ? await bodySig(b).catch(() => null) : null; x.sigV = APP_VER; saveChars(); }   // 10.3
     if(x.sig) out.push({pose:x.pose, sig:x.sig});
   }
@@ -2478,6 +2525,8 @@ function kitState(c){
       add('aproape', '🔍 Portretul de aproape', (!!cr && (!!cr.img || !!cr.skip || !!cr.fail)) || !!(c.closeTry && c.closeTry.k === c.photo && Date.now() - c.closeTry.at < 7 * 864e5), cr ? (cr.img ? (cr.off ? 'oprit de tine' : 'fața ' + idPct(cr.d) + '% · reperul de față la poze') : cr.skip ? 'nu e nevoie (fața e mare în portret)' : cr.fail ? 'n-a ieșit destul de fidel: rămâne decupajul din portret' : '') : 'se face după fișă', sv > 0, !!cr && !!cr.fail && !cr.img); }
     { const rs = c.refSet && c.refSet.e ? c.refSet : null, o = rs ? rs.e.filter(x => x.out).length : 0;   // 10.5 (R3)
       add('consens', '🤝 Reperele se potrivesc între ele', true, rs ? (o ? o + (o === 1 ? ' a ieșit din grup și nu e folosit' : ' au ieșit din grup și nu sunt folosite') : 'toate în grup') : 'se compară în telefon', false, o > 0); }
+    if(c.bodyRev && sheetOn(c)){ const st = sheetStale(c).length + bsheetStale(c).length + (closeStale(c) ? 1 : 0);   // 11.2 (4)
+      add('corpNou', '🔄 Reperele, după corpul nou', !st, st ? st + (st === 1 ? ' reper de refăcut' : ' repere de refăcut') + ' (până atunci rămân cele vechi)' : 'toate făcute pentru corpul de acum'); }
     { const fbm = fb && c.faceBox.multi; add('pasaport2', '🪪 Trăsăturile verificate pe toate pozele', !!fbm && c.faceBox.multi === passKey(c), fbm ? (c.faceBox.multi === passKey(c) ? 'din ' + (c.faceBox.multiN || 2) + ' poze' : 'se recitesc (pozele s-au schimbat)') : 'după fișă', sv > 0); }   // 9.99 (4)
     if(looksYoung(c)) add('fisaCorp', '🧍 Fișa corpului', false, 'oprită: nu pare clar adult(ă)', false, true); else
     { const nB = Object.keys(BSHEET_VIEWS).length, missB = bsheetMiss(c).join(','), bT2 = !!missB && bsheetMiss(c).every(x => bsheetTried(c, x));   // 10.7   // 10.5 (R4)
@@ -3096,8 +3145,7 @@ async function etalonGo(c, onStep = () => {}){
       }catch(e){ if(e.name === 'AbortError'){ run.part = true; break; } row.err = String(e.message || e).slice(0, 160); }
       row.ms = Math.round(performance.now() - t0); row.s = etalonScore(row); run.rows.push(row);
     }
-    const ok = run.rows.filter(x => x.s != null), avg = f => { const a = ok.map(f).filter(v => v != null); return a.length ? Math.round(a.reduce((s, x) => s + x, 0) / a.length) : null; };
-    run.score = avg(x => x.s); run.face = avg(x => x.fd != null ? idPct(x.fd) : null); run.body = avg(x => x.bd != null ? bodyPct(x.bd) : null); run.look = avg(x => lookPct(x.lk));
+    etalonStats(run);   // 11.2
     run.usd = Math.round((rwDay().usd - rw0) * 1e4) / 1e4;
     if(run.rows.length && charById(c.id)){
       const prev = etalonOf(c), all = prev.filter(r => r.set === 2).concat(run), drop = prev.filter(r => r.set !== 2).concat(all.slice(0, Math.max(0, all.length - ETALON_KEEP)));   // 10.2: rulările cu scenele vechi nu se mai compară
@@ -3214,13 +3262,20 @@ function drawEtalon(c, box){
     ${runs.length ? `<table class="ftab et"><tr><th></th>${runs.map(r => `<th>${esc(day(r.at))}<small>${esc(r.mdl || '')} · ${esc(r.ver || '')}</small></th>`).join('')}</tr>
       ${ETALON.map(([k, l]) => `<tr><td>${esc(l)}</td>${runs.map(r => `<td>${cell((r.rows || []).find(x => x.k === k))}</td>`).join('')}</tr>`).join('')}
       <tr class="tot"><td>Nota setului</td>${runs.map(r => `<td><b>${r.score ?? '—'}</b><small>👤${r.face ?? '—'} 🧍${r.body ?? '—'} 🎨${r.look ?? '—'}${r.usd ? ' · ' + usd(r.usd) : ''}${r.part ? ' · oprit' : ''}</small></td>`).join('')}</tr></table>
-      <div class="shgrid">${(last.rows || []).filter(x => x.img).map(x => `<figure><img data-k="${esc(x.img)}" data-fk="${esc(x.img)}" alt=""><figcaption>${esc((ETALON.find(e => e[0] === x.k) || [])[1] || x.k)}<br>${x.s ?? '—'}</figcaption></figure>`).join('')}</div>
+      <div class="shgrid">${(last.rows || []).filter(x => x.img).map(x => `<figure><img data-k="${esc(x.img)}" data-fk="${esc(x.img)}" alt="">${me ? '' : `<button type="button" class="shx" data-etr="${esc(x.k)}" aria-label="Refă poza asta">↻</button>`}<figcaption>${esc((ETALON.find(e => e[0] === x.k) || [])[1] || x.k)}<br>${x.s ?? '—'}</figcaption></figure>`).join('')}</div>
       ${(last.rows || []).some(x => x.err) ? `<small>✕ = poza n-a ieșit: ${esc((last.rows.find(x => x.err) || {}).err || '')}</small>` : ''}` : ''}
     <div class="btns"><button class="btn sm pri" id="pfEtGo">${me ? '⏹ Oprește' : '▶ Rulează setul (6 poze)'}</button>${runs.length && !me ? '<button class="btn sm" id="pfEtX">🗑 Șterge rulările</button>' : ''}</div>
     <small id="pfEtSt" style="margin-top:6px">${me ? `<span class="spin"></span> Poza ${etalonJob.i + 1} din ${ETALON.length}…` : ''}</small></div>`);
   const el = box.lastElementChild; hydrate(el);
   const imgs = last ? (last.rows || []).filter(x => x.img).map(x => x.img) : [];
-  el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.fk, imgs); });   // 10.2: pozele negre din set-etalon
+  el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.fk, imgs); });
+  el.querySelectorAll('[data-etr]').forEach(bt => bt.onclick = async e => {   // 11.2: o singură poză din set, refăcută
+    e.stopPropagation(); if(etalonJob){ toast('Setul rulează deja.'); return; }
+    const k = bt.dataset.etr, nm = (ETALON.find(x => x[0] === k) || [])[1] || k; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
+    const s0 = $('#pfEtSt'); if(s0) s0.innerHTML = `<span class="spin"></span> Refac „${esc(nm)}”…`;
+    try{ const row = await etalonRedo(c, k); if(row) toast(row.err ? `„${nm}” n-a ieșit: ${row.err}` : `🎯 „${nm}” refăcută: ${row.s ?? '—'}. Nota setului: ${(etalonOf(c).slice(-1)[0] || {}).score ?? '—'}`, 4500); }
+    catch(er){ toast(er.message || 'N-a mers.', 3500); }
+    fidRedraw(c, 'pfEtalon', drawEtalon); fidRedraw(c, 'pfStats', drawStats); });   // 10.2: pozele negre din set-etalon
   const re = () => fidRedraw(c, 'pfEtalon', drawEtalon);
   el.querySelector('#pfEtGo').onclick = async () => {
     if(etalonJob){ if(etalonJob.cid === c.id){ etalonStop(); toast('Se oprește după poza în lucru…'); } else toast('Setul rulează deja pentru alt personaj.'); return; }
@@ -6613,8 +6668,10 @@ function drawSheet(c, box){
       const el = $('#pfKit'); if(el){ const sh = $('#pfSheet'); el.remove(); if(sh) sh.remove(); drawSheet(c, box); } }; }
   box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfSheet"><b>🧩 Fișa de identitate</b><small>${Object.keys(SHEET_VIEWS).length} unghiuri ale aceleiași fețe, făcute o dată din poza de profil și verificate în telefon (intră doar cele aproape identice). La fiecare poză se folosesc cele potrivite scenei: trei-sferturi, profil, zâmbet, selfie de sus, lumina caldă de seară, ziua afară; și în pozele cu mai multe persoane. ${S.idSheet === 'off' ? 'Oprită din Setări → Poze.' : v.length ? 'Atinge ✕ pe un unghi care nu seamănă: se reface doar el, mai strict.' : 'Se face singură după prima poză din chat (~7–15 imagini, o dată).'}</small>
     ${v.length ? `<div class="shgrid">${v.map(x => `<figure><img data-k="${esc(x.k)}" data-sk="${esc(x.k)}" alt="">${sheetOn(c) ? `<button type="button" class="shx" data-shx="${esc(x.ang)}" aria-label="Nu seamănă: refă unghiul">✕</button>` : ''}<figcaption>${esc(SHEET_RO[x.ang] || x.ang)}<br>${x.d != null ? '👤 ' + idPct(x.d) + '%' : '—'}</figcaption></figure>`).join('')}</div>` : ''}
-    ${bv.length ? `<small style="margin-top:6px">🧍 Fișa de corp (din poza întreagă, verificată prin măsurare; se alege după poziția din scenă):</small><div class="shgrid">${bv.map(x => `<figure><img data-k="${esc(x.k)}" data-sk="${esc(x.k)}" alt=""><figcaption>${esc(BSHEET_RO[x.pose] || x.pose)}<br>${x.bd != null && !BSHEET_NOBODY.has(x.pose) ? '🧍 ' + bodyPct(x.bd) + '%' : '—'}</figcaption></figure>`).join('')}</div>` : c.photoFull && S.idSheet !== 'off' ? '<small style="margin-top:6px">🧍 Fișa de corp (¾, profil, așezată) se face singură după fișa feței.</small>' : ''}
+    ${bv.length ? `<small style="margin-top:6px">🧍 Fișa de corp (din poza întreagă, verificată prin măsurare; se alege după poziția din scenă):</small><div class="shgrid">${bv.map(x => `<figure><img data-k="${esc(x.k)}" data-sk="${esc(x.k)}" alt="">${sheetOn(c) ? `<button type="button" class="shx" data-bsx="${esc(x.pose)}" aria-label="Nu seamănă: refă poziția">✕</button>` : ''}<figcaption>${esc(BSHEET_RO[x.pose] || x.pose)}<br>${x.weak ? '⚠️ ' : ''}${(x.bv || 0) !== bodyVer(c) ? '🔄 ' : ''}${x.bd != null && !BSHEET_NOBODY.has(x.pose) ? '🧍 ' + bodyPct(x.bd) + '%' : '—'}</figcaption></figure>`).join('')}</div>` : c.photoFull && S.idSheet !== 'off' ? '<small style="margin-top:6px">🧍 Fișa de corp (¾, profil, așezată) se face singură după fișa feței.</small>' : ''}
+    ${(() => { const st = sheetStale(c).length + bsheetStale(c).length + (closeStale(c) ? 1 : 0); return st ? `<small style="margin-top:6px">🔄 ${st} ${st === 1 ? 'reper e făcut' : 'repere sunt făcute'} pentru corpul de dinainte: se refac la „Completează”, iar până atunci rămân cele vechi.</small>` : ''; })()}
     ${v.length || bv.length ? '<div class="btns" style="margin-top:6px"><button class="btn sm" id="pfSheetSave" type="button">⬇ Salvează toate pozele din fișă</button></div>' : ''}
+    ${sheetOn(c) && c.photoFull && !looksYoung(c) ? '<div class="btns"><button class="btn sm" id="pfBodyRev" type="button">🧍 Adaptează reperele la corpul de acum</button></div>' : ''}
     ${sheetOn(c) ? `<div class="btns"><button class="btn sm" id="pfSheetGo"${busyMe ? ' disabled' : ''}>${busyMe ? '<span class="spin"></span> Se face…' : v.length ? '↻ Refă fișa' : '🧩 Fă fișa acum'}</button></div>` : ''}
     ${rej.length ? `<small style="margin-top:8px">🎲 Ai respins la poze: ${esc(rej.join(', '))}. Pozele noi pun accent pe asta (scade singur în 2 săptămâni). <button class="btn sm" id="pfPfbX" type="button">Uită</button></small>` : ''}</div>`);
   const el = box.lastElementChild; hydrate(el);
@@ -6626,12 +6683,25 @@ function drawSheet(c, box){
     e.stopPropagation(); if(sheetBusy){ toast('Fișa se face deja, așteaptă puțin.'); return; }
     const ang = bt.dataset.shx; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
     const ok = await sheetReject(c, ang).catch(() => false);
-    toast(ok ? `🧩 Unghiul „${SHEET_RO[ang] || ang}” e refăcut` : `Unghiul „${SHEET_RO[ang] || ang}” n-a ieșit destul de asemănător; l-am scos din fișă. Încearcă „↻ Refă fișa” mai târziu.`, 4000);
+    toast(ok ? `🧩 Unghiul „${SHEET_RO[ang] || ang}” e refăcut` : `Unghiul „${SHEET_RO[ang] || ang}”: n-a ieșit unul destul de asemănător, așa că a rămas cel de acum. Mai încearcă o dată peste puțin.`, 4500);
     el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); });
+  // 11.2: ✕ pe o poziție de corp: se reface doar ea; cea veche rămâne dacă nu iese una nouă
+  el.querySelectorAll('[data-bsx]').forEach(bt => bt.onclick = async e => {
+    e.stopPropagation(); if(sheetBusy){ toast('Fișa se face deja, așteaptă puțin.'); return; }
+    const pose = bt.dataset.bsx; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
+    const ok = await bsheetReject(c, pose);
+    toast(ok ? `🧍 Poziția „${BSHEET_RO[pose] || pose}” e refăcută` : `Poziția „${BSHEET_RO[pose] || pose}”: n-a ieșit una destul de apropiată, așa că a rămas cea de acum. Mai încearcă o dată peste puțin.`, 4500);
+    el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); });
+  // 11.2 (4): reperele după corpul de acum
+  const ab = el.querySelector('#pfBodyRev'); if(ab) ab.onclick = () => {
+    const n = Object.keys(SHEET_VIEWS).length * 2 + Object.keys(BSHEET_VIEWS).length + 2, per = imgPrice ? imgPrice() : 0;
+    confirmSheet(`Refac reperele (fișa feței, portretul de aproape, fișa de corp) după corpul de acum al lui ${c.name}? ~${n} poze${per ? ', cam ' + usd(n * per) : ''}. Cele vechi rămân până iese fiecare nouă. Dacă poza întreagă nu arată încă noul corp, fă întâi „Alt corp”.`, 'Refă reperele', async () => {
+      bodyRevBump(c, crBodyEn({body:bodyOf(c)}), ''); await saveChars(); toast('🧍 Reperele se refac după corpul de acum, în fundal.', 3500);
+      kitBuild(c, {gen:true, toast:true}).catch(() => {}); el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); }); };
   const sa = el.querySelector('#pfSheetSave'); if(sa) sa.onclick = async () => { for(const k of sk){ await saveImage(k); await sleep(400); } };
   const go = el.querySelector('#pfSheetGo'); if(go) go.onclick = async () => {
     if(sheetBusy) return; go.disabled = true; go.innerHTML = '<span class="spin"></span> Se face…';
-    let ok = false; try{ ok = await sheetGen(c, true, (a, n) => { go.innerHTML = `<span class="spin"></span> ${SHEET_RO[a]} (${n + 1}/${Object.keys(SHEET_VIEWS).length})`; }); if(c.photoFull){ const okB = await bsheetGen(c, true, (a, n) => { go.innerHTML = `<span class="spin"></span> corp: ${BSHEET_RO[a]} (${n}/3)`; }); ok = ok || okB; } }catch(e){ toast(e.message, 3500); }
+    let ok = false; try{ ok = await sheetGen(c, true, (a, n) => { go.innerHTML = `<span class="spin"></span> ${SHEET_RO[a]} (${n + 1}/${Object.keys(SHEET_VIEWS).length})`; }); if(c.photoFull){ const okB = await bsheetGen(c, true, (a, n) => { go.innerHTML = `<span class="spin"></span> corp: ${BSHEET_RO[a]} (${n + 1}/${Object.keys(BSHEET_VIEWS).length})`; }); ok = ok || okB; } }catch(e){ toast(e.message, 3500); }
     toast(ok ? '🧩 Fișa de identitate e gata' : 'Fișa n-a ieșit cu aceeași față (sau plafonul zilnic e aproape atins). Încearcă mai târziu.', 3500);
     el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); };
   const x = el.querySelector('#pfPfbX'); if(x) x.onclick = async () => { delete c.pfb; await saveChars(); el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); };
@@ -12206,7 +12276,7 @@ async function pfMakeFull(c, o = {}){   // 9.89: o.cx = personajul cu alt corp, 
     const pv = e.target.closest('[data-pv]'); if(pv){ const v = st.vars[+pv.dataset.pv], ok = st.vars.filter(x => x.st === 'ok'); const face = {}; for(const x of ok) if(x.chk && x.chk.box) face[x.url] = x.chk.box; viewImg(v.url, ok.map(x => x.url), null, {face}); return; }
     const pc = e.target.closest('[data-pc]'); if(!pc || st.saving) return; st.saving = true; st.ac.abort();
     const v = st.vars[+pc.dataset.pc]; pc.disabled = true; pc.innerHTML = '<span class="spin"></span>';
-    if(o.persist){ c.appZones = c.appZones || crEmptyZ(); c.appZones.body = {...o.persist.body}; c.physEn = o.persist.physEn; if(o.persist.ro) c.physUser = physWithBody(c.physUser, o.persist.ro, 'corp'); }   // 9.89: corpul nou rămâne
+    if(o.persist){ bodyRevBump(c, crBodyEn({body:o.persist.body}), o.change || ''); c.appZones = c.appZones || crEmptyZ(); c.appZones.body = {...o.persist.body}; c.physEn = o.persist.physEn; if(o.persist.ro) c.physUser = physWithBody(c.physUser, o.persist.ro, 'corp'); }   // 9.89: corpul nou rămâne
     await saveFull(c, v); closeSheet(); toast('🧍 Poza întreagă e salvată. Fișa de corp se reface în fundal.', 3000);
     pfAfterFull(c);
   });
