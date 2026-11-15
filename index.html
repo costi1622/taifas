@@ -1702,6 +1702,17 @@ details.sdanger>summary{color:var(--err)}
 .fidb>.refbox:first-child,.fidb>.faceref:first-child{margin-top:2px}
 .fidc .kitl{flex-direction:row;flex-wrap:wrap}.fidc .kitl li{flex:1 1 100%}.fidc .kitl li.ok{flex:0 0 auto;padding:4px 9px;border-radius:99px}.fidc .kitl li.ok small{display:none}.fidc .kitl li.ok>span{font-size:.76rem}
 .fidclamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer}.fidclamp.all{display:block}
+
+/* 10.6 (C): neclaritatea de fundal (backdrop-filter) se recalcula la fiecare cadru pe zeci de elemente din liste (cardurile de pe
+   Acasă peste poza animată, eticheta zilei și ora de pe fiecare poză din chat): fond mai opac, fără neclaritate */
+.day span,.picbox .tm,.picbox .ploc,.card .when,.card .crel,.hchips span,.pfchips span,.under button,#sugg button,.hhmsg,.plst{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+.day span{background:#1e1a26f0}
+.picbox .tm,.picbox .ploc{background:#000000a6}
+.card .when{background:#000000a6}
+.card .crel{background:#0000005c}
+.hchips span{background:#00000052}
+.viewer .vsr{position:absolute;left:50%;top:calc(14px + var(--safe-t));transform:translateX(-50%);margin:0;white-space:nowrap;user-select:none;-webkit-user-select:none;touch-action:none}
+.viewer .vsr.done{cursor:pointer;background:#000a;border:1px solid #ffffff33}
 </style>
 </head>
 <body>

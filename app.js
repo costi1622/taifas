@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.5';
+const APP_VER = '10.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -48,7 +48,24 @@ let busy = null;           // AbortController când se generează ceva
 let live = null;           // {c, ch}: conversația în care se generează acum
 
 const saveSettings = () => DB.set('settings', S);
-const saveChars = () => DB.set('chars', chars);
+// 10.6 (C): salvările de personaje se adună (multe pe rând = o singură scriere, la 30 ms); la ieșirea din aplicație se scriu imediat
+let scPend = null;
+function saveChars(){ if(!scPend){ let res, rej; const pr = new Promise((a, b) => { res = a; rej = b; }); scPend = {pr, res, rej, t:setTimeout(scFlush, 30)}; } return scPend.pr; }
+function scFlush(){ const x = scPend; if(!x) return Promise.resolve(); scPend = null; clearTimeout(x.t); return DB.set('chars', chars).then(x.res, x.rej); }
+addEventListener('pagehide', () => { scFlush(); });
+document.addEventListener('visibilitychange', () => { if(document.hidden) scFlush(); });
+// 10.6 (C): formatele de dată se construiesc o dată (toLocale…String le construia la fiecare apel)
+const _dtf = new Map();
+function dtf(o){ const k = JSON.stringify(o); let f = _dtf.get(k); if(!f){ f = new Intl.DateTimeFormat('ro-RO', o); _dtf.set(k, f); } return f; }
+function fmtD(o, x){ try{ return dtf(o).format(x); }catch(e){ return 'Invalid Date'; } }
+// 10.6 (C): lucrul de fundal greu (măsurători) pornește doar după câteva secunde în care nu atingi ecranul
+let lastInput = 0;
+for(const e of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) addEventListener(e, () => { lastInput = Date.now(); }, {capture:true, passive:true});
+function whenIdle(fn, quiet = 4000, maxWait = 90e3){
+  const t0 = Date.now(), ric = window.requestIdleCallback || (f => setTimeout(f, 50));
+  const tick = () => { const q = Date.now() - lastInput; if(q >= quiet || Date.now() - t0 > maxWait) ric(() => fn(), {timeout:2000}); else setTimeout(tick, Math.max(400, quiet - q)); };
+  setTimeout(tick, quiet);
+}
 const charById = id => chars.find(c => c.id === id);
 // fire de conversație: firul „main" păstrează cheia veche chat:<id>, celelalte chat:<id>:<fir>
 const chatKey = (cid, tid) => (!tid || tid === 'main') ? 'chat:' + cid : 'chat:' + cid + ':' + tid;
@@ -277,7 +294,7 @@ function fmtMsg(t){
   }).join('');
 }
 const isJumbo = t => { const x = String(t || '').trim(); return x.length <= 12 && /^(\p{Extended_Pictographic}|‍|️|\s)+$/u.test(x); };
-const hhmm = ts => ts ? new Date(ts).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'}) : '';
+const hhmm = ts => ts ? fmtD({hour:'2-digit', minute:'2-digit'}, new Date(ts)) : '';
 function dayLabel(ts){
   const d = new Date(ts), n = new Date(), y = new Date(); y.setDate(n.getDate() - 1);
   if(d.toDateString() === n.toDateString()) return 'Azi';
@@ -522,14 +539,6 @@ function todEn(){
 }
 // trăsăturile fizice + poziția feței, citite o singură dată per poză de profil (c.faceBox: {k, x,y,w,h | none, phys})
 // 9.10: citirea detaliată a pozei de profil (ca în 8.21–8.23, cu formulări neutre pentru corp)
-const ID_DETAILED = `1. Find the main person's face (forehead to chin, ear to ear) as fractions 0-1 of the image width/height, top-left origin.
-2. "physique": ONLY the permanent traits of the face, in English, comma-separated, max 60 words: apparent age, skin tone, face shape, eye color and shape, eyebrows, nose, lips, jaw and chin, visible skin details (freckles, moles, dimples).
-3. "hair": the hair exactly, max 40 words: exact color (with highlights or roots if any), length, texture (straight, wavy, curly), volume, parting, fringe, how it is styled.
-4. "body": the body exactly as it looks in the photo, in neutral factual English, comma-separated, max 50 words: apparent height (petite / average / tall), build (slim, slender, athletic, average, curvy, full-figured, plus-size, muscular), shoulders, bust, waist, hips and legs proportions, overall body shape, skin tone on the body. Describe only what is visible; if the body is not visible, write "not visible".
-5. "marks": every permanent distinctive mark you can see (moles, freckle patterns, scars, birthmarks, tattoos with design and exact place, piercings with exact place), one short item each with the exact place, side given as the person's left or right. Empty list if none.
-6. "glasses": "" if no glasses; otherwise the frame shape, color and material in max 10 words.
-NO clothing, NO jewelry except piercings, NO background, NO pose, NO expression.
-JSON: {"x":0.0,"y":0.0,"w":0.0,"h":0.0,"physique":"...","hair":"...","body":"...","marks":["..."],"glasses":""} (if no face is visible, x,y,w,h = 0)`;
 // 9.80: o singură citire în zbor pe poză (variantele în paralel o așteaptă pe aceeași)
 const idInflight = new Map();
 function identityOf(c, force){
@@ -783,9 +792,6 @@ function genDiagHTML(m){
     <p style="color:var(--tx3);font-size:.8rem;line-height:1.45">${typeof g.look === 'string' ? esc(g.look) : ''}</p></details>`;
 }
 // expresia: cea obișnuită (din poza de profil), în afară de cazul în care ai cerut tu alta în conversație
-const EXPR_ASK = 'Facial expression requested: ';
-const exprLine = (c, shot, id) => String(shot || '').includes(EXPR_ASK) ? 'EXPRESSION — use the facial expression requested in the scene description.'
-  : 'EXPRESSION — the character always has the same facial expression as in the reference photo' + (id && id.expr ? ': ' + id.expr : '') + '. Copy that expression exactly.';
 // 8.24: trăsăturile definitorii (corp, ten, păr) chiar la începutul promptului, unde generatorul le dă cea mai mare greutate
 const subjLine = (c, id) => { const s0 = id && id.subj && ['portret', ''].includes(bodySrc(c, id).src) ? id.subj : (id && id.subj ? String(id.subj).replace(BODY_WORDS, '').split(',')[0] : ''); const u = c && c.physEn ? c.physEn.split(/\s+/).slice(0, 30).join(' ') : ''; return s0 || u ? ' The person: ' + [s0, u].filter(Boolean).join('; ') + '.' : ''; };
 const NO_BEAUTY = 'Do NOT beautify or idealize: same age, same weight and body shape, same skin texture, spots and under-eye shadows, same face width; no slimming, no smoothing, no younger look.';
@@ -796,12 +802,6 @@ const isAuto = opt => !!opt && (opt.tag === 'stories' || opt.tag === 'statusuri'
 const ECO_RESERVE = 600;
 const nineFits = () => rwFor('ancorat') || !Number.isFinite(capLeft()) || capLeft() >= (neurPerPhoto('ancorat') || 1455) + ECO_RESERVE;
 const sceneModel = (opt = {}) => { const m = isAuto(opt) && S.autoModel === 'eco' ? 'eco' : (S.wkChat || 'eco'); return m === 'ancorat' && S.imgProv === 'worker' && !nineFits() ? 'eco' : m; };
-function nineDegradedNote(opt){
-  if(S.wkChat !== 'ancorat' || S.imgProv !== 'worker' || nineFits() || (isAuto(opt) && S.autoModel === 'eco')) return;
-  const d = new Date().toISOString().slice(0, 10); if(S.degDay === d) return;
-  S.degDay = d; saveSettings();
-  toast(`Cota gratuită de azi nu mai ajunge pentru 9B: pozele continuă pe Eco (cu retușul feței) până la ${resetAt()}, fără cost.`, 6000);
-}
 function idPrompt(c, shot, fr, R, fix, two){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
   const requestedBodyChange = /(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)[^.!?]{0,45}(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)|(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)[^.!?]{0,45}(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)/i.test(String(shot || ''));
@@ -1242,6 +1242,123 @@ async function headRefOf(c, full, id){
 const HEAD_KEEP = 'face shape, eyes, eyebrows, nose, lips, skin tone and texture, age, and the hair and glasses exactly as shown: the same color, length, curls, volume and parting, the same frames';
 const glassLead = (c, id) => id && !id.none && id.glasses ? `${c.name} always wears ${idCut(id.glasses, 100)}: the same frames as in the reference, never other glasses and never without them. ` : '';
 let bodySigWhy = '';
+/* ═════════ 🧿 10.6 ═════════
+   (A) „✨ Îmbunătățire” în vizualizator: mărirea 2× ieșea aproape la fel cu originalul pe ecranul telefonului (iar pozele mari din
+       chat, peste 1400 px, nu primeau nimic). Acum: mărire 2× (la pozele mici) + claritate fină și contrast local pe luminozitate
+       (culorile rămân), cu prag ca să nu întărească zgomotul. Ții apăsat pe eticheta de sus și vezi originalul.
+   (B) Reperele în pozele din chat: al treilea loc de reper era folosit doar la profil și zâmbet. Acum intră unghiul din fișă potrivit
+       scenei (selfie de sus, seara, afară, ¾) sau, dacă nu se potrivește niciunul, poza ta în plus cea mai apropiată de portret,
+       doar dacă rămâne loc (camera pozei dinainte are prioritate). Decupajele mici se măresc 2× în telefon înainte să plece.
+   (C) Viteza: măsurătorile feței se țin minte după conținutul pozei (și după repornire); modelele de recunoaștere nu se mai încarcă
+       la deschiderea chatului, ci când ceri o poză; pachetul de identitate se completează când nu atingi ecranul; salvările de
+       personaje se adună; formatele de dată se construiesc o dată; fără neclaritate de fundal pe elementele care se repetă în liste. */
+
+// ── (C) măsurătorile feței, ținute minte după conținut ──
+const FDC_MAX = 800, fdMem = new Map();
+let fdIdx = null, fdIdxT = 0;
+async function blobFp(b){
+  const n = b.size, parts = [b.slice(0, 2048), b.slice(Math.max(0, (n >> 1) - 1024), (n >> 1) + 1024), b.slice(Math.max(0, n - 2048))];
+  let h = 2166136261 >>> 0;
+  for(const p of parts){ const a = new Uint8Array(await p.arrayBuffer()); for(let i = 0; i < a.length; i++){ h ^= a[i]; h = Math.imul(h, 16777619) >>> 0; } }
+  return n.toString(36) + '-' + h.toString(36) + '-' + (b.type || '').length;
+}
+async function fdTouch(fp){
+  try{
+    if(!fdIdx){ fdIdx = (await DB.get('thf:_idx').catch(() => null)) || []; }
+    const i = fdIdx.indexOf(fp); if(i >= 0) fdIdx.splice(i, 1); fdIdx.push(fp);
+    while(fdIdx.length > FDC_MAX){ const old = fdIdx.shift(); DB.del(thKey('f', old)).catch(() => {}); fdMem.delete(old); }
+    clearTimeout(fdIdxT); fdIdxT = setTimeout(() => DB.set('thf:_idx', fdIdx).catch(() => {}), 3000);
+  }catch(e){}
+}
+async function fdPersist(blob){
+  let fp = null; try{ fp = await blobFp(blob); }catch(e){}
+  if(!fp) return faceDescs0(blob);
+  const m = fdMem.get(fp); if(m){ fdMem.delete(fp); fdMem.set(fp, m); return m; }
+  const p = (async () => {
+    try{ const v = await DB.get(thKey('f', fp)); if(v && v.v === 1 && Array.isArray(v.r)){ fdTouch(fp); return v.r; } }catch(e){}
+    const r = await faceDescs0(blob);
+    DB.set(thKey('f', fp), {v:1, r}).catch(() => {}); fdTouch(fp);
+    return r;
+  })();
+  fdMem.set(fp, p); p.catch(() => fdMem.delete(fp));
+  while(fdMem.size > 200) fdMem.delete(fdMem.keys().next().value);
+  return p;
+}
+
+// ── (A) îmbunătățirea din vizualizator ──
+// claritate fină (rază mică) + contrast local (rază mare), doar pe luminozitate; mai puțin în lumini și umbre
+async function srEnhance(blob){
+  const u = URL.createObjectURL(blob);
+  try{
+    const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight; if(!W || !H) return null;
+    const lay = r => { const c2 = document.createElement('canvas'); c2.width = W; c2.height = H; const x = c2.getContext('2d', {willReadFrequently:true}); x.filter = `blur(${r}px)`; x.drawImage(im, 0, 0); return x.getImageData(0, 0, W, H).data; };
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d', {willReadFrequently:true}); g.drawImage(im, 0, 0);
+    const A = g.getImageData(0, 0, W, H), d = A.data, k = Math.max(W, H) / 1536, B1 = lay(Math.max(.9, 1.3 * k)), B2 = lay(Math.max(6, Math.round(14 * k)));
+    for(let i = 0; i < d.length; i += 4){
+      const y = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8, y1 = (B1[i] * 77 + B1[i + 1] * 150 + B1[i + 2] * 29) >> 8, y2 = (B2[i] * 77 + B2[i + 1] * 150 + B2[i + 2] * 29) >> 8;
+      let det = y - y1; const ad = Math.abs(det); det *= Math.min(1, ad / 3);   // prag moale: diferențele foarte mici (zgomotul) aproape nu se întăresc
+      const mid = Math.max(0, 1 - Math.abs(y - 128) / 150);
+      const dy = det * .75 * (.45 + .55 * mid) + (y - y2) * .16 * mid;
+      d[i] += dy; d[i + 1] += dy; d[i + 2] += dy;   // Uint8ClampedArray: se oprește singur la 0–255
+    }
+    g.putImageData(A, 0, 0);
+    return await new Promise(r => cv.toBlob(r, 'image/jpeg', .93));
+  }catch(e){ return null; } finally { URL.revokeObjectURL(u); }
+}
+const SR_V = 'y';   // 10.6: cheia nouă (mărire + îmbunătățire); cele vechi („x”, doar mărite) se șterg o dată
+async function srMigrate(){
+  if(S.srMig === 2) return;
+  try{ for(const k of await DB.keys()) if(/^thx:/.test(String(k))) await DB.del(k).catch(() => {}); }catch(e){}
+  S.srMig = 2; saveSettings();
+}
+
+// ── (B) al treilea reper, în pozele din chat ──
+const ANG_TXT = {
+  side:['seen in side profile', "the same person's face seen in side profile: use it for how the face looks from that angle."],
+  smile:['smiling widely with teeth showing', "the same person's face smiling widely with teeth showing: use it for how the face looks with that expression."],
+  high:['in a selfie from slightly above', "the same person's face in a selfie taken from slightly above: use it for how her face looks from that angle; not for clothes, light or background."],
+  warm:['in warm evening light', "the same person's face in warm evening light: use it only for her identity (face, eyes, hair) under such light; not for clothes, pose or background."],
+  sun:['outdoors in daylight', "the same person's face outdoors in daylight: use it only for her identity (face, eyes, hair) in daylight; not for clothes, pose or background."],
+  l34:['from a three-quarter angle', "the same person's face from a three-quarter angle: use it for how the face looks when turned; not for clothes, light or background."],
+  r34:['from a three-quarter angle', "the same person's face from a three-quarter angle: use it for how the face looks when turned; not for clothes, light or background."],
+  user:['another real photo', "another real photo of the same person: use it only to confirm her identity (face, eyes, eyebrows, nose, lips, skin, hair); not for clothes, pose, light or background."]};
+const angCropCache = new Map();
+async function refCropUp(key, box){
+  const ck = key + '|' + (box ? [box.x, box.y, box.w, box.h].map(v => Math.round(v * 1000)).join(',') : 'x') + '|' + (S.sr === 'off' ? 0 : 1);
+  if(angCropCache.has(ck)) return angCropCache.get(ck);
+  const p = (async () => {
+    const b = await DB.get(key).catch(() => null); if(!b) return null;
+    let f = await cropFace(b, box);
+    if(S.sr !== 'off'){ try{ const u = URL.createObjectURL(f); let side = 512; try{ side = (await loadImgEl(u)).naturalWidth; } finally { URL.revokeObjectURL(u); }
+      if(side < 380){ const up = await Promise.race([srUpscale(f), sleep(20000).then(() => null)]); if(up) f = up; } }catch(e){} }
+    return f;
+  })();
+  angCropCache.set(ck, p); p.then(v => { if(!v) angCropCache.delete(ck); }, () => angCropCache.delete(ck));
+  while(angCropCache.size > 24) angCropCache.delete(angCropCache.keys().next().value);
+  return p;
+}
+// tare = scena cere exact unghiul (profil, zâmbet larg): intră ca înainte; ușor = se potrivește scenei, intră doar dacă rămâne loc
+async function angleRefFor(c, shot, room){
+  if(S.refAng3 === 'off') return null;
+  const pk = sheetPick(c, shot, 1)[0], t = String(shot || '');
+  const strong = pk && ((pk.ang === 'side' && /\b(side view|profile|from the side|looking (away|out)|turned away|over (her|his|the) shoulder)\b/i.test(t)) || (pk.ang === 'smile' && /\b(laugh\w*|smil\w*|grin\w*|teeth)\b/i.test(t)));
+  let pick = null;
+  if(strong) pick = {k:pk.k, box:pk.box, ang:pk.ang};
+  else if(room){
+    if(pk && pk.sc >= 1.6 && ANG_TXT[pk.ang]) pick = {k:pk.k, box:pk.box, ang:pk.ang};
+    else {
+      const rs = c.refSet && c.refSet.e ? c.refSet.e : [], user = (c.refs || []).slice(0, 2).filter(k => !c.refsAuto && !refOut(c, k));
+      const best = user.map(k => ({k, dp:(rs.find(x => x.key === k) || {}).dp ?? .4})).sort((a, b) => a.dp - b.dp)[0];
+      if(best && best.dp <= .38) pick = {k:best.k, box:(c.refBoxes || {})[best.k], ang:'user'};
+    }
+  }
+  if(!pick) return null;
+  let box = pick.box;
+  if(box === undefined){ const b = await DB.get(pick.k).catch(() => null); if(!b) return null; box = await faceBoxOf(b); if(pick.ang === 'user'){ c.refBoxes = c.refBoxes || {}; c.refBoxes[pick.k] = box; saveChars(); } }
+  const img = await refCropUp(pick.k, box); if(!img) return null;
+  const [nm, txt] = ANG_TXT[pick.ang] || ['', ''];
+  return {img, ang:pick.ang, name:nm, txt, lbl:pick.ang === 'user' ? 'poza ta în plus' : 'unghi din fișă (' + (SHEET_RO[pick.ang] || pick.ang) + ')', strong:!!strong};
+}
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
   const asked = (opt.asked || []).filter(Boolean);
@@ -1267,15 +1384,14 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   let clothedBody = null;
   if(!bodyRef && exposure === 'clothed' && st === 'photo' && fr.k !== 'close'){ try{ clothedBody = await bodyRefFor(c, shot); }catch(e){ clothedBody = null; } }
   // 9.83 (2): scena cere un unghi pe care portretul nu-l arată (profil, zâmbet larg) → și unghiul din fișa de identitate
-  let angRef = null, angName = '';
-  if(!bodyRef && st === 'photo'){ const pk = sheetPick(c, shot, 1)[0], t = String(shot || '');
-    if(pk && ((pk.ang === 'side' && /\b(side view|profile|from the side|looking (away|out)|turned away|over (her|his|the) shoulder)\b/i.test(t)) || (pk.ang === 'smile' && /\b(laugh\w*|smil\w*|grin\w*|teeth)\b/i.test(t)))){
-      const b = await DB.get(pk.k).catch(() => null); if(b){ angRef = await cropFace(b, pk.box); angName = pk.ang === 'side' ? 'seen in side profile' : 'smiling widely with teeth showing'; } } }
+  let angRef = null, angName = '', angTxt = '', angLbl = '';   // 10.6 (B): unghiul potrivit scenei sau poza ta în plus, când rămâne loc
+  if(!bodyRef && st === 'photo'){ const wantS = !!(opt.sref && sceneRefOn(c, opt)), room = clothedBody ? 2 + (clothedBody.full2 ? 1 : 0) + (wantS ? 1 : 0) < 4 : true;
+    try{ const a = await angleRefFor(c, shot, room); if(a){ angRef = a.img; angName = a.name; angTxt = a.txt; angLbl = a.lbl; } }catch(e){} }
   let ratioTxt = ''; if(clothedBody){ try{ ratioTxt = bodyRatioText(await refBodySig(c)); }catch(e){} }   // 9.89 (a)
   const faceInstruction = clothedBody
-    ? `Image 1 is a close-up of ${c.name}'s face: keep exactly this face and identity (${HEAD_KEEP}). Image 2 shows ${c.name}'s whole body: reproduce exactly the same body, with the same build, weight, height impression and proportions of shoulders, chest, waist, hips, arms and legs; do NOT copy its clothing, pose, framing, background or light, which come only from this text.${clothedBody.full2 ? ` Image ${angRef ? 4 : 3} is the same person's whole body standing, front view: the same body, for its exact proportions.` : ''}${ratioTxt ? ' ' + ratioTxt : ''}${angRef ? ` Image 3 is the same person's face ${angName}: use it for how the face looks from that angle or with that expression.` : ''}`
+    ? `Image 1 is a close-up of ${c.name}'s face: keep exactly this face and identity (${HEAD_KEEP}). Image 2 shows ${c.name}'s whole body: reproduce exactly the same body, with the same build, weight, height impression and proportions of shoulders, chest, waist, hips, arms and legs; do NOT copy its clothing, pose, framing, background or light, which come only from this text.${clothedBody.full2 ? ` Image ${angRef ? 4 : 3} is the same person's whole body standing, front view: the same body, for its exact proportions.` : ''}${ratioTxt ? ' ' + ratioTxt : ''}${angRef ? ` Image 3 is ${angTxt}` : ''}`
     : angRef
-    ? `Image 1 is a close-up of this person's face only: keep exactly this face and identity (${HEAD_KEEP}). Image 2 is the same person's face ${angName}: use it for how this face looks from that angle or with that expression. Everything else comes from this text, not from the references.`
+    ? `Image 1 is a close-up of this person's face only: keep exactly this face and identity (${HEAD_KEEP}). Image 2 is ${angTxt} Everything else comes from this text, not from the references.`
     : bodyRef
     ? `Image 1 is the exact head reference for ${c.name}; preserve the same facial identity and the hair and glasses exactly as shown. Image 2 is the body/proportion reference for ${c.name}; preserve the same build and silhouette, especially bust size and shape, but do not copy its clothing, pose, framing or background.`
     : 'The reference image is a close-up of this person’s head: keep exactly this face and identity (' + HEAD_KEEP + '); everything else comes from this text, not from the reference.';
@@ -1309,7 +1425,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const promptS = sref ? prompt.replace(faceInstruction, fiS) : prompt;   // 10.1 (S5); p1 (rezerva cu un singur reper) rămâne fără decor
   if(sref){ if(clothedBody) genOpt2.extra = [...(genOpt2.extra || []), sref]; else if(angRef) genOpt2.extra = [sref]; else genOpt2.force = {two:true}; }
   let blob = await genImage(promptS, face, signal, clothedBody ? clothedBody.blob : angRef || bodyRef || sref, genOpt2);
-  const refsTxt = ['față', clothedBody && 'corp: ' + BSHEET_RO[clothedBody.pose], angRef && 'unghi din fișă (' + angName + ')', sref && 'decorul pozei dinainte'].filter(Boolean).join(' + ');
+  const refsTxt = ['față', clothedBody && 'corp: ' + BSHEET_RO[clothedBody.pose], angRef && angLbl, sref && 'decorul pozei dinainte'].filter(Boolean).join(' + ');
   if(Array.isArray(blob)) return {prompt:promptS, blob:blob[0], blobs:blob, engine:'creator', refs:refsTxt, sref:!!sref};   // 9.86: schițele, toate deodată
   // fața: dacă s-a îndepărtat de personaj, retușul obișnuit (doar fața; cadrul și hainele rămân); cu „identitate maximă” îl face idBoost
   if(st === 'photo' && !idBoostOn(c, opt)){
@@ -1457,7 +1573,7 @@ function sheetPick(c, shot, n = 2){
   if(/\b(laugh\w*|smil\w*|grin\w*|teeth)\b/.test(t)) sc.smile = 2.5;
   if(/\bmirror\b/.test(t)){ sc.l34 += .5; sc.r34 += .5; }
   if(/\bleft\b/.test(t)) sc.l34 += .4; if(/\bright\b/.test(t)) sc.r34 += .4;
-  return v.slice().sort((a, b) => (sc[b.ang] || 0) - (sc[a.ang] || 0)).slice(0, n);
+  return v.slice().sort((a, b) => (sc[b.ang] || 0) - (sc[a.ang] || 0)).slice(0, n).map(x => ({...x, sc:sc[x.ang] || 0}));   // 10.6 (B): cât se potrivește scenei
 }
 // reperele 3 și 4 (fețe decupate): ale tale întâi, apoi fișa (după scenă), apoi unghiurile automate
 async function extraRefs(c, shot, noBox){
@@ -1918,13 +2034,14 @@ const sharpPen = (x, mx) => x.sh != null && mx > 0 ? (1 - Math.min(1, x.sh / mx)
 let srP = null;
 function srModel(){ if(!srP){ srP = faceApi().then(f => f.tf.loadLayersModel('vendor/sr/x2/model.json').then(m => ({tf:f.tf, m}))); srP.catch(() => { srP = null; }); } return srP; }
 async function srUpscale(blob, alive = () => true, onProg){
-  const {tf, m} = await srModel();
   const u = URL.createObjectURL(blob); let im;
   try{ im = await loadImgEl(u); } finally { URL.revokeObjectURL(u); }
   const W = im.naturalWidth, H = im.naturalHeight; if(Math.max(W, H) > 1400) return null;   // deja mare
+  const {tf, m} = await srModel();   // 10.6: modelul, doar când chiar trebuie mărită
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H; cv.getContext('2d').drawImage(im, 0, 0);
   const out = document.createElement('canvas'); out.width = W * 2; out.height = H * 2; const go = out.getContext('2d');
-  const src = tf.browser.fromPixels(cv), P = 128, pad = 8, tiles = Math.ceil(W / P) * Math.ceil(H / P); let done = 0;
+  const src = tf.browser.fromPixels(cv), P = tf.getBackend && tf.getBackend() === 'webgl' ? 256 : 128, pad = 8,   // 10.6: bucăți mai mari pe placa video (de 4× mai puține treceri)
+    tiles = Math.ceil(W / P) * Math.ceil(H / P); let done = 0;
   try{
     for(let y = 0; y < H; y += P) for(let x = 0; x < W; x += P){
       if(!alive()) return null;
@@ -1939,15 +2056,25 @@ async function srUpscale(blob, alive = () => true, onProg){
   } finally { src.dispose(); }
   return await new Promise(r => out.toBlob(r, 'image/jpeg', .92));
 }
-const srKey = k => thKey('x', k);
+const srKey = k => thKey(SR_V, k);
 let srBusy = null;
-async function srGet(k, alive, onProg){
+// 10.6 (A): mărire 2× (doar la pozele mici) + îmbunătățire; o dată pe poză, apoi se ia din memorie
+async function srGet(k, alive = () => true, onProg){
   const hit = await DB.get(srKey(k)).catch(() => null); if(hit) return hit;
-  if(S.sr === 'off' || srBusy) return null;
+  if(S.sr === 'off') return null;
+  for(let i = 0; i < 150 && srBusy && alive(); i++) await sleep(200);   // altă poză încă se mărește: o așteaptă (înainte renunța)
+  if(srBusy || !alive()) return null;
   const b = await DB.get(k).catch(() => null); if(!b) return null;
   srBusy = k;
-  try{ const x = await srUpscale(b, alive, onProg); if(x){ await DB.set(srKey(k), x); return x; } return null; }
-  catch(e){ console.warn('mărirea 2× n-a mers', e); return null; } finally { srBusy = null; }
+  try{
+    let x = null; try{ x = await srUpscale(b, alive, onProg); }catch(e){ console.warn('mărirea 2× n-a mers', e); }
+    if(!alive()) return null;
+    if(onProg) onProg(1);
+    const e = await srEnhance(x || b);
+    const out = e || x; if(!out) return null;
+    await DB.set(srKey(k), out).catch(() => {});
+    return out;
+  } finally { srBusy = null; }
 }
 /* ═════════ 9.88 ═════════
    (1) REZOLUȚIA: poza finală din chat la ~1,8 MP (1152×1536 în loc de 768×1024): la zoom nu se mai văd pixelii; repararea corpului
@@ -2506,7 +2633,6 @@ const auditOf = c => c && c.audit ? c.audit : null;
 const auditFresh = c => !!(c && c.audit && c.audit.k === auditKey(c));
 const auditOpen = c => auditOf(c) ? (c.audit.v || []).filter(x => !x.st) : [];
 const MUST_MAX = 8, MUST_ZONES = ['eyes', 'face', 'hair', 'skin', 'body', 'marks', 'glasses', 'hands'];
-const MUST_ZONE_RO = {eyes:'ochi', face:'față', hair:'păr', skin:'piele', body:'corp', marks:'semn', glasses:'ochelari', hands:'mâini'};
 // cele automate (citite din poze) țin doar cât pozele sunt aceleași; cele puse de tine rămân
 const mustOf = c => c && c.must && Array.isArray(c.must.v) ? c.must.v.filter(x => x && x.en && !x.off && (x.src !== 'auto' || c.must.k === marksKey(c))).slice(0, MUST_MAX) : [];
 const mustOver = c => mustOf(c).filter(x => x.over).map(x => x.en);
@@ -2732,10 +2858,6 @@ function lab2css(L){
   return 'rgb(' + lin.map(v => Math.round(255 * Math.max(0, Math.min(1, v > .0031308 ? 1.055 * Math.pow(v, 1 / 2.4) - .055 : 12.92 * v)))).join(',') + ')';
 }
 const hlRo = (hl, cut) => hl == null ? '' : (cut ? 'cel puțin ' : '') + (hl < -.2 ? 'scurt, deasupra bărbiei' : hl < .25 ? 'până la bărbie' : hl < .8 ? 'până la umeri' : hl < 1.6 ? 'trecut de umeri' : 'lung, spre mijlocul spatelui');
-function drawFidel(c, box){
-  if(!c.photo || (c.stil || 'photo') !== 'photo') return;
-  drawAudit(c, box); drawStats(c, box); drawEtalon(c, box);
-}
 const fidRedraw = (c, id, fn) => { const el = $('#' + id); if(!el || profId !== c.id) return; const box = el.parentNode, nx = el.nextSibling; el.remove(); const tmp = document.createElement('div'); fn(c, tmp); while(tmp.firstChild) box.insertBefore(tmp.firstChild, nx); fidHead(c); };
 function drawAudit(c, box){
   const a = auditOf(c), fresh = auditFresh(c), open = auditOpen(c), must = mustOf(c), marks = marksPosOf(c) || [], R = c.lookRef && c.lookRef.k === lookKey(c) && !c.lookRef.none ? c.lookRef : null;
@@ -2812,7 +2934,7 @@ function drawEtalon(c, box){
   if(S.imgProv !== 'worker') return;
   const runs = etalonOf(c).slice(-3), last = runs[runs.length - 1], me = etalonJob && etalonJob.cid === c.id, P = S.rwPhoto, est = P && P.n >= 3 && P.avg > 0 ? ` La media ta de acum (${usd(P.avg)} pe poză), cam ${usd(P.avg * ETALON.length)}.` : '';
   const cell = x => !x ? '—' : x.err ? '✕' : `<b>${x.s ?? '—'}${x.np > 0 ? ' 👥' : ''}</b><small>${x.fd != null ? '👤' + idPct(x.fd) : ''}${x.bd != null ? ' 🧍' + bodyPct(x.bd) : ''}${x.lk ? ' 🎨' + lookPct(x.lk) : ''}</small>`;
-  const day = t => new Date(t).toLocaleDateString('ro-RO', {day:'numeric', month:'short'});
+  const day = t => fmtD({day:'numeric', month:'short'}, new Date(t));
   box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfEtalon"><b>🎯 Set-etalon</b>
     <small>6 scene fixe, aceleași de fiecare dată (selfie, corp întreg, așezată, din profil, afară, seara), cu hainele din poza ei${c.outfitRef && c.outfitRef.t ? ': <i>' + esc(c.outfitRef.t) + '</i>' : ' (le citește la prima rulare)'}.${runs.some(r => r.set !== 2) ? ' Rulările de dinainte de 10.2 aveau alte scene și dispar la prima rulare nouă.' : ''} Fiecare poză e notată automat (fața 50%, corpul 30%, culorile și proporțiile 20%). Rulezi setul înainte și după o schimbare (alt portret, altă fișă, alt model din Setări → Poze) și compari cifrele, nu impresiile. Costă cât 6 poze din chat.${est}</small>
     ${runs.length ? `<table class="ftab et"><tr><th></th>${runs.map(r => `<th>${esc(day(r.at))}<small>${esc(r.mdl || '')} · ${esc(r.ver || '')}</small></th>`).join('')}</tr>
@@ -2870,7 +2992,7 @@ function faceApi(){
 const fdCache = new WeakMap();
 async function faceDescs(blob){
   if(!(blob instanceof Blob)) return faceDescs0(blob);
-  let p = fdCache.get(blob); if(!p){ p = faceDescs0(blob); fdCache.set(blob, p); p.catch(() => fdCache.delete(blob)); }
+  let p = fdCache.get(blob); if(!p){ p = fdPersist(blob); fdCache.set(blob, p); p.catch(() => fdCache.delete(blob)); }   // 10.6 (C): și după conținut, peste reporniri
   return (await p).map(x => ({...x}));
 }
 async function faceDescs0(blob){
@@ -2918,8 +3040,6 @@ const idLabel = d => d == null ? 'fața nu se vede' : d <= .4 ? 'aceeași persoa
    Telefonul găsește fața în poza nouă, o decupează (512×512), iar FLUX.2 klein primește decupajul + fața din poza de profil
    și redesenează DOAR fața: aceeași poziție a capului, expresie, privire și lumină. Telefonul o lipește la loc pe o elipsă
    cu margini estompate și culori potrivite cu restul pozei; părul, hainele și fundalul rămân cele generate. Eco: ~37 de neuroni. */
-const faceFixOn = (c, opt = {}) => S.faceFix !== 'off' && S.imgProv === 'worker' && !!S.wkBase && !!c.photo && !opt.together && (c.stil || 'photo') === 'photo' && sceneModel(opt) === 'eco';
-const neurUsd = (model, size) => S.imgProv === 'worker' && S.cfPlan === 'paid' && neurToday >= 10000 ? (neurPerPhoto(model, size) || 0) * NEUR_USD : 0;
 const toBlob = (cv, q = .93) => new Promise(r => cv.toBlob(r, 'image/jpeg', q));
 async function facePass(c, blob, signal, model = 'eco', shot = '', why = 'retus', src = null, area = 'face'){   // 9.83 (5): area = 'hair' → doar părul   // 9.35: `src` = altă poză de bază (editor: varianta aleasă)
   const u = URL.createObjectURL(blob); let im;
@@ -3189,9 +3309,6 @@ JSON: {"face":0,"scene":0,"framing":0,"body":0,"hair":0,"hands":0,"skin":0,${mar
   return r;
 }
 // 9.7: o refacere costă cât o poză nouă; pe 9B se reface doar ce e clar greșit (pe Eco, ieftin, rămân pragurile de dinainte)
-const checkSerious = x => !!x && ((x.d != null && x.d > .55) || (x.scene != null && x.scene < 5) || (x.framing != null && x.framing < 4));
-const checkBad = x => !!x && ((x.d != null && x.d > ID_MAX) || (x.scene != null && x.scene < 6) || (x.framing != null && x.framing < 5) || (x.hair != null && x.hair < 6) || (x.marks != null && x.marks < 6) || (x.body != null && x.body < 6));
-const checkScore = x => !x ? 0 : (x.d != null ? (1 - x.d) * 20 : (x.face != null ? x.face * 2 : 10)) + (x.scene ?? 5) + (x.framing ?? 5) * .5 + (x.hair ?? 5) * .7 + (x.marks ?? 5) * .5 + (x.body ?? 5) * .8;
 /* 8.25: cea mai bună din N. Asemănarea variază mult de la o generare la alta (74–87% pe același model), deci se fac
    N variante în paralel (Worker), telefonul le măsoară gratuit fața și o păstrează pe cea mai apropiată de poza de profil.
    Doar ea trece mai departe (retuș, verificare Haiku). N scade singur dacă limita zilnică de neuroni nu ajunge. */
@@ -3255,7 +3372,6 @@ async function bestScene(c, shot, signal, corr, opt = {}){
   return best;
 }
 // generează, retușează fața, verifică; dacă e cazul, încă un retuș (9B) sau o refacere completă; păstrează varianta mai bună
-const otherBad = x => !!x && ((x.scene != null && x.scene < 6) || (x.framing != null && x.framing < 5) || (x.hair != null && x.hair < 6) || (x.marks != null && x.marks < 6) || (x.body != null && x.body < 6));
 /* ═════════ 🎯 9.21 identitate maximă pe Runware ═════════
    Un generator redesenează fața la fiecare poză, deci 1:1 perfect nu există; ce se poate: (1) 3 variante în paralel, telefonul
    măsoară fața fiecăreia (face-api, gratuit) și o păstrează pe cea mai apropiată de poza de profil; (2) dacă și aceea e „altă față”
@@ -3285,6 +3401,7 @@ async function idBoost(c, shot, signal, corr, opt = {}){
   return best;
 }
 async function makeScenePhoto(c, shot, signal, opt = {}){
+  photoWarm(c);   // 10.6 (C): modelele din telefon se încarcă în timp ce se generează poza (nu la deschiderea chatului)
   if(lookOn(c, opt) && S.imgProv === 'worker') lookRefOf(c).catch(() => {});   // 10.0
   const r = await makeScenePhoto0(c, shot, signal, opt);
   if(r.bd != null && r.bd > bodyGate(c) && !opt.together && !opt.partner) r.bodyWarn = bodyPct(r.bd);   // 9.85 (6)
@@ -3778,8 +3895,8 @@ function renderHome(){
 function when(ts){
   if(!ts) return '';
   const d = new Date(ts), n = new Date();
-  if(d.toDateString() === n.toDateString()) return d.toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'});
-  return d.toLocaleDateString('ro-RO', {day:'numeric', month:'short'});
+  if(d.toDateString() === n.toDateString()) return fmtD({hour:'2-digit', minute:'2-digit'}, d);
+  return fmtD({day:'numeric', month:'short'}, d);
 }
 
 /* ───────── 9.44 / 9.45: 👥 GRUPURI ─────────
@@ -4723,7 +4840,7 @@ async function gLifeSweep(){
 
 /* ───────── CONVERSAȚIE ───────── */
 async function openChat(id, push = true, tid, dir){
-  setTimeout(() => { const cc = charById(id); photoWarm(cc); kitEnsure(cc, {delay:6000}); }, 3000);   // 9.86 (f) + 9.92: partea gratuită a pachetului
+  whenIdle(() => { const cc = charById(id); if(cc) kitEnsure(cc, {delay:0}); }, 5000);   // 9.92: partea gratuită a pachetului; 10.6 (C): doar când nu atingi ecranul, iar modelele de recunoaștere se încarcă abia când ceri o poză
   cur = charById(id); if(!cur) return;
   threadsOf(cur);
   tid = tid || cur.thread || 'main';
@@ -4836,9 +4953,9 @@ function addSched(c, ch, sc){
   toast(`⏰ ${c.name} îți scrie ${whenText(sc.at)}`, 3500);
 }
 function whenText(at){
-  const d = new Date(at), t = d.toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'});
+  const d = new Date(at), t = fmtD({hour:'2-digit', minute:'2-digit'}, d);
   const k = dayKey(at), today = dayKey(Date.now()), tm = dayKey(Date.now() + 864e5);
-  return (k === today ? 'azi' : k === tm ? 'mâine' : d.toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'short'})) + ' la ' + t;
+  return (k === today ? 'azi' : k === tm ? 'mâine' : fmtD({weekday:'long', day:'numeric', month:'short'}, d)) + ' la ' + t;
 }
 let schedRun = false;
 async function runDueSched(){
@@ -4856,7 +4973,7 @@ async function runDueSched(){
         const open = cur === c && chat && (chat.tid || 'main') === x.tid;
         const ch = open ? chat : await loadChat(c, x.tid);
         const u = S.userName.trim() || 'utilizatorul';
-        const hm = new Date(x.at).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'});
+        const hm = fmtD({hour:'2-digit', minute:'2-digit'}, new Date(x.at));
         const fr = x.via && charById(x.via.from);
         if(fr && x.via.kind === 'plot'){ await plotReveal(c, ch); if(!$('#vHome').hidden) renderHome(); continue; }   // 9.98 (10)
         if(fr && (x.via.kind === 'news' || x.via.kind === 'newsU')){   // 9.98 (9): a aflat vestea de la cealaltă
@@ -4906,7 +5023,7 @@ const charNow = c => new Date(Date.now() + charShift(c));
 function charTimeNote(c){
   if(Math.abs(charShift(c)) < 36e5) return '';
   const d = charNow(c), h = d.getHours();
-  return ` (la tine${c.geo && c.geo.name ? ', în ' + c.geo.name : ''}, e acum ${d.toLocaleDateString('ro-RO', {weekday:'long'})}, ora ${String(h).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}, ${h < 5 ? 'noaptea târziu' : h < 11 ? 'dimineața' : h < 14 ? 'la prânz' : h < 18 ? 'după-amiaza' : h < 22 ? 'seara' : 'noaptea'}; trăiești după ora ta, nu după a lui)`;
+  return ` (la tine${c.geo && c.geo.name ? ', în ' + c.geo.name : ''}, e acum ${fmtD({weekday:'long'}, d)}, ora ${String(h).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}, ${h < 5 ? 'noaptea târziu' : h < 11 ? 'dimineața' : h < 14 ? 'la prânz' : h < 18 ? 'după-amiaza' : h < 22 ? 'seara' : 'noaptea'}; trăiești după ora ta, nu după a lui)`;
 }
 // 8.18: ceasul personajului pe Acasă, doar când fusul lui diferă de al tău
 function clockTxt(c){
@@ -5048,9 +5165,9 @@ function turnExtras(c, ch, opts = {}){
 async function drawMem(c){
   const box = $('#pfMem'); if(!box) return;
   const f = await firstDay(c), d = daysSince(f), next = ANN.find(x => x > d);
-  const nextDate = next ? new Date(new Date(dayKey(f) + 'T12:00').getTime() + next * 864e5).toLocaleDateString('ro-RO', {day:'numeric', month:'long'}) : '';
+  const nextDate = next ? fmtD({day:'numeric', month:'long'}, new Date(new Date(dayKey(f) + 'T12:00').getTime() + next * 864e5)) : '';
   const ms = c.moments || [], show = ms.slice(0, 8);
-  const li = m => `<li>${esc(m.t)}<small>${new Date(m.day + 'T12:00').toLocaleDateString('ro-RO', {day:'numeric', month:'long', year:'numeric'})}</small></li>`;
+  const li = m => `<li>${esc(m.t)}<small>${fmtD({day:'numeric', month:'long', year:'numeric'}, new Date(m.day + 'T12:00'))}</small></li>`;
   box.innerHTML = `<button class="btn pri albtn" id="memAlbum">📖 Deschide albumul vostru</button><p class="annline">💞 <b>${d}</b> ${d === 1 ? 'zi' : 'zile'} împreună${next ? ` · următoarea aniversare: <b>${next === 365 ? 'un an' : next === 730 ? 'doi ani' : next + (next >= 20 ? ' de zile' : ' zile')}</b>, pe ${nextDate}` : ''}</p>
     ${show.length ? `<ul class="mems">${show.map(li).join('')}</ul>${ms.length > 8 ? '<div class="btns jbtn"><button class="btn sm" id="memAll">Vezi tot</button></div>' : ''}`
       : `<p style="color:var(--tx3);font-size:.88rem;margin:0">Albumul se umple singur: momentul fiecărei zile din jurnal, nivelurile relației, cadourile și aniversările.</p>`}`;
@@ -5170,12 +5287,12 @@ const mdLabel = md => { const [m, d] = (md || '').split('-').map(Number); return
 const todayMd = () => dayKey(Date.now()).slice(5);
 const userBdayToday = () => !!S.userBday && mdOf(S.userBday) === todayMd();
 const charBdayToday = c => !!(c && c.bday) && c.bday === todayMd();
-const evDayLabel = d => { const x = daysSince(new Date(d + 'T12:00').getTime()); return x === 0 ? 'azi' : x === 1 ? 'ieri' : x === -1 ? 'mâine' : x === -2 ? 'poimâine' : new Date(d + 'T12:00').toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'long'}); };
+const evDayLabel = d => { const x = daysSince(new Date(d + 'T12:00').getTime()); return x === 0 ? 'azi' : x === 1 ? 'ieri' : x === -1 ? 'mâine' : x === -2 ? 'poimâine' : fmtD({weekday:'long', day:'numeric', month:'long'}, new Date(d + 'T12:00')); };
 const evFuture = c => (c.ev || []).filter(e => e.d >= dayKey(Date.now())).sort((a, b) => (a.d + (a.h || '')) < (b.d + (b.h || '')) ? -1 : 1);
 const evPast = c => (c.ev || []).filter(e => e.d < dayKey(Date.now())).sort((a, b) => a.d < b.d ? 1 : -1);
 function agendaFor(c){   // pentru promptul de sistem: date absolute, ca să nu se strice cache-ul la fiecare mesaj
   if(!c || c.evOff) return '';
-  const fmtE = e => `- ${new Date(e.d + 'T12:00').toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'long'})}${e.h ? ', ' + e.h : ''}: ${e.t}`;
+  const fmtE = e => `- ${fmtD({weekday:'long', day:'numeric', month:'long'}, new Date(e.d + 'T12:00'))}${e.h ? ', ' + e.h : ''}: ${e.t}`;
   const past = evPast(c).filter(e => daysSince(new Date(e.d + 'T12:00').getTime()) <= 10).slice(0, 4).reverse(), fut = evFuture(c).slice(0, 6);
   if(!c.bday && !past.length && !fut.length) return '';
   return `## Viața ta în zilele astea\n${c.bday ? 'Ziua ta de naștere: ' + mdLabel(c.bday) + '.\n' : ''}${past.length ? 'Ce ai avut deja:\n' + past.map(fmtE).join('\n') + '\n' : ''}${fut.length ? 'Ce urmează:\n' + fut.map(fmtE).join('\n') + '\n' : ''}Sunt lucruri reale din viața ta: le pomenești firesc, ca orice om (îți faci planuri, ai emoții înainte, povestești după, cu detalii concrete). Nu le schimba datele și nu le înșira pe toate.`;
@@ -5183,7 +5300,7 @@ function agendaFor(c){   // pentru promptul de sistem: date absolute, ca să nu 
 async function genEvents(c, bg){
   c.evTried = Date.now();
   const today = dayKey(Date.now()), zile = [];
-  for(let i = 1; i <= 14; i++){ const d = new Date(Date.now() + i * 864e5); zile.push(dayKey(d.getTime()) + ' (' + d.toLocaleDateString('ro-RO', {weekday:'long'}) + ')'); }
+  for(let i = 1; i <= 14; i++){ const d = new Date(Date.now() + i * 864e5); zile.push(dayKey(d.getTime()) + ' (' + fmtD({weekday:'long'}, d) + ')'); }
   const fut = evFuture(c).map(e => '- ' + e.d + ': ' + e.t).join('\n'), past = evPast(c).slice(0, 5).map(e => '- ' + e.d + ': ' + e.t).join('\n');
   const rut = c.life && !c.lifeOff ? (c.life.wk || []).map(x => x.f + '-' + x.t + ' ' + x.w).join('; ') : '';
   const SYS = 'Construiești viața unui personaj de poveste, realist și coerent. Răspunzi DOAR cu JSON valid.', TXT =
@@ -5403,10 +5520,10 @@ async function openAlbum(c){
   const rot = s => ((s.split('').reduce((a, ch) => a + ch.charCodeAt(0), 0) % 7) - 3) * .9;
   let html = '', lastMonth = '';
   for(const d of keys){
-    const mo = new Date(d + 'T12:00').toLocaleDateString('ro-RO', {month:'long', year:'numeric'});
+    const mo = fmtD({month:'long', year:'numeric'}, new Date(d + 'T12:00'));
     if(mo !== lastMonth){ html += `<div class="almon">${esc(mo)}</div>`; lastMonth = mo; }
     const it = days[d].sort((a, b) => a.ts - b.ts), pics = it.filter(x => x.k === 'pic'), rest = it.filter(x => x.k !== 'pic');
-    html += `<div class="alday"><div class="aldate"><b>${new Date(d + 'T12:00').getDate()}</b><small>${new Date(d + 'T12:00').toLocaleDateString('ro-RO', {weekday:'short'})}</small></div><div class="albody">`;
+    html += `<div class="alday"><div class="aldate"><b>${new Date(d + 'T12:00').getDate()}</b><small>${fmtD({weekday:'short'}, new Date(d + 'T12:00'))}</small></div><div class="albody">`;
     for(const x of rest){
       if(x.k === 'start') html += `<div class="alnote start"><b>💫 ${esc(x.t)}</b>${x.q ? `<q>${esc(x.q)}</q>` : ''}</div>`;
       else if(x.k === 'jrn') html += `<div class="alnote jrn"><b>📔 Din jurnalul lui ${esc(c.name)}</b><p>${esc(x.t.slice(0, 220))}${x.t.length > 220 ? '…' : ''}</p></div>`;
@@ -5419,7 +5536,7 @@ async function openAlbum(c){
   closeAlbum();
   albumEl = document.createElement('div'); albumEl.className = 'albumv';
   albumEl.innerHTML = `<header><button class="ib" data-alx aria-label="Închide">✕</button><div><b>📖 Albumul vostru</b><small>${esc(c.name)} · ${dz} ${dz === 1 ? 'zi' : 'zile'} împreună · ${picsN} ${picsN === 1 ? 'poză' : 'poze'} · ${momN} ${momN === 1 ? 'moment' : 'momente'}</small></div></header>
-    <div class="alscroll"><div class="alcover">${c.photo ? `<img data-k="${esc(c.photo)}" alt="">` : ''}<span><b>${esc(S.userName.trim() || 'Tu')} & ${esc(c.name)}</b><small>din ${new Date(first).toLocaleDateString('ro-RO', {day:'numeric', month:'long', year:'numeric'})}</small></span></div>${html}<div class="alend">— va urma —</div></div>`;
+    <div class="alscroll"><div class="alcover">${c.photo ? `<img data-k="${esc(c.photo)}" alt="">` : ''}<span><b>${esc(S.userName.trim() || 'Tu')} & ${esc(c.name)}</b><small>din ${fmtD({day:'numeric', month:'long', year:'numeric'}, new Date(first))}</small></span></div>${html}<div class="alend">— va urma —</div></div>`;
   document.body.appendChild(albumEl); hydrate(albumEl);
   const allPics = [...albumEl.querySelectorAll('[data-view]')].map(x => x.dataset.view);
   albumEl.onclick = e => { if(e.target.closest('[data-alx]')){ closeAlbum(); return; } const v = e.target.closest('[data-view]'); if(v) viewImg(v.dataset.view, allPics); };
@@ -5456,7 +5573,7 @@ function circleFor(c){   // pentru promptul de sistem (se schimbă rar, deci nu 
   const list = circleOf(c); if(!list.length) return '';
   const u = S.userName.trim() || 'el';
   // 9.97: pentru fiecare, și ce s-a întâmplat recent între voi (văzut la fel de amândouă), ca să vorbească despre ele cu detalii reale
-  const day = ts => new Date(ts).toLocaleDateString('ro-RO', {weekday:'short', day:'numeric', month:'short'});
+  const day = ts => fmtD({weekday:'short', day:'numeric', month:'short'}, new Date(ts));
   const lines = list.map(o => { const nw = socNowOf(c, o), lg = socLogOf(c, o).slice(-3);
     return `- ${o.name}${o.tag ? ' (' + o.tag + ')' : ''}: ${relBetween(c, o)}${nw ? '; acum: ' + nw.t + ' (' + G_RELN[String(nw.s)].toLowerCase() + ')' : ''}${lg.length ? '\n  Recent între voi: ' + lg.map(e => `(${day(e.ts)}) ${e.t}`).join(' · ') : ''}`; }).join('\n');
   const cross = S.cross !== 'off';
@@ -5610,7 +5727,7 @@ function socMapSheet(){
   const pairs = []; for(let a = 0; a < pos.length; a++) for(let b = a + 1; b < pos.length; b++){ const p = pos[a], q = pos[b]; if(relBetween(p.c, q.c) || socNowOf(p.c, q.c)) pairs.push([p, q, socNowOf(p.c, q.c)]); }
   const lines = pairs.map(([p, q, r]) => `<line x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}" stroke="${r ? G_RELC[String(r.s)] : 'var(--tx3)'}" stroke-width="${r ? 2 + Math.abs(r.s) : 1.5}" ${r && r.s < 0 ? 'stroke-dasharray="6 5"' : ''} stroke-linecap="round"/>`).join('');
   const avs = pos.map(p => `<span class="grav" style="left:${p.x / W * 100}%;top:${p.y / H * 100}%">${avatarHTML(p.c)}<b>${esc(p.c.name.split(' ')[0])}</b></span>`).join('');
-  const day = ts => new Date(ts).toLocaleDateString('ro-RO', {day:'numeric', month:'short'});
+  const day = ts => fmtD({day:'numeric', month:'short'}, new Date(ts));
   const list = pairs.map(([p, q, r], i) => { const lg = socLogOf(p.c, q.c).filter(socVisible).slice(-1)[0];
     return `<button type="button" class="grrow grbtn" data-smp="${i}"><i style="background:${r ? G_RELC[String(r.s)] : 'var(--line)'}"></i><b>${esc(p.c.name)} ↔ ${esc(q.c.name)}</b><span>${esc(relBetween(p.c, q.c) || '')}${r ? ` · <em style="color:${G_RELC[String(r.s)]}">${esc(r.t)}</em>` : ''}${lg ? `<br><small>${SOC_K[lg.k] || '•'} ${esc(lg.t.slice(0, 70))}</small>` : ''}</span></button>`; }).join('');
   const about = Object.values(S.socLog || {}).flat().filter(e => ['cross', 'news', 'join', 'pic'].includes(e.k) && socVisible(e)).sort((a, b) => b.ts - a.ts).slice(0, 8);
@@ -5624,7 +5741,7 @@ function socMapSheet(){
 }
 function socPairSheet(a, b){
   const nw = socNowOf(a, b), lg = socLogOf(a, b).filter(socVisible).slice().reverse();
-  const day = ts => new Date(ts).toLocaleDateString('ro-RO', {weekday:'short', day:'numeric', month:'short'});
+  const day = ts => fmtD({weekday:'short', day:'numeric', month:'short'}, new Date(ts));
   openSheet(`<h4>${esc(a.name)} ↔ ${esc(b.name)}</h4><div class="pad">
     <p style="margin:0 0 6px">${esc(relBetween(a, b) || 'se cunosc')}${nw ? ` · <b style="color:${G_RELC[String(nw.s)]}">${esc(nw.t)}</b> (${G_RELN[String(nw.s)].toLowerCase()})` : ''}</p>
     ${lg.length ? lg.map(e => `<div class="grlog">${day(e.ts)} · ${SOC_K[e.k] || '•'} ${esc(e.t)}</div>`).join('') : '<p class="hint">Încă nu s-a întâmplat nimic notat între ele.</p>'}
@@ -5669,7 +5786,7 @@ const plotOn = () => !!(S.plot && S.plot.roles && Date.now() < S.plot.at + 864e5
 function plotFor(c){
   if(!plotOn() || !c || !S.plot.roles[c.id]) return '';
   const P = S.plot, u = S.userName.trim() || 'el', others = Object.keys(P.roles).filter(id => id !== c.id).map(id => (charById(id) || {}).name).filter(Boolean).join(' și ');
-  const date = new Date(P.at).toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'long'}), org = P.org === c.id;
+  const date = fmtD({weekday:'long', day:'numeric', month:'long'}, new Date(P.at)), org = P.org === c.id;
   return `\n\n## Un secret (nu i-l spui lui ${u})
 Împreună cu ${others} pregătiți o surpriză pentru ziua lui, ${date}: ${P.idea}. Rolul tău: ${P.roles[c.id]}.
 Până atunci nu-i dezvălui surpriza. ${org ? 'Poți scăpa cel mult un indiciu vag, o dată, ca să-l faci curios.' : 'Dacă bănuiește ceva sau te întreabă, te faci că nu știi nimic (dar se poate simți că ascunzi ceva).'} În ziua lui, ${org ? 'seara îi arăți tu surpriza' : (charById(P.org) || {name:'organizatoarea'}).name + ' îi arată surpriza seara; până atunci îi urezi firesc'}.`;
@@ -5687,7 +5804,7 @@ async function plotSweep(){
   if(!org) return null;
   const people = [org, ...mem], u = S.userName.trim() || 'el';
   const j = await crAskJSON('Scrii planuri realiste pentru personajele unei povești de chat. Răspunzi DOAR cu JSON valid, în română.',
-`${u} își serbează ziua pe ${bd.toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'long'})}.${S.userAbout ? ' Despre el: ' + S.userAbout.slice(0, 300) : ''}
+`${u} își serbează ziua pe ${fmtD({weekday:'long', day:'numeric', month:'long'}, bd)}.${S.userAbout ? ' Despre el: ' + S.userAbout.slice(0, 300) : ''}
 Personajele care țin la el și se cunosc între ele:
 ${people.map(c => `- ${c.name}${c.tag ? ' (' + c.tag + ')' : ''}: ${String(c.persona || '').slice(0, 250)}; relația cu ${u}: ${relOf(c).name}`).join('\n')}
 Relațiile dintre ele: ${people.flatMap((a, i) => people.slice(i + 1).map(b => `${a.name} + ${b.name}: ${relBetween(a, b) || 'se cunosc'}`)).join('; ')}.
@@ -5754,43 +5871,10 @@ const bondOf = c => { const b0 = [25, 35, 50, 62, 75, 85][(relOf(c).lv || 1) - 1
 const bondWord = (v, w) => v >= 80 ? w[3] : v >= 55 ? w[2] : v >= 30 ? w[1] : w[0];
 function bondFor(c){   // pentru promptul de sistem
   const b = bondOf(c), u = S.userName.trim() || 'el';
-  const arcs = (c.arcs || []).slice(-4).map(a => `- ${a.t} (${new Date(a.ts).toLocaleDateString('ro-RO', {day:'numeric', month:'long'})})`).join('\n');
+  const arcs = (c.arcs || []).slice(-4).map(a => `- ${a.t} (${fmtD({day:'numeric', month:'long'}, new Date(a.ts))})`).join('\n');
   return `## Cum stați acum, tu și ${u}
 (Dacă descrierea ta stabilește deja ce relație aveți, aceea are prioritate; asta arată doar nuanța de acum.)
 Încredere: ${bondWord(b.trust, ['încă te ții în rezervă cu lucrurile personale', 'îi spui lucruri personale, dar nu chiar tot', 'ai încredere în el, îi spui și ce te frământă', 'ai încredere deplină; îi spui orice'])}. Apropiere: ${bondWord(b.warm, ['politicos, încă puțin distant', 'cald și prietenos', 'foarte cald, îți e drag', 'atașament profund, îți e dor de el când nu vorbiți'])}.${b.tension >= 45 && b.why ? `\nTensiune acum: ești puțin supărat(ă) sau rănit(ă) pentru că ${b.why}. Se simte discret (mai scurt, mai rece, o aluzie), fără scene. Dacă el își cere scuze sau lămurește, te înmoi treptat, nu brusc.` : ''}${arcs ? `\nMomente-cheie din relația voastră (le ții minte, le poți pomeni):\n${arcs}` : ''}${b.help != null ? `\nCât îl ajuți: ${gHelpWord(b.help)}.` : ''}${b.lock && b.why && b.tension < 45 ? `\nDe știut: ${b.why}.` : ''}`;
-}
-async function bondAnalyze(c, ch){
-  if(!aiReady()) return;
-  const u = S.userName.trim() || 'el';
-  const last = ch.msgs.filter(m => (m.text || m.gift) && !m.err && !m.pending).slice(-12).map(m => spk(m, u, c.name) + ': ' + (m.gift ? `[i-a dăruit ${m.gift.n}] ` : '') + plain(stripMood(m.text || '')).slice(0, 280)).join('\n');
-  if(!last) return;
-  const b = bondOf(c), gap = (() => { const us = ch.msgs.filter(m => m.role === 'user' && m.ts); return us.length > 1 ? (us[us.length - 1].ts - us[us.length - 2].ts) / 864e5 : 0; })();
-  try{
-    const out = await stream('Analizezi dinamica unei relații dintr-o poveste. Răspunzi DOAR cu JSON valid.', [{role:'user', text:
-`Personaj: ${c.name}. Relația cu ${u} acum: încredere ${b.trust}/100, apropiere ${b.warm}/100, tensiune ${b.tension}/100${b.why ? ' (motiv: ' + b.why + ')' : ''}.${gap >= 3 ? ` Înainte de ultimele mesaje, ${u} a lipsit ${Math.round(gap)} zile.` : ''}
-Momente-cheie deja notate: ${(c.arcs || []).slice(-6).map(a => a.t).join('; ') || 'niciunul'}.
-Ultimele mesaje:
-${last}
-
-Cum s-a schimbat relația din perspectiva lui ${c.name}, realist (schimbările sunt mici: de obicei -3..+4; mai mari doar la momente importante)?
-- trust: încrederea (crește când el e sincer, ține minte lucruri, o susține; scade când o minte, o ignoră, își bate joc)
-- warm: apropierea și afecțiunea
-- tension: o mică supărare reală (el a fost nepoliticos, a uitat ceva important, a lipsit mult după o promisiune, a fost rece). Scade spre 0 când lucrurile se lămuresc. Nu inventa conflicte fără motiv în mesaje.
-- moment: doar dacă s-a întâmplat ACUM ceva memorabil și nou: secret (și-au spus un secret), gluma (o glumă doar a lor), sprijin (el a susținut-o la greu sau invers), cearta (o neînțelegere), impacare, incredere (s-a deschis prima dată despre ceva), amintire (un moment frumos), dor, surpriza. Altfel null.
-JSON: {"trust":0,"warm":0,"tension":0,"why":"motivul tensiunii, scurt, sau gol","moment":null sau {"tip":"secret","t":"propoziție scurtă, persoana a II-a plural, ex: V-ați spus primul secret: frica ei de înălțime."}}`}], {max:300, aux:true, cid:c.id});
-    const j = parseJSON(out), cl = (x, lo, hi) => Math.max(lo, Math.min(hi, Math.round(+x || 0)));
-    const nb = b.lock ? {...b} : {...b, trust:cl(b.trust + cl(j.trust, -15, 15), 0, 100), warm:cl(b.warm + cl(j.warm, -15, 15), 0, 100), tension:cl(b.tension + cl(j.tension, -40, 40), 0, 100)};   // 9.74
-    if(!b.lock) nb.why = nb.tension >= 25 ? String(j.why || b.why || '').trim().slice(0, 140) : '';
-    const wasT = b.tension >= 45;
-    c.bond = nb;
-    const mo = j.moment && j.moment.t && ARC_E[j.moment.tip] ? {tip:j.moment.tip, t:faraLiniute(String(j.moment.t)).trim().slice(0, 160), ts:Date.now()} : (wasT && nb.tension < 25 ? {tip:'impacare', t:'V-ați lămurit și v-ați împăcat.', ts:Date.now()} : null);
-    if(mo && !(c.arcs || []).some(a => a.t === mo.t)){
-      c.arcs = (c.arcs || []).concat(mo).slice(-40);
-      addMoment(c, `${ARC_E[mo.tip]} ${mo.t}`, 'arc');
-      toast(`${ARC_E[mo.tip]} Moment-cheie cu ${c.name}: ${mo.t}`, 4500);
-    }
-    await saveChars();
-  }catch(e){}
 }
 // 8.17: un singur job de fundal la 6 răspunsuri: fapte noi + cum a evoluat relația, dintr-o singură citire a conversației (Haiku)
 function applyBond(c, j){
@@ -5851,7 +5935,7 @@ function drawBond(c){
   box.innerHTML = bar('🔐 Încredere', b.trust, 'tr') + bar('💗 Apropiere', b.warm, 'wm') + (b.help != null ? bar('🤝 Te ajută', b.help, 'wm') : '') + bar('⚡ Tensiune', b.tension, 'tn')
     + `<div class="bdedit"><small>${b.lock ? '🔒 fixată de tine' : 'se schimbă singură din conversații'}</small><button type="button" class="btn sm" id="pfBondEd">✏️ Ajustează</button></div>`
     + (b.tension >= 45 && b.why ? `<p class="bdwhy">E puțin supărat(ă): ${esc(b.why)}</p>` : '')
-    + ((c.arcs || []).length ? `<div class="bdarcs">${c.arcs.slice(-6).reverse().map(a => `<div><i>${ARC_E[a.tip] || '💫'}</i><span>${esc(a.t)}<small>${new Date(a.ts).toLocaleDateString('ro-RO', {day:'numeric', month:'short'})}</small></span></div>`).join('')}</div>` : '<p class="hint" style="margin:8px 0 0">Momentele-cheie apar singure din conversații: primul secret, o glumă doar a voastră, o neînțelegere și împăcarea.</p>');
+    + ((c.arcs || []).length ? `<div class="bdarcs">${c.arcs.slice(-6).reverse().map(a => `<div><i>${ARC_E[a.tip] || '💫'}</i><span>${esc(a.t)}<small>${fmtD({day:'numeric', month:'short'}, new Date(a.ts))}</small></span></div>`).join('')}</div>` : '<p class="hint" style="margin:8px 0 0">Momentele-cheie apar singure din conversații: primul secret, o glumă doar a voastră, o neînțelegere și împăcarea.</p>');
   const ed = $('#pfBondEd'); if(ed) ed.onclick = () => bondEdit(c, () => drawBond(c));   // 9.74
 }
 
@@ -5998,7 +6082,7 @@ async function learnSummary(c){
   let sum = '';
   try{ sum = (await stream('Ești un profesor de limbi străine prietenos. Răspunzi în română, scurt.', [{role:'user', text:`Elevul învață ${LANGS[c.learn.lang][2]}. Corecturile din ultimele conversații:\n${all.map(x => '- ' + x.t).join('\n')}\n\nÎn 3-5 rânduri: tiparele de greșeli, la ce să fie atent și un sfat practic. Fără liste lungi.`}], {max:350, aux:true, cid:c.id})).trim(); }catch(e){}
   const box = $('#lnBox'); if(!box) return;
-  box.innerHTML = `${sum ? `<p class="lnsum">${esc(sum)}</p>` : ''}<div class="lnlist">${all.slice().reverse().map(x => `<div>✏️ ${esc(x.t)}<small>${new Date(x.ts).toLocaleDateString('ro-RO', {day:'numeric', month:'short'})}</small></div>`).join('')}</div>`;
+  box.innerHTML = `${sum ? `<p class="lnsum">${esc(sum)}</p>` : ''}<div class="lnlist">${all.slice().reverse().map(x => `<div>✏️ ${esc(x.t)}<small>${fmtD({day:'numeric', month:'short'}, new Date(x.ts))}</small></div>`).join('')}</div>`;
 }
 async function translateMsg(m){
   if(m.tr && m.trFor === m.text){ m.trOn = !m.trOn; renderMsgs(); return; }
@@ -6045,7 +6129,7 @@ async function openPhone(c){
   el.innerHTML = `<div class="phframe"><div class="phwall">${c.photo ? `<img data-k="${esc(photoNow(c))}" alt="">` : ''}</div>
     <div class="phbar"><b>${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}</b><span>📶 🔋</span></div>
     <div class="phscreen" data-p="home">
-      <div class="phclock"><b>${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}</b><small>${now.toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'long'})}</small></div>
+      <div class="phclock"><b>${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}</b><small>${fmtD({weekday:'long', day:'numeric', month:'long'}, now)}</small></div>
       <div class="phnotes">${np ? `<div class="phn"><i>🎵</i><span><b>Acum ascultă</b>${esc(np.a)} – ${esc(np.t)}</span></div>` : ''}${nx ? `<div class="phn"><i>🗓️</i><span><b>Calendar</b>${esc(evDayLabel(nx.d))}${nx.h ? ', ' + nx.h : ''}: ${esc(nx.t)}</span></div>` : ''}${lf ? `<div class="phn"><i>${LIFE_E[lf.b]}</i><span><b>Acum</b>${esc(lf.w)}</span></div>` : ''}</div>
       <div class="phapps"><button data-ap="gal"><i style="background:linear-gradient(135deg,#ffb020,#ff4f9a)">🖼️</i><small>Galerie</small></button><button data-ap="mus"><i style="background:linear-gradient(135deg,#ff4f6a,#9b5cff)">🎵</i><small>Muzică</small></button><button data-ap="not"><i style="background:linear-gradient(135deg,#ffd84f,#ffb020)">📝</i><small>Notițe</small></button></div>
     </div></div><button class="phx" aria-label="Închide">✕</button><button class="phre" aria-label="Reîmprospătează">↻ Actualizează telefonul</button>`;
@@ -6056,7 +6140,7 @@ async function openPhone(c){
     if(k === 'home'){ scr.innerHTML = home; scr.dataset.p = 'home'; }
     else if(k === 'gal') scr.innerHTML = head('Galerie') + (pics.length ? `<div class="phgal">${pics.map(p => `<img data-k="${esc(p.k)}" data-pv="${esc(p.k)}" alt="" loading="lazy">`).join('')}</div>` : '<p class="phempty">Încă nicio poză.</p>');
     else if(k === 'mus') scr.innerHTML = head('Muzică') + `<div class="phmus">${c.phone.songs.map((s, i) => `<a href="https://www.youtube.com/results?search_query=${encodeURIComponent(s.a + ' ' + s.t)}" target="_blank" rel="noopener" class="${np && np.t === s.t ? 'on' : ''}"><i>${np && np.t === s.t ? '▶' : i + 1}</i><span><b>${esc(s.t)}</b><small>${esc(s.a)}</small></span></a>`).join('')}</div>`;
-    else if(k === 'not') scr.innerHTML = head('Notițe') + `<div class="phnot">${c.phone.notes.map(n => `<div><b>${esc(n.t)}</b><p>${esc(n.b)}</p><small>${new Date(n.ts).toLocaleDateString('ro-RO', {day:'numeric', month:'short'})}</small></div>`).join('')}</div>`;
+    else if(k === 'not') scr.innerHTML = head('Notițe') + `<div class="phnot">${c.phone.notes.map(n => `<div><b>${esc(n.t)}</b><p>${esc(n.b)}</p><small>${fmtD({day:'numeric', month:'short'}, new Date(n.ts))}</small></div>`).join('')}</div>`;
     scr.dataset.p = k; hydrate(scr);
   };
   el.onclick = async e => {
@@ -6521,7 +6605,7 @@ async function wrapMonths(){
   for(const c of chars) for(const ch of await allChats(c)) for(const m of ch.msgs) if(m.ts) set.add(dayKey(m.ts).slice(0, 7));
   return [...set].sort().reverse();
 }
-const moName = mo => new Date(mo + '-15T12:00').toLocaleDateString('ro-RO', {month:'long', year:'numeric'});
+const moName = mo => fmtD({month:'long', year:'numeric'}, new Date(mo + '-15T12:00'));
 async function openWrapped(mo){
   const months = await wrapMonths();
   if(!months.length){ toast('Încă n-ai conversații. Revino după câteva zile de taifas.'); return; }
@@ -6546,7 +6630,7 @@ async function openWrapped(mo){
     <div class="wcard g4"><h3>Ora voastră</h3><div class="big">${String(pk).padStart(2, '0')}:00</div><p>Vorbești cel mai mult ${part}.</p><div class="hours">${r.hours.map((h, i) => `<i class="${i === pk ? 'pk' : ''}" style="height:${Math.round(h / mx * 100)}%"></i>`).join('')}</div><div class="hlbl"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div></div>
     ${top.length ? `<div class="wcard g6"><h3>Cu cine ai vorbit cel mai mult</h3><div class="big">${esc(top[0][0].name)}</div><p>${top[0][1].toLocaleString('ro-RO')} mesaje · ${esc(relOf(top[0][0]).name)}</p><div class="wbars">${top.slice(0, 5).map(([c, n]) => `<div><span>${esc(c.name)}</span><b style="width:${Math.max(4, Math.round(n / top[0][1] * 100))}%"></b><small>${n}</small></div>`).join('')}</div></div>` : ''}
     <div class="wgrid"><div class="wcard g5"><h3>Poze primite</h3><div class="big">${r.pics}</div></div><div class="wcard g2"><h3>Mesaje vocale</h3><div class="big">${r.voice}</div></div>
-      <div class="wcard g3"><h3>Cadouri trimise</h3><div class="big">${r.gifts}</div></div><div class="wcard g1"><h3>Cea mai vorbăreață zi</h3><div class="big">${bestDay ? bestDay[1] : 0}</div><p>${bestDay ? new Date(bestDay[0] + 'T12:00').toLocaleDateString('ro-RO', {day:'numeric', month:'long'}) : ''}</p></div></div>
+      <div class="wcard g3"><h3>Cadouri trimise</h3><div class="big">${r.gifts}</div></div><div class="wcard g1"><h3>Cea mai vorbăreață zi</h3><div class="big">${bestDay ? bestDay[1] : 0}</div><p>${bestDay ? fmtD({day:'numeric', month:'long'}, new Date(bestDay[0] + 'T12:00')) : ''}</p></div></div>
     ${words.length ? `<div class="wcard g4"><h3>Cuvintele tale</h3><div class="chips">${words.map(w => `<span>${esc(w)}</span>`).join('')}</div>${emo.length ? `<p style="margin-top:10px;font-size:1.5rem">${emo.join(' ')}</p>` : ''}</div>` : ''}
     ${r.moments.length ? `<div class="wcard g6"><h3>Momentele lunii</h3>${r.moments.slice(0, 6).map(x => `<p>• ${esc(x.t)} <span style="opacity:.75">(${esc(x.c.name)})</span></p>`).join('')}</div>` : ''}
     <div class="wcard g1"><h3>Povestea lunii</h3><p id="wStory">${saved ? esc(saved) : 'Lasă-mă să scriu câteva rânduri despre luna ta în Taifas.'}</p><div class="btns" style="margin-top:10px"><button class="btn sm" id="wGen" style="background:#ffffff26;color:#fff">${saved ? '↻ Rescrie' : '✨ Scrie povestea lunii'}</button></div></div>
@@ -6759,7 +6843,7 @@ function proNote(c, st){
   const how = st.k === 0 ? 'ca și cum reiei legătura după pauza asta'
     : st.k === 1 ? `i-ai mai scris o dată și nu ți-a răspuns; scrie-i iar, scurt, în felul tău (poate îți lipsește, poate ești curioasă ce face), fără reproșuri apăsate`
     : `de câteva ori nu ți-a răspuns; trimite-i un ultim mesaj scurt și cald, fără să insiști, lăsând ușa deschisă`;
-  return `(Notă de regie, nu o menționa ca atare: au trecut ${ore} de la ultimul mesaj din conversație. Acum e ${new Date().toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'})}. Scrie-i tu primul lui ${u}, natural, ${how}.)`;
+  return `(Notă de regie, nu o menționa ca atare: au trecut ${ore} de la ultimul mesaj din conversație. Acum e ${fmtD({hour:'2-digit', minute:'2-digit'}, new Date())}. Scrie-i tu primul lui ${u}, natural, ${how}.)`;
 }
 function maybeProactive(){
   if(S.pro !== 'on' || busy || !aiReady() || !chat.msgs.length) return;
@@ -6859,7 +6943,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
   }
   if(me && m.seenAt && seen && !chat.msgs.slice(i + 1).some(x => x.role === 'user')){
     const d = new Date(m.seenAt), today = dayKey(m.seenAt) === dayKey(Date.now());
-    under += `<div class="seenl">Văzut ${today ? '' : dayKey(m.seenAt) === dayKey(Date.now() - 864e5) ? 'ieri ' : d.toLocaleDateString('ro-RO', {day:'numeric', month:'short'}) + ' '}la ${hhmm(m.seenAt)}</div>`;
+    under += `<div class="seenl">Văzut ${today ? '' : dayKey(m.seenAt) === dayKey(Date.now() - 864e5) ? 'ieri ' : fmtD({day:'numeric', month:'short'}, d) + ' '}la ${hhmm(m.seenAt)}</div>`;
   }
   return `<div class="mw${anim ? ' anim' : ''}${m.react ? ' hasreact' : ''}${g}" data-i="${i}"><div class="m ${cls}">${me ? '' : g.includes('gn') ? '<span class="av ghost"></span>' : avatarHTML(m.guest && charById(m.guest) || cur)}${inner}</div>${lx}${under}</div>`;
 }
@@ -7664,7 +7748,7 @@ function systemFor(c, ch){
     `## Stilul de roleplay și apropierea\n${S.rpStyle === 'natural' ? `Păstrează un ton natural și lasă apropierea să evolueze din conversație.` : S.rpStyle === 'romantic' ? `Fii mai tandru/tandră, afectuos/afectuoasă și flirtant(ă) când se potrivește relației. Primește invitațiile romantice cu căldură și răspunde concret, fără formule generice.` : `În conversațiile dintre adulți, când ${u} face o invitație romantică, flirtantă sau intimă și contextul este consensual, fii receptiv(ă) și răspunde pozitiv în mod firesc, în vocea personajului. Nu respinge automat invitațiile doar fiindcă sunt intime și nu ține morală. Păstrează personalitatea și ritmul scenei; consimțământul rămâne reciproc, iar dacă situația este ambiguă, coercitivă sau implică un minor, nu continua în direcția sexuală.`}`,
     `## Continuitate intimă în roleplay\nUrmează concret acțiunile deja descrise și răspunde la gesturi, atingeri, săruturi și schimbările de apropiere înainte de a avansa scena. Nu sări automat peste moment și nu transforma fiecare apropiere într-un refuz sau într-o încheiere vagă. Păstrează ritmul gradual, reciprocitatea și limitele personajului. Nu inventa acțiunile sau consimțământul lui ${u}.`,
     (c.stickers || []).length && ch && `## Stickere\nAi un set de stickere cu tine: ${c.stickers.map(x => x.l).join(', ')}. Rar, când se potrivește (cel mult o dată la câteva mesaje), poți trimite unul adăugând la final, pe rând separat: [sticker: nume] (exact unul din listă).`,
-    (c.gifts || []).length && `## Cadouri primite de la ${u} (le ții minte; le poți pomeni firesc)\n${c.gifts.slice(-6).map(g => '- ' + g.e + ' ' + g.n + ' (' + new Date(g.ts).toLocaleDateString('ro-RO', {day:'numeric', month:'long'}) + ')').join('\n')}`,
+    (c.gifts || []).length && `## Cadouri primite de la ${u} (le ții minte; le poți pomeni firesc)\n${c.gifts.slice(-6).map(g => '- ' + g.e + ' ' + g.n + ' (' + fmtD({day:'numeric', month:'long'}, new Date(g.ts)) + ')').join('\n')}`,
     (c.prefs || []).length && `## Cum îi place lui ${u} să-i scrii (din notele lui, respectă-le)\n${c.prefs.map(x => '- ' + x.t).join('\n')}`,
     (c.liked || []).length && `## Răspunsuri de-ale tale care i-au plăcut lui ${u} (ca ton și stil; nu le repeta)\n${c.liked.map(x => '„' + x + '”').join('\n')}`,
     `## Reguli de scris
@@ -7739,7 +7823,7 @@ async function jrnReq(c, day, force){
   // păstrăm și acțiunile (*…*), doar fără etichetele ascunse
   const clean = t => stripMood(stripReact(String(t || ''))).replace(/\s+/g, ' ').trim();
   const log = msgs.slice(-80).map(m => spk(m, u, c.name) + ': ' + (m.img && !m.text ? '[poză]' : clean(m.text))).join('\n').slice(-12000);
-  const date = new Date(day + 'T12:00').toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'long'});
+  const date = fmtD({weekday:'long', day:'numeric', month:'long'}, new Date(day + 'T12:00'));
   const sys = [`Ești ${c.name}. Scrii în jurnalul tău personal, privat, în română corectă, cu diacritice.`,
     c.persona && `Cine ești: ${c.persona}`, c.speech && `Cum vorbești: ${c.speech}`, `Relația ta cu ${u}: ${relOf(c).name}.`].filter(Boolean).join('\n\n');
   return {sys, prompt:`Scrie intrarea din jurnal pentru ziua de ${date}, pe baza conversației voastre de mai jos. 4-7 propoziții, la persoana I, sincer și personal: ce s-a întâmplat între voi, ce ai simțit, un detaliu care ți-a rămas în minte despre ${u}. Nu cita mesajele, nu face listă, fără *acțiuni*, fără titlu, fără dată, fără etichete între paranteze drepte.\n\nConversația din ziua aceea:\n${log}`};
@@ -7788,13 +7872,6 @@ async function jrnBatchPoll(){
     }
   }
   S.jrnPend = null; saveSettings();
-}
-async function maybeJournal(c){
-  if(!c || S.jrn !== 'on' || !aiReady()) return;
-  const today = dayKey(Date.now());
-  const days = [...new Set((await allChats(c)).flatMap(ch => ch.msgs).filter(m => m.ts && !m.err && !m.pending).map(m => dayKey(m.ts)))].filter(d => d < today).sort().reverse();
-  const missing = days.filter(x => !(c.journal || []).some(j => j.day === x)).slice(0, 3);
-  for(const d of missing){ try{ await writeJournal(c, d); }catch(e){ break; } }
 }
 // verificarea zilnică pentru toate personajele (nu doar la deschiderea unei conversații)
 let jrnRun = false;
@@ -7920,7 +7997,7 @@ function gapText(ms){
 }
 function nowNote(){
   const d = new Date(), h = d.getHours();
-  const zi = d.toLocaleDateString('ro-RO', {weekday:'long'}), data = d.toLocaleDateString('ro-RO', {day:'numeric', month:'long'});
+  const zi = fmtD({weekday:'long'}, d), data = fmtD({day:'numeric', month:'long'}, d);
   const parte = h < 5 ? 'noaptea târziu' : h < 11 ? 'dimineața' : h < 14 ? 'la prânz' : h < 18 ? 'după-amiaza' : h < 22 ? 'seara' : 'noaptea';
   const wk = [0, 6].includes(d.getDay()) ? ', weekend' : '';
   return `(acum e ${zi}, ${data}, ora ${hhmm(Date.now())}, ${parte}${wk})`;
@@ -8228,10 +8305,10 @@ async function reply(target, opts = {}){
   if(!m.err){ m.am = m.am || {}; m.am[m.alt] = {voice:!!m.voice, cut:m.cut || '', re:m.reply || null, eco:!!m.eco}; }
   busy = null; live = null;
   if(!m.err && !(chat === ch && !$('#vChat').hidden)) c.unread = (c.unread || 0) + 1;
+  if(chat === ch){ setBusyUI(false); renderMsgs(); if(!m.err && navigator.vibrate && !document.hidden) try{ navigator.vibrate(12); }catch(e){} }   // 10.6 (C): întâi pe ecran, apoi în memorie
+  else if(!busy && chat) setBusyUI(false);
   await saveChat(c, ch);
   if(!$('#vHome').hidden) renderHome();
-  if(chat === ch){ setBusyUI(false); renderMsgs(); if(!m.err && navigator.vibrate && !document.hidden) try{ navigator.vibrate(12); }catch(e){} }
-  else if(!busy && chat) setBusyUI(false);
   if(ch.dead) return;
   if(joinNm) setTimeout(() => guestJoin(c, ch, joinNm, m).catch(() => {}), S.typeReal === 'off' ? 50 : 1500 + Math.random() * 2500);   // 9.97 (3)
   if(!m.err){
@@ -8677,7 +8754,7 @@ async function charProfile(id, push = true){
   if(push) profTab = pics.length ? 'poze' : 'despre';
   // 8.9: momente (ca evidențierile de pe Instagram): pozele grupate pe zile
   const hiDays = []; for(const x of picsM){ const d = dayKey(x.ts); let g = hiDays.find(h => h.d === d); if(!g){ if(hiDays.length >= 10) continue; g = {d, items:[]}; hiDays.push(g); } g.items.push(x); }
-  const hiLabel = d => { const n = daysSince(new Date(d + 'T12:00').getTime()); return n === 0 ? 'Azi' : n === 1 ? 'Ieri' : new Date(d + 'T12:00').toLocaleDateString('ro-RO', {day:'numeric', month:'short'}); };
+  const hiLabel = d => { const n = daysSince(new Date(d + 'T12:00').getTime()); return n === 0 ? 'Azi' : n === 1 ? 'Ieri' : fmtD({day:'numeric', month:'short'}, new Date(d + 'T12:00')); };
   const hasStory = storyLive().some(x => x.cid === id), storyUn = storyLive().some(x => x.cid === id && !x.sv);
   const msgs = chats.reduce((n, ch) => n + ch.msgs.filter(m => !m.err && (m.text || m.img)).length, 0);
   const first = Math.min(c.created || Date.now(), ...chats.flatMap(ch => ch.msgs.map(m => m.ts || Date.now())));
@@ -8731,7 +8808,7 @@ async function charProfile(id, push = true){
       <ul class="facts" id="pfFacts"></ul>
       <div class="addfact"><input id="pfFactIn" placeholder="Adaugă ceva ce să știe"><button class="btn sm" id="pfFactAdd">＋</button><button class="btn sm" id="pfFactScan" title="Caută fapte noi în conversație">🔄</button></div>
     </div>
-    <div class="pfFoot">Creat pe ${new Date(c.created || first).toLocaleDateString('ro-RO', {day:'numeric', month:'long', year:'numeric'})} · cost estimat ${usd(spent)}</div>`;
+    <div class="pfFoot">Creat pe ${fmtD({day:'numeric', month:'long', year:'numeric'}, new Date(c.created || first))} · cost estimat ${usd(spent)}</div>`;
   const body = $('#pfBody');
   if(duoOn(c)) duoCardsWire(c);   // 9.64
   $('#pfMix').onclick = async e => { const b = e.target.closest('[data-mx]'); if(!b) return; const v = b.dataset.mx;   // 9.66
@@ -8750,7 +8827,7 @@ async function charProfile(id, push = true){
     $('#pfFacts').querySelectorAll('[data-fx]').forEach(b => b.onclick = async () => { c.facts.splice(+b.dataset.fx, 1); await saveChars(); drawFacts(); });
   };
   drawFacts();
-  const jHTML = list => list.map(j => `<div class="jentry"><b>${new Date(j.day + 'T12:00').toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'long'})}</b><p>${esc(j.text)}</p></div>`).join('');
+  const jHTML = list => list.map(j => `<div class="jentry"><b>${fmtD({weekday:'long', day:'numeric', month:'long'}, new Date(j.day + 'T12:00'))}</b><p>${esc(j.text)}</p></div>`).join('');
   const drawJ = () => { const js = (c.journal || []).slice(0, 3); $('#pfJrn').innerHTML = js.length ? jHTML(js) : `<p style="color:var(--tx3);font-size:.88rem">Încă nicio pagină. ${esc(c.name)} scrie aici singur, a doua zi, despre fiecare zi în care ați vorbit (cel puțin 4 mesaje). Pentru azi, apasă „Scrie despre azi”.</p>`; };
   drawJ();
   $('#pfJrnToday').onclick = async () => {
@@ -10053,7 +10130,6 @@ async function vfPose(img){
 }
 // silabele unui cuvânt (grupuri de vocale) → câte deschideri de gură
 const vfSyl = w => Math.max(1, (String(w).toLowerCase().match(/[aeiouăâîyàáèéìíòóùúöü]+/g) || []).length);
-const vfVow = w => { const v = (String(w).toLowerCase().match(/[aeiouăâîyàáèéìíòóùúöü]/g) || []); return v.length ? v : ['a']; };
 // 9.9: formele buzelor după litere (româna se scrie cum se pronunță): deschidere, lățime, buze lipite
 const VF_VIS = (ch, nx) => {
   if('a'.includes(ch)) return {o:.95, w:1.03, v:1};
@@ -11079,15 +11155,20 @@ async function viewImg(k, list, meta, vopt = {}){
     // centrăm: originea transformării e colțul stânga-sus al imaginii afișate
     requestAnimationFrame(() => { img.style.transition = 'transform .25s ease, opacity .2s'; img.style.opacity = '1'; tx = 0; apply(true); });
     // 9.87 (3): mărirea 2× pe telefon (o dată pe poză; apoi se ia din memorie)
-    if(!raw && S.sr !== 'off'){ const my = idx, key = list[idx], badge = v.querySelector('.vsr'); badge.hidden = false; badge.textContent = '✨ Detaliu 2×…';
-      srGet(key, () => document.body.contains(v) && idx === my, p => { if(idx === my) badge.textContent = `✨ Detaliu 2× · ${Math.round(p * 100)}%`; }).then(x => {
+    if(!raw && S.sr !== 'off'){ const my = idx, key = list[idx], badge = v.querySelector('.vsr'); badge.hidden = false; badge.classList.remove('done'); badge.textContent = '✨ Îmbunătățesc…';
+      badge.onpointerdown = badge.onpointerup = badge.onpointerleave = badge.onpointercancel = null;
+      srGet(key, () => document.body.contains(v) && idx === my, p => { if(idx === my) badge.textContent = `✨ Îmbunătățesc… ${Math.round(p * 100)}%`; }).then(x => {
         if(idx !== my || !document.body.contains(v)) return; if(!x){ badge.hidden = true; return; }
-        const su = URL.createObjectURL(x); const pre = new Image(); pre.onload = () => { if(idx !== my) return; img.src = su; badge.textContent = '✨ Detaliu 2×'; setTimeout(() => { if(idx === my) badge.hidden = true; }, 1600); }; pre.src = su; }); }
+        const su = URL.createObjectURL(x), pre = new Image(), lbl = '✨ Îmbunătățită · ține apăsat: originalul';
+        pre.onload = () => { if(idx !== my){ URL.revokeObjectURL(su); return; } img.src = su; badge.classList.add('done'); badge.textContent = lbl;   // 10.6 (A): rămâne afișată; ții apăsat → originalul
+          badge.onpointerdown = e => { e.preventDefault(); e.stopPropagation(); if(idx === my){ img.src = u; badge.textContent = '👁 Originalul'; } };
+          badge.onpointerup = badge.onpointerleave = badge.onpointercancel = e => { e.stopPropagation(); if(idx === my && img.src !== su){ img.src = su; badge.textContent = lbl; } }; };
+        pre.src = su; }).catch(() => { if(idx === my) badge.hidden = true; }); }
     else v.querySelector('.vsr').hidden = true;
     v.querySelector('.vcount').textContent = list.length > 1 ? `${idx + 1} / ${list.length}` : '';
     const mt = meta[list[idx]];
     // 7.4: doar data și ora; scena (textul pentru generator) rămâne în apăsare lungă → „Ce scenă a ales”
-    v.querySelector('.vcap').innerHTML = mt && mt.ts ? `<b>${esc(new Date(mt.ts).toLocaleDateString('ro-RO', {weekday:'long', day:'numeric', month:'long'}))} · ${esc(hhmm(mt.ts))}</b>` : '';
+    v.querySelector('.vcap').innerHTML = mt && mt.ts ? `<b>${esc(fmtD({weekday:'long', day:'numeric', month:'long'}, new Date(mt.ts)))} · ${esc(hhmm(mt.ts))}</b>` : '';
     v.querySelector('.vplay').hidden = list.length < 2;
     v.querySelector('#vwRe').hidden = !(S.imgProv !== 'none' && !busy && aiPicIdx() >= 0);
     { const i = aiPicIdx(); v.querySelector('#vwRef').hidden = !(i >= 0 && cur && refCanGrow(cur, chat.msgs[i])); }   // 10.0 (F9)
@@ -11991,32 +12072,6 @@ async function runVerify(){
   }catch(e){ setEdStatus('Verificarea a eșuat: ' + esc(e.message), 'err'); }
   btn.disabled = false; btn.textContent = '🔍 Verifică';
 }
-async function runPortrait(){
-  if(S.imgProv === 'none'){ toast('Pornește pozele din Setări.'); return; }
-  let look = $('#edLook').value.trim();
-  const aspect = $('#edAspect').value.trim();
-  if(!look && !aspect){ toast('Scrie întâi ideea și apasă ✨ Completează, ca să aibă un aspect.'); return; }
-  const btn = $('#edGen'); btn.disabled = true;
-  setEdStatus('<span class="spin"></span> Generez portretul…');
-  try{
-    if(!look){
-      look = (await stream('You translate character descriptions into short English image prompts.', [{role:'user', text:'Turn this appearance description into comma-separated English tags for an image generator, max 60 words, face and hair first. Only the tags.\n\n' + aspect}], {max:200})).trim();
-      $('#edLook').value = look;
-    }
-    const stil = $('#edStil').value || 'photo';
-    const prompt = `head and shoulders portrait of an adult, ${look}, looking at the camera, friendly expression, simple softly blurred background. ${STIL_TAG[stil]}`;
-    const E = ed;
-    let pb = await genImage(prompt, null, null, null, {why:'profil'});
-    try{ if(pb.type === 'image/png') pb = await toJpeg(pb, 2048, .92); }catch(e){}
-    if(ed !== E || $('#vEdit').hidden){ btn.disabled = false; return; }    // ai ieșit din editor între timp
-    ed.photoBlob = pb;
-    ed.aiPortrait = true; crReset();
-    addUsage(ed.id, imgPrice(), 'img', null, 'profil');
-    await renderEdPhoto();
-    setEdStatus('✓ Portret generat. Dacă nu-ți place, mai apasă o dată.', 'ok');
-  }catch(e){ setEdStatus('Portretul n-a mers: ' + esc(e.message), 'err'); }
-  btn.disabled = false;
-}
 async function runDraft(){
   if(!aiReady()){ toast('Adaugă cheia în Setări.'); return; }
   const btn = $('#edDraft'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
@@ -12391,7 +12446,7 @@ function neurAdd(n, why){ neurCalc(); neurLoc.push({t:Date.now(), n}); neurCalc(
   const k = why || 'alte'; S.neurBy.by[k] = (S.neurBy.by[k] || 0) + n; saveSettings(); }
 const NEUR_WHY = {alte:'📷 poze (chat, stories, statusuri)', chat:'📷 poze în chat', variante:'🎯 variante în plus', refacere:'🔁 refaceri', retus:'🧬 retușul feței', corp:'🧍 potrivirea corpului', expresii:'🎭 expresii (apel)', stories:'📸 stories', statusuri:'📱 statusuri', test:'🔬 comparații', profil:'🖼️ portrete, avatar, stickere'};
 // cota se resetează la 00:00 UTC; afișăm ora locală (03:00 vara, 02:00 iarna)
-const resetAt = () => { const d = new Date(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)).toLocaleTimeString('ro-RO', {hour:'2-digit', minute:'2-digit'}); };
+const resetAt = () => { const d = new Date(); return fmtD({hour:'2-digit', minute:'2-digit'}, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1))); };
 const CAP_USD = {free:0, '0.1':.10};
 function capLeft(){   // neuroni permiși până la limită (Infinity = fără limită)
   if(S.imgProv !== 'worker') return Infinity;
@@ -12562,7 +12617,7 @@ async function exportAll(share){
   for(const k of await DB.keys()){
     let v = await DB.get(k);
     if(String(k).startsWith('aud:')) continue;   // înregistrările vocale nu intră în backup (se refac la nevoie)
-    if(/^th[msx]:/.test(String(k))) continue;      // 9.13: nici miniaturile pozelor (se refac singure); 9.87: nici pozele mărite 2×
+    if(/^th[msxyf]:/.test(String(k))) continue;      // 9.13: nici miniaturile pozelor (se refac singure); 9.87: nici pozele mărite 2×
     if(k === 'settings'){ v = {...v}; for(const x of SECRET_SETTINGS) delete v[x]; }
     if(v instanceof Blob) v = {__blob:await blobToB64(v), type:v.type};
     out.data[k] = v;
@@ -12964,6 +13019,7 @@ async function init(){
   navigator.storage?.persist?.().catch(() => {});
   setTimeout(runDueSched, 1500);
   setInterval(runDueSched, 30e3);
+  whenIdle(srMigrate, 8000);   // 10.6 (A): pozele mărite în versiunile vechi (fără îmbunătățire) se șterg o dată
   setTimeout(jrnSweep, 6000); setInterval(jrnSweep, 30 * 60e3);
   document.addEventListener('visibilitychange', () => { if(!document.hidden){ setTimeout(runDueSched, 800); setTimeout(jrnSweep, 4000); } });
   if('serviceWorker' in navigator && location.protocol === 'https:'){
