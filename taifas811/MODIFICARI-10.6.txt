@@ -1,0 +1,16 @@
+Taifas 10.6 — Extindere anatomie corporală și intimă în portofoliul adult
+
+- Păstrează portofoliul individual introdus în 10.5 și toate imaginile existente.
+- Adaugă modul „Anatomie corporală completă + intimă” în profil: referință anatomică full-body, neutră, cu anatomia corporală și anatomia intimă externă vizibile, non-grafic.
+- Adaugă aceeași opțiune în editorul „Modifică poza”, conectată la clasificarea comună a expunerii și la renderPerson.
+- Păstrează separat modul „Anatomie intimă vizibilă”, topless și nuditate artistică.
+- Promptul pentru anatomie completă solicită cadru cap-picioare, anatomie corporală realistă, proporții identice cu referințele, poziție neutră și fundal simplu.
+- Imaginile rămân salvate în portofoliul personajului și sunt asociate cu profilul individual.
+- Gardurile 21+, verificarea vizuală, personajul fictiv cu portret AI și moderarea furnizorului rămân neschimbate. Nu există fallback sau ocolire a blocărilor Runware.
+
+Verificări executate:
+- node --check app.js — trecut
+- node test-portofoliu-105.mjs — trecut (15 verificări)
+- node test-explicit-968.mjs — trecut (14 verificări)
+- test-worker.mjs nu poate rula în arhiva furnizată: importă un pachet cu numele literal „undefined”; nu este o regresie introdusă de această modificare.
+- pytest nu a găsit teste Python colectabile.
