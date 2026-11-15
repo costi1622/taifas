@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '11.4';
+const APP_VER = '11.5';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1762,6 +1762,7 @@ const SHEET_RO = {l34:'¾ stânga', r34:'¾ dreapta', side:'profil', smile:'zâm
 const SHEET_LIT = {warm:1, sun:1};   // unghiurile cu lumina scenei (restul: lumină uniformă, fundal simplu)
 // 9.99 (2): un unghi intră în fișă doar dacă e chiar aceeași față: până la 3 încercări, rămâne cea mai apropiată, sub 0,42
 //           (înainte: prima sub 0,50, adică exact pragul „altă față”; un unghi la 0,49 devenea reper pentru toate pozele)
+let redoInfo = null;   // 11.5: ce a ieșit la ultimul ✕ (pentru mesaj)
 const SHEET_MAX = .42, SHEET_GOOD = .32, SHEET_TRIES = 4, SHEET_WEAK = .75;   // 11.4: rezerva ⚠️ (nefolosită), ca unghiul să nu lipsească   // 10.9: o încercare în plus (se oprește oricum la prima destul de bună)
 const sheetMaxOf = (c, ang) => (ang === 'side' || ang === 'side2' ? .52 : ang === 'down' || ang === 'low' || ang === 'laugh' ? .46 : 0) ||   // 11.4: și râsul (gura deschisă, ochii mijiți)
   Math.max(.3, SHEET_MAX - .04 * Math.min(3, ((c && c.sheetRej) || {})[ang] || 0));   // 10.9: din profil, fața e departe de cea din față prin natura ei (lipsea mereu)   // (5) unghiul respins de tine: mai strict
@@ -1795,8 +1796,9 @@ async function sheetGen(c, force, onStep, o = {}){
       const p2 = cr ? p + ' Image 2 is a close-up of the same person: use it for the exact face (face shape, eyes, eyebrows, nose, lips, skin, glasses); everything else from image 1.' : p;
       const cands = [], h0 = have.find(y => y.ang === ang), needTwo = !(h0 && h0.k && !force);
       let stop = false, weakC = null, gotAny = false;
-      for(let t = 0; t < SHEET_TRIES && !stop; ){
-        let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'768x1024', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, Math.min(2, SHEET_TRIES - t)); }catch(e){ if(t) break; t++; continue; }
+      const TR = o.redo ? 12 : SHEET_TRIES;   // 11.5: la ✕ încearcă mai mult (câte 4 deodată pe Runware), ca să nu mai rămână fără variantă nouă
+      for(let t = 0; t < TR && !stop; ){
+        let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'768x1024', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, Math.min(o.redo ? 4 : 2, TR - t)); }catch(e){ if(t) break; t++; continue; }
         t += Math.max(1, bs.length);
         for(let b of bs){
           addUsage(c.id, imgPrice(), 'img', null, 'profil');
@@ -1810,7 +1812,7 @@ async function sheetGen(c, force, onStep, o = {}){
         const okN = cands.filter(x => x.d != null && x.strict).length, good = cands.filter(x => x.d != null && x.strict && x.d <= SHEET_GOOD).length;
         if(good >= 2 || (good >= 1 && okN >= (needTwo ? 2 : 1))) stop = true;   // destul de aproape: nu mai plătește alte încercări
       }
-      { const st = cands.filter(x => x.strict || x.d == null), use = st.length ? st : cands; if(use.length) out.push({ang, cands:use}); else if(weakC && !h0) out.push({ang, cands:[weakC]}); else if(!gotAny && !h0) noRes++; }   // 11.2: întâi cele sub pragul tău, altfel sub cel obișnuit; 11.4: lipsea cu totul → rezerva ⚠️
+      { const st = cands.filter(x => x.strict || x.d == null), use = st.length ? st : cands; if(use.length) out.push({ang, cands:use}); else if(weakC && (!h0 || (o.redo && (h0.weak || h0.d == null || weakC.d < h0.d) && weakC.d < (h0.d ?? 9)))) out.push({ang, cands:[weakC]}); else if(!gotAny && !h0) noRes++; if(o.redo) redoInfo = {ang, best:use.length ? use[0].d : weakC ? weakC.d : null, old:h0 ? h0.d : null, n:gotAny}; }   // 11.5: la ✕, și o rezervă mai apropiată decât cea de acum o înlocuiește   // 11.2: întâi cele sub pragul tău, altfel sub cel obișnuit; 11.4: lipsea cu totul → rezerva ⚠️
       doneN++; refProg.i = doneN;
     };
     await pool(want, sheetPar(), one);
@@ -2135,9 +2137,9 @@ async function bsheetGen(c, force, onStep, o = {}){
       const p = `Edit this exact photo: the same person photographed ${vw}. Keep exactly the same person: the same face, the same body (build, weight and proportions), ${BSHEET_CLOTH[pose] ? 'the same hairstyle; ' + BSHEET_CLOTH[pose] : 'the same clothes and hairstyle'}. Plain neutral background, even soft light. ${STIL_TAG.photo}`;
       const p2 = cr ? p + ' Image 2 is a close-up of the same person: use it only for the exact face, hair and glasses; the body, clothes and everything else from image 1.' : p;   // 10.9
       const noFace = pose === 'side' || pose === 'back', noBody = BSHEET_NOBODY.has(pose), tol = BSHEET_TOL[pose] || BODY_SHEET_OK;   // 11.0
-      let keep = null, loose = null, weak = null, stop = false;
-      for(let t = 0; t < 3 && !stop; ){
-        let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, t === 0 ? 2 : 3 - t); }catch(e){ if(t) break; t++; continue; }
+      let keep = null, loose = null, weak = null, stop = false; const BT = o.redo ? 9 : 3;   // 11.5: la ✕, până la 9 variante (câte 3 deodată)
+      for(let t = 0; t < BT && !stop; ){
+        let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, o.redo ? Math.min(3, BT - t) : t === 0 ? 2 : 3 - t); }catch(e){ if(t) break; t++; continue; }
         t += Math.max(1, bs.length);
         for(let b of bs){
           addUsage(c.id, imgPrice(), 'img', null, 'profil');
@@ -2154,7 +2156,8 @@ async function bsheetGen(c, force, onStep, o = {}){
         }
       }
       if(!keep && loose && !have.some(x => x.pose === pose)) keep = loose;
-      if(!keep && weak && !have.some(x => x.pose === pose)) keep = weak;   // 11.2: lipsea cu totul: rămâne, marcată ⚠️, nefolosită la poze   // 10.9: mai bine o poziție aproape decât deloc
+      if(!keep && weak && !have.some(x => x.pose === pose)) keep = weak;
+      { const h0 = have.find(x => x.pose === pose); if(!keep && o.redo && h0 && h0.weak){ const nb = loose || weak; if(nb && (h0.bd == null || (nb.bd != null && nb.bd < h0.bd))) keep = {...nb, weak:true}; } if(o.redo) redoInfo = {pose, best:keep ? keep.bd : null, old:h0 ? h0.bd : null}; }   // 11.5: o rezervă ⚠️ mai apropiată o înlocuiește pe cea de acum   // 11.2: lipsea cu totul: rămâne, marcată ⚠️, nefolosită la poze   // 10.9: mai bine o poziție aproape decât deloc
       if(keep && noBody) keep.bd = null;   // întinsă / profil: silueta nu se compară (afișa 0%)
       if(keep) out.push(keep);
       doneN++; refProg.i = doneN;
@@ -2162,7 +2165,7 @@ async function bsheetGen(c, force, onStep, o = {}){
     await pool(want, sheetPar(), one);
     if(c.photoFull !== k0 || !charById(c.id)) return false;
     // 10.9: o poziție veche rămâne până iese una nouă mai bună (înainte, „Refă fișa” le scotea pe toate)
-    for(let i = out.length - 1; i >= 0; i--){ const x = out[i], h = have.find(y => y.pose === x.pose); if(h && ((x.weak && !h.weak) || (!o.redo && (h.bv || 0) === bodyVer(c) && !h.weak && h.bd != null && x.bd != null && x.bd > h.bd))) out.splice(i, 1); }   // 11.2: ✕ / corp nou: cea nouă câștigă; una slabă nu înlocuiește una bună
+    for(let i = out.length - 1; i >= 0; i--){ const x = out[i], h = have.find(y => y.pose === x.pose); if(h && ((x.weak && !h.weak) || (x.weak && h.weak && h.bd != null && x.bd != null && x.bd >= h.bd) || (!o.redo && (h.bv || 0) === bodyVer(c) && !h.weak && h.bd != null && x.bd != null && x.bd > h.bd))) out.splice(i, 1); }   // 11.2: ✕ / corp nou: cea nouă câștigă; una slabă nu înlocuiește una bună
     if(!out.length) return false;
     const old = have.filter(x => out.some(y => y.pose === x.pose)), v = have.filter(x => !old.includes(x));
     for(const o of out) v.push({pose:o.pose, k:await saveImg(o.b), bd:o.bd, sig:o.sig, bv:bodyVer(c), ...(o.weak ? {weak:true} : {})});
@@ -4121,7 +4124,7 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = RW_MODEL, n = 1){
   let r, d = null;
   try{
     try{ r = await fetch(url, {method:'POST', signal:tac.signal, headers:{'content-type':'application/json', authorization:'Bearer ' + (direct ? S.rwKey : S.wkTok).trim()}, body:safeJSON([task])}); }
-    catch(e){ if(late()) throw new Error('Runware nu răspunde (timp depășit).'); if(e.name === 'AbortError') throw e; throw new Error('Runware nu răspunde' + (direct ? ' din browser. Pune cheia în Worker (secretul RUNWARE_KEY) și golește câmpul din telefon.' : ' (rețea).')); }
+    catch(e){ if(late()) throw new Error('Runware nu răspunde (timp depășit).'); if(e.name === 'AbortError') throw e; throw new Error('Runware nu răspunde' + (direct ? ' din aplicație. Pune cheia în Worker (secretul RUNWARE_KEY) și golește câmpul din telefon.' : ' (rețea).')); }
     try{ d = await r.json(); }catch(e){}
     if(late()) throw new Error('Runware nu răspunde (timp depășit).');
   } finally { clearTimeout(tT); if(signal) signal.removeEventListener('abort', onAb); }
@@ -6732,16 +6735,18 @@ function drawSheet(c, box){
   // 9.99 (5): ✕ pe un unghi: se reface doar el
   el.querySelectorAll('[data-shx]').forEach(bt => bt.onclick = async e => {
     e.stopPropagation(); if(sheetBusy){ toast('Fișa se face deja, așteaptă puțin.'); return; }
-    const ang = bt.dataset.shx; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
-    const ok = await sheetReject(c, ang).catch(() => false);
-    toast(ok ? `🧩 Unghiul „${SHEET_RO[ang] || ang}” e refăcut` : `Unghiul „${SHEET_RO[ang] || ang}”: n-a ieșit unul destul de asemănător, așa că a rămas cel de acum. Mai încearcă o dată peste puțin.`, 4500);
+    const ang = bt.dataset.shx; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>'; redoInfo = null;
+    toast(`🧩 Refac „${SHEET_RO[ang] || ang}”: încerc până la 12 variante și o păstrez pe cea mai apropiată.`, 3000);
+    const ok = await sheetReject(c, ang).catch(() => false), ri = redoInfo, x2 = sheetOf(c).find(y => y.ang === ang);
+    toast(ok ? `🧩 „${SHEET_RO[ang] || ang}” e refăcut${x2 && x2.d != null ? ': ' + idPct(x2.d) + '%' + (x2.weak ? ' (încă ⚠️, dar mai aproape)' : '') : ''}` : ri && ri.n === false ? `„${SHEET_RO[ang] || ang}”: generatorul n-a răspuns acum. Încearcă din nou peste câteva minute.` : `„${SHEET_RO[ang] || ang}”: cea de acum${ri && ri.old != null ? ' (' + idPct(ri.old) + '%)' : ''} e tot cea mai apropiată din 12 încercări, așa că rămâne ea.`, 5000);   // 11.5
     el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); });
   // 11.2: ✕ pe o poziție de corp: se reface doar ea; cea veche rămâne dacă nu iese una nouă
   el.querySelectorAll('[data-bsx]').forEach(bt => bt.onclick = async e => {
     e.stopPropagation(); if(sheetBusy){ toast('Fișa se face deja, așteaptă puțin.'); return; }
-    const pose = bt.dataset.bsx; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
-    const ok = await bsheetReject(c, pose);
-    toast(ok ? `🧍 Poziția „${BSHEET_RO[pose] || pose}” e refăcută` : `Poziția „${BSHEET_RO[pose] || pose}”: n-a ieșit una destul de apropiată, așa că a rămas cea de acum. Mai încearcă o dată peste puțin.`, 4500);
+    const pose = bt.dataset.bsx; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>'; redoInfo = null;
+    toast(`🧍 Refac „${BSHEET_RO[pose] || pose}”: încerc până la 9 variante și o păstrez pe cea mai apropiată.`, 3000);
+    const ok = await bsheetReject(c, pose), ri = redoInfo;
+    toast(ok ? `🧍 Poziția „${BSHEET_RO[pose] || pose}” e refăcută` : `Poziția „${BSHEET_RO[pose] || pose}”: cea de acum${ri && ri.old != null ? ' (' + bodyPct(ri.old) + '%)' : ''} e tot cea mai apropiată din 9 încercări, așa că rămâne ea.`, 5000);   // 11.5
     el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); });
   // 11.2 (4): reperele după corpul de acum
   const ab = el.querySelector('#pfBodyRev'); if(ab) ab.onclick = () => {
@@ -6807,11 +6812,8 @@ function drawBodyNote(c, box){
 }
 function drawPics(c){
   const box = $('#pfPics'); if(!box) return;
-  const on = sendPicsOn(c);
-  const why = S.imgProv === 'none' ? 'Pozele sunt oprite în Setări → Poze; pornește-le acolo.' : !c.photo ? 'Are nevoie de o poză de profil (după ea se păstrează fața).' : '';
-  box.innerHTML = `<div class="pfVoice"><span>${on ? '✅ Pornit' : '⏸ Oprit'}${why ? ' · ' + why : ''}</span><button class="btn sm" id="pfPicsOn">${on ? '⏸ Oprește' : '▶ Pornește'}</button></div>
-    <p class="hint" style="margin-top:6px">${on ? `${esc(c.name)} îți poate trimite poze în chat: când vrea, când i-o ceri, plus cele spontane (Setări → Poze) și cele din statusuri. Fața vine din poza de profil.` : `${esc(c.name)} nu trimite poze singur${c.aiPortrait ? '' : ' (implicit doar personajele cu portret generat în aplicație o fac)'}. 📷 Cere o poză din ＋ merge oricum.`}</p>`;
-  $('#pfPicsOn').onclick = async () => { c.sendPics = !on; await saveChars(); drawPics(c); toast(c.sendPics ? '📷 ' + c.name + ' îți poate trimite poze' : c.name + ' nu mai trimite poze singur'); };
+  const why = S.imgProv === 'none' ? 'Pozele sunt oprite în Setări → Poze; pornește-le acolo.' : !c.photo ? 'Are nevoie de o poză de profil (după ea se păstrează fața).' : '';   // 11.5: fără comutator, pornite la toate
+  box.innerHTML = `<p class="hint" style="margin-top:0">${why ? why + ' ' : ''}${esc(c.name)} îți poate trimite poze în chat: când vrea, când i-o ceri, plus cele spontane (Setări → Poze) și cele din statusuri. Fața vine din poza de profil.</p>`;
   drawPeople(c, box);   // 9.43
   drawFidCard(c, box);   // 10.2: tot ce ține de fidelitate, într-un singur card
   drawHome(c, box);
@@ -8059,7 +8061,7 @@ function setBusyUI(on){
 const LEN = {scurt:{t:'1-2 fraze scurte', max:700}, mediu:{t:'un paragraf, cel mult două', max:1300}, lung:{t:'2-4 paragrafe bogate', max:2400}};
 // pozele trimise de personaj (promise în text, spontane, statusuri): implicit doar cu portret generat în aplicație;
 // 6.5: comutatorul din profil (c.sendPics true/false) le pornește/oprește pentru orice personaj cu poză de profil
-const sendPicsOn = c => c.sendPics === undefined ? !!c.aiPortrait : !!c.sendPics;
+const sendPicsOn = c => !!c;   // 11.5: pornite la toate personajele (pe Runware o poză costă fracțiuni de cent); comutatorul din profil a dispărut
 // Cererile explicite ale utilizatorului sunt independente de setarea pentru poze spontane.
 const canRequestPhoto = c => S.imgProv !== 'none' && !!c && !!c.photo && !duoOn(c);   // 9.63: fără poze la două personaje
 const canAutoPhoto = c => canRequestPhoto(c) && sendPicsOn(c);
@@ -9972,7 +9974,7 @@ async function pushCfgToSW(){
   if(sw) sw.postMessage({cfg:{wk:wkUrl(), tok:S.wkTok ? S.wkTok.trim() : ''}});
 }
 async function pushEnable(){
-  if(!pushOk()) throw new Error('Telefonul sau browserul nu permite notificări pentru aplicații web. Deschide Taifas ca aplicație instalată, din Chrome.');
+  if(!pushOk()) throw new Error('Telefonul nu permite notificări pentru Taifas. Deschide Taifas din aplicația instalată și permite notificările din setările telefonului.');
   if(!S.wkBase) throw new Error('Pune întâi adresa Worker-ului în Setări → Poze.');
   const perm = await Notification.requestPermission(); if(perm !== 'granted') throw new Error('Notificările nu sunt permise. Permite-le din setările telefonului pentru Taifas.');
   const {key} = await wkFetch('/push/key');
@@ -10082,7 +10084,7 @@ function callPics(c, ch){   // pozele ei recente din același loc: în video „
 }
 function startCall(opts = {}){
   if(call) return;
-  if(!SpeechRec){ toast('Telefonul nu are recunoaștere vocală în browser.'); return; }
+  if(!SpeechRec){ toast('Telefonul nu are recunoaștere vocală (instalează sau pornește Google Voice Typing).'); return; }
   if(!('speechSynthesis' in window)){ toast('Telefonul nu are voce pentru citire.'); return; }
   if(!aiReady()){ toast('Pune întâi cheia în Setări.'); return; }
   if(busy){ toast('Așteaptă să termine răspunsul.'); return; }
@@ -10241,7 +10243,7 @@ function callVoiceFail(c, err){
   VOX.err = {e:err, t:Date.now()};
   if(call !== c || c.vWarned) return; c.vWarned = true;
   const hint = /language|voice/.test(err) ? 'telefonul n-are vocea română instalată: Setări Android → Ieșire text în vorbire → Motor Google → Instalează date vocale → Română'
-    : /not-allowed/.test(err) ? 'browserul n-a permis vocea: atinge o dată ecranul apelului'
+    : /not-allowed/.test(err) ? 'telefonul n-a permis vocea: atinge o dată ecranul apelului'
     : 'încearcă fără căști Bluetooth sau cu „Întrerup” oprit; din profil → 🎙️ Vocea → „🔧 Verifică vocea” vezi ce răspunde telefonul';
   toast(`🔇 Vocea nu pornește (${err}). ${hint[0].toUpperCase() + hint.slice(1)}.`, 9000);
 }
@@ -12993,7 +12995,7 @@ async function refTest(){
   if(!c){ box.innerHTML = '<p class="hint">Ai nevoie de un personaj cu poză de profil.</p>'; return; }
   if(S.imgProv !== 'worker' || !S.wkBase){ box.innerHTML = '<p class="hint">Pornește întâi Worker-ul.</p>'; return; }
   const cost = Math.round(neurPerPhoto('eco') * 2 + neurPerPhoto('ancorat'));
-  if(!confirm2(`Generez ${3 + (rwReady() ? 1 : 0) + (rwReady() && S.rw === 'on' && S.idBoost !== 'off' ? 1 : 0)} poze cu ${c.name} (aceeași scenă), ca să compari fața: eco cu 2 repere, eco cu 1 reper, 9B${rwReady() ? ' pe Cloudflare, 9B pe Runware (~$0,004)' : ''} ~${cost.toLocaleString('ro-RO')} neuroni.`)) return;
+  if(!await confirm2(`Generez ${3 + (rwReady() ? 1 : 0) + (rwReady() && S.rw === 'on' && S.idBoost !== 'off' ? 1 : 0)} poze cu ${c.name} (aceeași scenă), ca să compari fața: eco cu 2 repere, eco cu 1 reper, 9B${rwReady() ? ' pe Cloudflare, 9B pe Runware (~$0,004)' : ''} ~${cost.toLocaleString('ro-RO')} neuroni.`)) return;
   const R = await idRefs(c);
   const shot = 'mirror selfie in a cozy bedroom, standing, holding the phone, casual t-shirt and jeans, warm lamp light, relaxed smile', fr = framingOf(shot);
   const p2 = idPrompt(c, shot, fr, R, '', true), p1 = idPrompt(c, shot, fr, R, '', false);
@@ -13019,7 +13021,7 @@ async function refTest(){
   box.querySelectorAll('img').forEach(im => im.onclick = () => openSheet(`<div class="pad"><img src="${im.src}" style="width:100%;border-radius:14px" alt=""></div>`));
   setTimeout(() => loadNeurons(true), 1500);
 }
-const confirm2 = t => window.confirm(t);
+const confirm2 = t => new Promise(r => confirmSheet(t, 'Continuă', () => r(true)));   // 11.5: fereastra aplicației, nu cea a browserului
 async function testImages(){
   for(const [id, k] of Object.entries(FIELDS)) S[k] = $('#' + id).value.trim(); saveSettings();
   if(S.imgProv === 'worker' && S.wkBase) $('#stWkBase').value = S.wkBase = wkUrl(), saveSettings();
@@ -13204,6 +13206,8 @@ function bind(){
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => $('#vHome').addEventListener(ev, () => clearTimeout(lpT)));
   $('#vHome').addEventListener('scroll', () => clearTimeout(lpT), true);
   $('#vHome').addEventListener('contextmenu', e => { if(e.target.closest('[data-open]')) e.preventDefault(); });
+  document.addEventListener('contextmenu', e => { if(!(e.target.closest && e.target.closest('input,textarea,[contenteditable],code'))) e.preventDefault(); });   // 11.5: fără meniul browserului
+  document.addEventListener('dragstart', e => { if(e.target && e.target.tagName === 'IMG') e.preventDefault(); });
   $('#vHome').addEventListener('click', e => { if(lpFired){ e.stopImmediatePropagation(); lpFired = false; } }, true);
   // glisare: spre dreapta pe orice mesaj = răspunde la el; spre stânga pe ultimul răspuns = altă variantă
   let sx = 0, sy = 0, sEl = null, sLastAi = false, sLock = null;

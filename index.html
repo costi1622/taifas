@@ -34,7 +34,7 @@
 })();
 </script>
 <meta name="referrer" content="no-referrer">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
 <meta name="theme-color" content="#0e0c12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1717,6 +1717,17 @@ details.sdanger>summary{color:var(--err)}
 /* 11.3 (E3) */
 #pfEtalon figure .etref{display:block;margin:4px auto 0;font-size:.72rem;padding:3px 8px}
 #pfEtalon figure small.etref{text-align:center;color:var(--tx3)}
+/* 11.5: senzație de aplicație, nu de pagină web: fără selecție de text și meniuri de browser pe butoane și poze,
+   fără mărirea întregii pagini cu două degete, fără inelul de focus la atingere, fără triunghiurile native la secțiunile pliabile */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable],[contenteditable] *,code{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+img,video,canvas,svg,a{-webkit-user-drag:none;-webkit-touch-callout:none}
+button:focus,summary:focus,a:focus,[tabindex]:focus{outline:none}
+button:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+details>summary{list-style:none}details>summary::-webkit-details-marker{display:none}
+details:not(.sadv)>summary::before{content:'›';display:inline-block;width:1em;margin-right:4px;transition:transform .2s;color:var(--tx3);font-weight:700}
+details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 </style>
 </head>
 <body>
@@ -2095,7 +2106,7 @@ details.sdanger>summary{color:var(--err)}
         </div>
         <label style="margin-top:14px">👥 Poze cu oamenii din viața personajului (sora, prietena, colegul…)</label>
         <div class="seg" id="stPeople"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-        <label style="margin-top:14px">Poze spontane (doar personajele cu portret generat cu 🎨)</label>
+        <label style="margin-top:14px">Poze spontane (toate personajele cu poză de profil)</label>
         <div class="seg" id="stSpont"><button data-v="off">Niciodată</button><button data-v="rar">Rar</button><button data-v="des">Des</button></div>
         <label style="margin-top:14px">🎬 Cadrul propus: înainte de o poză cerută de tine, vezi ce a înțeles și poți corecta</label>
         <div class="seg" id="stShotPrev"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
