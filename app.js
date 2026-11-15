@@ -2034,11 +2034,21 @@ async function ageLook(c){
     try{ const im = await loadImgEl(u); let r = await f.detectSingleFace(im, new f.TinyFaceDetectorOptions({inputSize:608, scoreThreshold:.4})).withAgeAndGender();
       if(!r){ if(!f.nets.ssdMobilenetv1.isLoaded) await f.nets.ssdMobilenetv1.loadFromUri(FA + 'model'); r = await f.detectSingleFace(im, new f.SsdMobilenetv1Options({minConfidence:.35})).withAgeAndGender(); }
       if(r) a = Math.round(r.age); } finally { URL.revokeObjectURL(u); } }catch(e){}
-  const ph = String((c.faceBox && c.faceBox.k === c.photo && c.faceBox.phys) || '').toLowerCase();
-  if(/\b(teen|teenage|adolescent|schoolgirl|schoolboy|young girl|young boy|child|kid|minor)\b/.test(ph)) txt = 'tânăr';
-  const m = ph.match(/\b(?:aged?|around|about|apparent age[: ]*)\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\s*years?\b|\b(\d{2})s\b/);
-  const ta = m ? +(m[1] || m[2] || m[4]) : null; if(ta != null && ta < 18) txt = 'tânăr';
-  c.ageLook = {k:c.photo, a, ta, young:(a != null && a < AGE_MIN) || txt === 'tânăr'}; saveChars();
+  // Folosim descrierea vizuală a portretului ca a doua sursă de dovezi.
+  // face-api ageGenderNet estimează vârsta cu erori mari, mai ales la fețe în vârstă;
+  // un rezultat lipsă sau sub 21 nu trebuie să anuleze automat un portret evident matur.
+  const fb = c.faceBox && c.faceBox.k === c.photo ? c.faceBox : null;
+  const visualText = [fb && fb.phys, c.aspect, c.look, c.physEn].filter(Boolean).join(' ').toLowerCase();
+  if(/\b(teen|teenage|adolescent|schoolgirl|schoolboy|young girl|young boy|child|kid|minor|underage|minor-looking)\b/.test(visualText)) txt = 'tânăr';
+  const m = visualText.match(/\b(?:aged?|around|about|apparent age[: ]*)\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:de\s*)?(?:ani|years? old)\b|\b(\d{1,2})[- ]year[- ]old\b|\b(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\s*years?\b|\b(\d{2})s\b/);
+  const ta = m ? +(m[1] || m[2] || m[3] || m[4] || m[6]) : null;
+  if(ta != null && ta < 18) txt = 'tânăr';
+  // Indicii vizuale maturi din fișa extrasă din fotografie: utili când predictorul numeric
+  // nu poate evalua corect ridurile, textura pielii sau trăsăturile unei persoane în vârstă.
+  const matureVisual = (ta != null && ta >= AGE_MIN) || /\b(elderly|senior|older woman|older man|old woman|old man|elderly female|elderly male|aged woman|aged man|middle[- ]aged|mature[- ]looking|advanced age|old age|wrinkled|deep facial lines|pronounced wrinkles|grey[- ]haired|white[- ]haired|femeie in varsta|barbat in varsta|persoana in varsta|femeie în vârstă|bărbat în vârstă|persoană în vârstă|vârstnic[aă]?|varstnic[aă]?|matur[aă]?)\b/.test(visualText);
+  const hardMinor = txt === 'tânăr' || (a != null && a < 18);
+  const young = hardMinor || (a != null && a < AGE_MIN && !matureVisual);
+  c.ageLook = {k:c.photo, a, ta, matureVisual, visualAdult:(a != null && a >= AGE_MIN) || matureVisual, young}; saveChars();
   return c.ageLook;
 }
 const looksYoung = c => !!(c && c.ageLook && c.ageLook.k === c.photo && c.ageLook.young);
@@ -8680,8 +8690,11 @@ async function generateAdultPortfolioImage(c, exposure, button){
     const declaredAge = ageMatch ? +(ageMatch[1] || ageMatch[2]) : 0;
     if(declaredAge < AGE_MIN) throw new Error('Fișa trebuie să declare explicit o vârstă de minimum 21 de ani.');
     const age = await ageLook(c);
-    if(!age || age.a == null || age.a < AGE_MIN || looksYoung(c))
-      throw new Error('Vârsta nu a putut fi confirmată vizual la pragul intern de 21+. Nu generez imagini intime pentru acest profil.');
+    // Acceptă fie estimarea numerică de adult, fie o descriere vizuală matură extrasă
+    // din portret (ex. personaj în vârstă de ~70 ani). Nu acceptă indicii de minoritate
+    // și nu folosește vârsta declarată singură drept dovadă vizuală.
+    if(!age || !age.visualAdult || looksYoung(c))
+      throw new Error('Nu există suficiente indicii vizuale pentru a confirma un personaj adult. Verifică fotografia și descrierea vizuală din fișa personajului.');
     const modes = {
       topless: 'The clearly adult fictional character is topless, with bare breasts visibly uncovered and no shirt, bra, bikini top or chest covering. Keep the lower body fully clothed. Non-sexual portrait, no sexual activity.',
       full: 'The clearly adult fictional character is fully nude in a non-sexual fine-art figure portrait. Natural, non-graphic artistic nudity, neutral pose, no sexual activity. Do not add lingerie, underwear, towels or clothing.',
