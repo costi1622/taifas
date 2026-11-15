@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '11.0';
+const APP_VER = '11.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1488,10 +1488,43 @@ async function refsAllRun(onStep){
 }
 function refsAllHTML(){
   const rows = chars.filter(c => c.photo && (c.stil || 'photo') === 'photo'), imgs = rows.reduce((t, c) => t + refsAllNeed(c), 0), P = S.rwPhoto, per = imgPrice ? imgPrice() : 0;
-  if(refsAll) return `<p class="hint"><span class="spin"></span> ${esc(refsAll.name)} (${refsAll.i + 1} din ${refsAll.n})…</p><div class="btns"><button class="btn sm" id="rAllStop">⏹ Oprește după personajul ăsta</button></div>`;
+  const eng = `<p class="hint">⚙️ Motorul din telefon: ${tfBeRO()}.${tfBeNow === 'wasm' ? ' <button class="btn sm" id="rAllGpu">Încearcă placa video</button>' : ''}</p>`;   // 11.1 (V5)
+  if(refsAll){ const pc = refsAll.n ? Math.round(100 * (refsAll.i + (refProg.n ? refProg.i / refProg.n : 0)) / refsAll.n) : 0;
+    return `<p class="hint"><span class="spin"></span> ${esc(refsAll.name)} (${refsAll.i + 1} din ${refsAll.n})${refProg.n ? ` · ${refProg.lbl}: ${refProg.i} din ${refProg.n}` : ''}…</p><div style="height:6px;border-radius:3px;background:var(--hair);overflow:hidden;margin:6px 0"><i style="display:block;height:100%;width:${pc}%;background:var(--acc,#c46be0)"></i></div><p class="hint">Ecranul rămâne aprins cât lucrează. Dacă ieși din aplicație, se oprește până revii.</p><div class="btns"><button class="btn sm" id="rAllStop">⏹ Oprește după personajul ăsta</button></div>${eng}`; }
   return `<p class="hint">🧩 Reperele noi (12 unghiuri ale feței, 2 variante pe unghi, detaliile, 12 poziții de corp) pentru toate cele ${rows.length} personaje: doar ce lipsește, pe rând, în fundal. Estimare: ~${imgs} poze${per ? ', cam ' + usd(imgs * per) : ''}.</p>
-    <div class="btns"><button class="btn sm pri" id="rAllGo"${imgs || rows.some(c => !detailOf(c)) ? '' : ' disabled'}>🧩 Completează reperele la toate</button></div>`;
+    <div class="btns"><button class="btn sm pri" id="rAllGo"${imgs || rows.some(c => !detailOf(c)) ? '' : ' disabled'}>🧩 Completează reperele la toate</button></div>${eng}`;
 }
+/* ═════════ ⚡ 11.1 reperele, mai repede (aceeași calitate) ═════════
+   (V1) Mai multe variante într-o singură cerere Runware (până la 2 deodată): un drum în loc de 2–4.
+   (V2) Câte două unghiuri / poziții în același timp (Runware primește 2 cereri simultane); cât se generează unul, se măsoară altul.
+        Poza cerută de tine în chat are mereu loc (al treilea loc e al ei).
+   (V3) Pozele de reper se pregătesc (micșorare + codare) o singură dată, nu la fiecare cerere. Urcarea o singură dată la Runware
+        ar cere o schimbare în Worker (seiful permite doar generarea), deci nu e inclusă.
+   (V4) Ecranul rămâne aprins cât se fac reperele (altfel telefonul încetinește aplicația și pare blocată); progres „x din y”.
+   (V5) Recunoașterea feței încearcă din nou placa video la fiecare pornire (după o blocare, o zi pe procesor, nu 30).
+   (V6) Ordinea: întâi ce folosesc pozele din chat cel mai des (selfie de sus, ¾, zâmbet; talie în sus, ¾, așezată). */
+const SHEET_PRIO = ['high', 'l34', 'r34', 'smile', 'warm', 'sun', 'side', 'down', 'low', 'laugh', 'serious', 'side2'];
+const BSHEET_PRIO = ['waist', 'waist34', '34', 'sit', 'front', 'fit', 'side', 'back', 'walk', 'lean', 'bend', 'lie'];
+const prioSort = (a, P) => a.sort((x, y) => (P.indexOf(x) + 1 || 99) - (P.indexOf(y) + 1 || 99));
+function sheetPar(){ return rwFor('ancorat') ? 2 : 1; }          // V2: în paralel doar pe Runware
+function sheetMulti(n){ return rwFor('ancorat') ? n : 1; }       // V1: mai multe rezultate într-o cerere doar pe Runware
+async function genMany(prompt, ref, ref2, opt, n){
+  const k = sheetMulti(n), r = await genImage(prompt, ref, null, ref2, {...opt, multi:k > 1 ? k : 0});
+  return (Array.isArray(r) ? r : [r]).filter(Boolean);
+}
+async function pool(items, k, fn){ const q = items.slice(); const run = async () => { while(q.length){ const x = q.shift(); await fn(x); } }; await Promise.all(Array.from({length:Math.max(1, Math.min(k, q.length))}, run)); }
+// V3: micșorarea și codarea reperelor, o dată pe poză
+const jpgMemo = new WeakMap(), b64Memo = new WeakMap();
+function toJpegC(b, px, q){ if(!(b instanceof Blob)) return toJpeg(b, px, q); let m = jpgMemo.get(b); if(!m){ m = new Map(); jpgMemo.set(b, m); } const k = px + '|' + q; if(!m.has(k)){ const pr = toJpeg(b, px, q); m.set(k, pr); pr.catch(() => m.delete(k)); } return m.get(k); }
+function b64C(b){ if(!(b instanceof Blob)) return blobToB64(b); let pr = b64Memo.get(b); if(!pr){ pr = blobToB64(b); b64Memo.set(b, pr); pr.catch(() => b64Memo.delete(b)); } return pr; }
+// V4: ecranul aprins + progresul
+let awakeN = 0, awakeL = null;
+async function awakeGet(){ try{ if(!awakeL && navigator.wakeLock && document.visibilityState === 'visible'){ awakeL = await navigator.wakeLock.request('screen'); awakeL.addEventListener('release', () => { awakeL = null; }); } }catch(e){} }
+function keepAwake(on){ awakeN = Math.max(0, awakeN + (on ? 1 : -1)); if(awakeN > 0) awakeGet(); else if(awakeL){ awakeL.release().catch(() => {}); awakeL = null; } }
+document.addEventListener('visibilitychange', () => { if(awakeN > 0 && document.visibilityState === 'visible') awakeGet(); });
+const refProg = {lbl:'', i:0, n:0};
+let tfBeNow = '';
+const tfBeRO = () => tfBeNow === 'webgl' ? 'placa video (rapid)' : tfBeNow === 'wasm' ? 'procesor (mai lent)' : tfBeNow === 'cpu' ? 'procesor, fără accelerare (lent)' : 'pornește la prima măsurare';
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
   const asked = (opt.asked || []).filter(Boolean);
@@ -1656,40 +1689,48 @@ async function sheetGen(c, force, onStep, o = {}){
   if(!sheetOn(c) || sheetBusy) return false;
   const all = Object.keys(SHEET_VIEWS), have = sheetOf(c);
   // 9.99: forțat = toată fișa; altfel doar unghiurile care lipsesc (fișele vechi primesc unghiurile noi); o.only = doar acelea
-  const want = o.only ? o.only.filter(a => SHEET_VIEWS[a]) : force ? all : all.filter(a => { const h = have.find(x => x.ang === a); return !h || !h.k2; });   // 11.0: și varianta a doua
+  const want = o.only ? o.only.filter(a => SHEET_VIEWS[a]) : force ? all.slice() : all.filter(a => { const h = have.find(x => x.ang === a); return !h || !h.k2; });   // 11.0: și varianta a doua
   if(!want.length) return false;
+  prioSort(want, SHEET_PRIO);   // 11.1 (V6)
   const tried = (t) => t && t.k === c.photo && (t.set || '') === SHEET_SET() && Date.now() - t.at < 7 * 864e5;   // 11.0: unghiurile noi se încearcă o dată, chiar dacă fișa veche s-a completat de curând
   if(!force && !o.only && (have.length ? tried(c.sheetFill) : tried(c.sheetTry))) return false;
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
   let sl = false; { const afford = Math.floor((rwFor(mdl) ? rwCapLeft() / rwPer() : capLeft() / (neurPerPhoto(mdl) || 5000)));   // 11.0: cât permite plafonul de azi
     while(want.length && Math.max(4, want.length * 2) > afford){ want.pop(); sl = true; } }
   if(!want.length) return false;   // nu consumă ultima parte din plafon
-  const k0 = c.photo; sheetBusy = c.id; { const at = sl ? Date.now() - 7 * 864e5 + 3600e3 : Date.now(); c.sheetTry = {k:k0, at, set:SHEET_SET()}; c.sheetFill = {k:k0, at, set:SHEET_SET()}; }   // tăiat de plafon: restul, peste o oră await saveChars();
+  const k0 = c.photo; sheetBusy = c.id; keepAwake(true); { const at = sl ? Date.now() - 7 * 864e5 + 3600e3 : Date.now(); c.sheetTry = {k:k0, at, set:SHEET_SET()}; c.sheetFill = {k:k0, at, set:SHEET_SET()}; }   // tăiat de plafon: restul, peste o oră await saveChars();
   try{
     const base = await DB.get(k0); const ref = base ? await profDesc(c).catch(() => null) : null; if(!base || !ref) return false;   // fără față măsurabilă în profil nu se poate verifica
     const crs = closeOf(c), cr = crs ? await DB.get(crs.img).catch(() => null) : null;   // 10.9: portretul de aproape, al doilea reper (fața la rezoluție mare)
     const out = [];
-    for(const ang of want){
+    let doneN = 0; refProg.lbl = 'fața'; refProg.i = 0; refProg.n = want.length;
+    const one = async ang => {   // 11.1 (V1, V2): un unghi; două unghiuri în același timp
+      if(c.photo !== k0) return;
       const vw = SHEET_VIEWS[ang], mx = sheetMaxOf(c, ang);
-      if(onStep) onStep(ang, out.length);
+      if(onStep) onStep(ang, doneN);
       const p = `Edit this exact photo: the same person, photographed from ${vw}. Head and shoulders, ${SHEET_LIT[ang] ? 'softly blurred background' : 'plain softly blurred background, even soft light'}. Keep the exact same face and identity, hairstyle, skin and age, and the same clothes. ${STIL_TAG.photo}`;
-      const cands = [];   // 11.0 (A3): toate încercările care trec, apoi rămân cele mai bune două
-      for(let t = 0; t < SHEET_TRIES; t++){
-        const p2 = cr ? p + ' Image 2 is a close-up of the same person: use it for the exact face (face shape, eyes, eyebrows, nose, lips, skin, glasses); everything else from image 1.' : p;
-        let b; try{ b = await genImage(p2, base, null, cr, {model:mdl, size:'768x1024', force:cr ? {two:true} : {two:false, px:1024}, p1:p, quiet:true, why:'profil'}); }catch(e){ if(t) break; continue; }
-        addUsage(c.id, imgPrice(), 'img', null, 'profil');
-        try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
-        const fs = await faceDescs(b).catch(() => []);
-        const best = fs.length ? fs.map(f => ({f, d:fdist(f.d, ref)})).sort((x, y) => x.d - y.d)[0] : null;
-        if(!best){ if((ang === 'side' || ang === 'side2') && !cands.length){ cands.push({b, d:null, box:null}); break; } continue; }   // din profil, fața de obicei nu se poate măsura: îl păstrăm, dar nu-l folosim la măsurători
-        if(best.d < mx) cands.push({b, d:Math.round(best.d * 1000) / 1000, box:{x:best.f.box.x / best.f.W, y:best.f.box.y / best.f.H, w:best.f.box.w / best.f.W, h:best.f.box.h / best.f.H}});
+      const p2 = cr ? p + ' Image 2 is a close-up of the same person: use it for the exact face (face shape, eyes, eyebrows, nose, lips, skin, glasses); everything else from image 1.' : p;
+      const cands = [], h0 = have.find(y => y.ang === ang), needTwo = !(h0 && h0.k && !force);
+      let stop = false;
+      for(let t = 0; t < SHEET_TRIES && !stop; ){
+        let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'768x1024', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, Math.min(2, SHEET_TRIES - t)); }catch(e){ if(t) break; t++; continue; }
+        t += Math.max(1, bs.length);
+        for(let b of bs){
+          addUsage(c.id, imgPrice(), 'img', null, 'profil');
+          try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
+          const fs = await faceDescs(b).catch(() => []);
+          const best = fs.length ? fs.map(f => ({f, d:fdist(f.d, ref)})).sort((x, y) => x.d - y.d)[0] : null;
+          if(!best){ if((ang === 'side' || ang === 'side2') && !cands.length){ cands.push({b, d:null, box:null}); stop = true; break; } continue; }   // din profil, fața de obicei nu se poate măsura: îl păstrăm, dar nu-l folosim la măsurători
+          if(best.d < mx) cands.push({b, d:Math.round(best.d * 1000) / 1000, box:{x:best.f.box.x / best.f.W, y:best.f.box.y / best.f.H, w:best.f.box.w / best.f.W, h:best.f.box.h / best.f.H}});
+        }
         const okN = cands.filter(x => x.d != null).length, good = cands.filter(x => x.d != null && x.d <= SHEET_GOOD).length;
-        const h0 = have.find(y => y.ang === ang), needTwo = !(h0 && h0.k && !force);   // unghiul există deja: îi trebuie doar varianta a doua
-        if(good >= 2 || (good >= 1 && okN >= (needTwo ? 2 : 1))) break;   // destul de aproape: nu mai plătește alte încercări
+        if(good >= 2 || (good >= 1 && okN >= (needTwo ? 2 : 1))) stop = true;   // destul de aproape: nu mai plătește alte încercări
       }
       if(cands.length) out.push({ang, cands});
-      if(c.photo !== k0 || !charById(c.id)) return false;   // ai schimbat poza de profil între timp
-    }
+      doneN++; refProg.i = doneN;
+    };
+    await pool(want, sheetPar(), one);
+    if(c.photo !== k0 || !charById(c.id)) return false;   // ai schimbat poza de profil între timp
     // 10.9 + 11.0: din cele vechi și cele noi rămân cele mai apropiate două (un unghi vechi nu se pierde dacă cel nou e mai slab)
     let changed = false; const v = have.slice(), dels = [];
     for(const o of out){
@@ -1709,7 +1750,7 @@ async function sheetGen(c, force, onStep, o = {}){
     c.sheet = {k:k0, v, at:Date.now()}; await saveChars();
     for(const k of dels) delImg(k).catch(() => {});
     return true;
-  } finally { sheetBusy = null; }
+  } finally { sheetBusy = null; keepAwake(false); refProg.n = 0; }
 }
 // 9.99 (5): un unghi care nu-ți place: îl scoți, se reface doar el (mai strict), și ține minte că l-ai respins
 async function sheetReject(c, ang, onStep){
@@ -1832,23 +1873,26 @@ async function closeGen(c, force){
   if(!force && c.closeTry && c.closeTry.k === c.photo && Date.now() - c.closeTry.at < 7 * 864e5) return false;
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
   if(rwFor(mdl) ? rwCapLeft() < rwPer() * (CLOSE_TRIES + 1) : capLeft() < (neurPerPhoto(mdl) || 5000) * (CLOSE_TRIES + 1)) return false;
-  const k0 = c.photo; sheetBusy = c.id; c.closeTry = {k:k0, at:Date.now()}; await saveChars();
+  const k0 = c.photo; sheetBusy = c.id; keepAwake(true); c.closeTry = {k:k0, at:Date.now()}; await saveChars();
   try{
     const base = await DB.get(k0), ref = base ? await profDesc(c).catch(() => null) : null; if(!base || !ref) return false;
     let id = null; try{ id = await identityOf(c); }catch(e){}
     const gl = id && !id.none && id.glasses ? ` The same glasses (${idCut(id.glasses, 80)}), the same frames.` : '';
     const p = `Edit this exact photo: the same person in a close-up portrait, head and shoulders filling the frame, straight front view, eyes towards the camera, relaxed natural expression with the mouth closed, even soft daylight on the face, plain softly blurred background. Keep exactly the same face and identity, the same skin with its texture, freckles and marks, the same age, the same hair (the same color, length, curls, volume and parting, all of it visible) and the same clothes.${gl} Sharp focus on the face, natural skin texture, no retouching. ${STIL_TAG.photo}`;
     let keep = null;
-    for(let t = 0; t < CLOSE_TRIES; t++){
-      let b; try{ b = await genImage(p, base, null, null, {model:mdl, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}); }catch(e){ if(t) break; continue; }
-      addUsage(c.id, imgPrice(), 'img', null, 'profil');
-      try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
-      const fs = await faceDescs(b).catch(() => []); if(!fs.length) continue;
-      const f = fs.map(x => ({x, d:fdist(x.d, ref)})).sort((a, z) => a.d - z.d)[0];
-      let lk = null; try{ lk = await lookOf(c, b, 'close-up portrait, head and shoulders'); }catch(e){}
-      const sc = f.d + (lk ? Math.min(.15, lk.pen || 0) : 0);
-      if(!keep || sc < keep.sc) keep = {b, d:Math.round(f.d * 1000) / 1000, sc, h:f.x.box.h / f.x.H};
-      if(keep.d <= CLOSE_GOOD && keep.sc - keep.d < .02) break;
+    for(let t = 0, stop = false; t < CLOSE_TRIES && !stop; ){   // 11.1 (V1): câte două pe cerere
+      let bs; try{ bs = await genMany(p, base, null, {model:mdl, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}, Math.min(2, CLOSE_TRIES - t)); }catch(e){ if(t) break; t++; continue; }
+      t += Math.max(1, bs.length);
+      for(let b of bs){
+        addUsage(c.id, imgPrice(), 'img', null, 'profil');
+        try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
+        const fs = await faceDescs(b).catch(() => []); if(!fs.length) continue;
+        const f = fs.map(x => ({x, d:fdist(x.d, ref)})).sort((a, z) => a.d - z.d)[0];
+        let lk = null; try{ lk = await lookOf(c, b, 'close-up portrait, head and shoulders'); }catch(e){}
+        const sc = f.d + (lk ? Math.min(.15, lk.pen || 0) : 0);
+        if(!keep || sc < keep.sc) keep = {b, d:Math.round(f.d * 1000) / 1000, sc, h:f.x.box.h / f.x.H};
+        if(keep.d <= CLOSE_GOOD && keep.sc - keep.d < .02) stop = true;
+      }
       if(c.photo !== k0 || !charById(c.id)) return false;
     }
     if(c.photo !== k0 || !charById(c.id)) return false;
@@ -1858,7 +1902,7 @@ async function closeGen(c, force){
     if(old && old !== c.closeRef.img) delImg(old).catch(() => {});
     headCache.clear();
     return true;
-  } finally { sheetBusy = null; }
+  } finally { sheetBusy = null; keepAwake(false); refProg.n = 0; }
 }
 /* ── (R1, R3) toate reperele, cu amprenta, unghiul capului și locul în grup ── */
 const refOut = (c, key) => !!(c && c.refSet && c.refSet.e && c.refSet.e.some(x => x.key === key && x.out));
@@ -1983,53 +2027,61 @@ const bsheetTried = (c, pose) => { const t = c.bsheetTry; if(!t || t.k !== c.pho
 // 10.5 (R4): forțat = toată fișa; altfel doar pozițiile lipsă (cele bune rămân); 3 încercări pe poziție, rămâne cea mai apropiată ca siluetă
 async function bsheetGen(c, force, onStep){
   if(!sheetOn(c) || !c.photoFull || sheetBusy || looksYoung(c)) return false;   // 9.94 (D)
-  const all = Object.keys(BSHEET_VIEWS), have = bsheetOf(c), want = force ? all : bsheetMiss(c).filter(x => !bsheetTried(c, x));   // 10.7: pe poziție
+  const all = Object.keys(BSHEET_VIEWS), have = bsheetOf(c), want = (force ? all.slice() : bsheetMiss(c).filter(x => !bsheetTried(c, x)));   // 10.7: pe poziție
   if(!want.length) return false;
+  prioSort(want, BSHEET_PRIO);   // 11.1 (V6)
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
   let sl = false; { const afford = Math.floor((rwFor(mdl) ? rwCapLeft() / rwPer() : capLeft() / (neurPerPhoto(mdl) || 5000)));   // 11.0: cât permite plafonul de azi
     while(want.length && want.length * 2 + 1 > afford){ want.pop(); sl = true; } }
   if(!want.length) return false;   // nu consumă ultima parte din plafon
-  const k0 = c.photoFull; sheetBusy = c.id; { const pp = c.bsheetTry && c.bsheetTry.k === k0 && c.bsheetTry.p ? c.bsheetTry.p : {}; for(const x of want) pp[x] = Date.now(); c.bsheetTry = {k:k0, at:Date.now(), n:want.join(','), p:pp}; } await saveChars();
+  const k0 = c.photoFull; sheetBusy = c.id; keepAwake(true); { const pp = c.bsheetTry && c.bsheetTry.k === k0 && c.bsheetTry.p ? c.bsheetTry.p : {}; for(const x of want) pp[x] = Date.now(); c.bsheetTry = {k:k0, at:Date.now(), n:want.join(','), p:pp}; } await saveChars();
   try{
     const base = await DB.get(k0); if(!base) return false;
     const ref = await bodySig(base).catch(() => null);   // 9.94 (A): fără siluetă măsurabilă, se verifică doar fața
     const crs = closeOf(c), cr = crs ? await DB.get(crs.img).catch(() => null) : null;   // 10.9
     const out = [];
-    for(const pose of want){
+    let doneN = 0; refProg.lbl = 'corpul'; refProg.i = 0; refProg.n = want.length;
+    const one = async pose => {   // 11.1 (V1, V2)
+      if(c.photoFull !== k0) return;
       const vw = BSHEET_VIEWS[pose];
-      if(onStep) onStep(pose, out.length);
+      if(onStep) onStep(pose, doneN);
       const p = `Edit this exact photo: the same person photographed ${vw}. Keep exactly the same person: the same face, the same body (build, weight and proportions), ${BSHEET_CLOTH[pose] ? 'the same hairstyle; ' + BSHEET_CLOTH[pose] : 'the same clothes and hairstyle'}. Plain neutral background, even soft light. ${STIL_TAG.photo}`;
       const p2 = cr ? p + ' Image 2 is a close-up of the same person: use it only for the exact face, hair and glasses; the body, clothes and everything else from image 1.' : p;   // 10.9
       const noFace = pose === 'side' || pose === 'back', noBody = BSHEET_NOBODY.has(pose), tol = BSHEET_TOL[pose] || BODY_SHEET_OK;   // 11.0
-      let keep = null, loose = null;
-      for(let t = 0; t < 3; t++){
-        let b; try{ b = await genImage(p2, base, null, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, p1:p, quiet:true, why:'profil'}); }catch(e){ if(t) break; continue; }
-        addUsage(c.id, imgPrice(), 'img', null, 'profil');
-        try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
-        const fd = (await localFace(b, c).catch(() => ({d:null}))).d, sig = await bodySig(b).catch(() => null);
-        const bd = sig && ref ? bodyDist2(sig, ref) : null;
-        const faceOk = fd == null ? noFace : fd < .55, bodyOk = noBody || !ref ? true : bd != null && bd <= tol;
-        if(faceOk && !noBody && bd != null && bd <= BODY_SHEET_LOOSE && (!loose || bd < loose.bd)) loose = {pose, b, bd:Math.round(bd * 1000) / 1000, sig, sc:bd};   // 10.9: rezerva, dacă poziția lipsește cu totul
-        if(!faceOk || !bodyOk) continue;
-        const sc = (bd ?? .06) + (fd ?? .4) * .2;
-        if(!keep || sc < keep.sc) keep = {pose, b, bd:bd == null ? null : Math.round(bd * 1000) / 1000, sig, sc};
-        if(noBody || (bd != null && bd <= tol * .6)) break;   // destul de aproape: nu mai plătește alte încercări
+      let keep = null, loose = null, stop = false;
+      for(let t = 0; t < 3 && !stop; ){
+        let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, t === 0 ? 2 : 3 - t); }catch(e){ if(t) break; t++; continue; }
+        t += Math.max(1, bs.length);
+        for(let b of bs){
+          addUsage(c.id, imgPrice(), 'img', null, 'profil');
+          try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
+          const fd = (await localFace(b, c).catch(() => ({d:null}))).d, sig = noBody ? null : await bodySig(b).catch(() => null);
+          const bd = sig && ref ? bodyDist2(sig, ref) : null;
+          const faceOk = fd == null ? noFace : fd < .55, bodyOk = noBody || !ref ? true : bd != null && bd <= tol;
+          if(faceOk && !noBody && bd != null && bd <= BODY_SHEET_LOOSE && (!loose || bd < loose.bd)) loose = {pose, b, bd:Math.round(bd * 1000) / 1000, sig, sc:bd};   // 10.9: rezerva, dacă poziția lipsește cu totul
+          if(!faceOk || !bodyOk) continue;
+          const sc = (bd ?? .06) + (fd ?? .4) * .2;
+          if(!keep || sc < keep.sc) keep = {pose, b, bd:bd == null ? null : Math.round(bd * 1000) / 1000, sig, sc};
+          if(noBody || (bd != null && bd <= tol * .6)) stop = true;   // destul de aproape: nu mai plătește alte încercări
+        }
       }
       if(!keep && loose && !have.some(x => x.pose === pose)) keep = loose;   // 10.9: mai bine o poziție aproape decât deloc
       if(keep && noBody) keep.bd = null;   // întinsă / profil: silueta nu se compară (afișa 0%)
       if(keep) out.push(keep);
-      if(c.photoFull !== k0 || !charById(c.id)) return false;
-    }
+      doneN++; refProg.i = doneN;
+    };
+    await pool(want, sheetPar(), one);
+    if(c.photoFull !== k0 || !charById(c.id)) return false;
     // 10.9: o poziție veche rămâne până iese una nouă mai bună (înainte, „Refă fișa” le scotea pe toate)
     for(let i = out.length - 1; i >= 0; i--){ const x = out[i], h = have.find(y => y.pose === x.pose); if(h && h.bd != null && x.bd != null && x.bd > h.bd) out.splice(i, 1); }
     if(!out.length) return false;
     const old = have.filter(x => out.some(y => y.pose === x.pose)), v = have.filter(x => !old.includes(x));
     for(const o of out) v.push({pose:o.pose, k:await saveImg(o.b), bd:o.bd, sig:o.sig});
     v.sort((a, b) => all.indexOf(a.pose) - all.indexOf(b.pose));
-    c.bsheet = {k:k0, v, at:Date.now()}; await saveChars();
+    c.bsheet = {k:k0, v, at:Date.now()}; await saveChars();   // 11.1: în paralel, ordinea de sosire nu contează
     for(const o of old) delImg(o.k).catch(() => {});
     return true;
-  } finally { sheetBusy = null; }
+  } finally { sheetBusy = null; keepAwake(false); refProg.n = 0; }
 }
 // poza de corp potrivită scenei: așezată, din profil, ¾ sau poza întreagă (toată silueta, încadrată fără tăieturi)
 function bodyPoseOf(shot){
@@ -2444,7 +2496,7 @@ const kitBusy = new Set();
 async function kitBuild(c, o = {}){
   if(!c || !c.photo || kitBusy.has(c.id) || S.imgProv === 'none') return false;
   if(typeof call !== 'undefined' && call && !o.force){ setTimeout(() => kitEnsure(c, o), 60e3); return false; }   // nu în timpul unui apel: telefonul are nevoie de el
-  kitBusy.add(c.id); const k0 = kitKey(c), step = o.onStep || (() => {});
+  kitBusy.add(c.id); const k0 = kitKey(c), step = o.onStep || (() => {}); if(o.gen) keepAwake(true);   // 11.1 (V4)
   try{
     if(aiReady()){ step('pasaport'); try{ await identityOf(c); }catch(e){} }
     step('amprenta'); try{ await refDescs(c); }catch(e){}
@@ -2458,9 +2510,9 @@ async function kitBuild(c, o = {}){
         step('aproape'); try{ const s3 = await closeGen(c, false); if(s3 && o.toast) toast(`🔍 ${c.name}: portretul de aproape e gata.`, 2500); }catch(e){}   // 10.5 (R2); 11.0: înaintea fișelor (le folosesc ca al doilea reper)
         for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
         step('detalii'); try{ await detailGen(c); }catch(e){}   // 11.0 (A2)
-        step('fisa'); const s1 = await sheetGen(c, !!o.force && !sheetOf(c).length).catch(() => false); if(s1 && o.toast) toast(`🧩 ${c.name}: fișa feței e gata.`, 2500);   // forțat doar ce lipsește
+        step('fisa'); const s1 = await sheetGen(c, !!o.force && !sheetOf(c).length, () => step('fisa')).catch(() => false); if(s1 && o.toast) toast(`🧩 ${c.name}: fișa feței e gata.`, 2500);   // forțat doar ce lipsește
         for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
-        step('fisaCorp'); const s2 = await bsheetGen(c, !!o.force && !bsheetOf(c).length).catch(() => false); if(s2 && o.toast) toast(`🧍 ${c.name}: fișa corpului e gata.`, 2500);
+        step('fisaCorp'); const s2 = await bsheetGen(c, !!o.force && !bsheetOf(c).length, () => step('fisaCorp')).catch(() => false); if(s2 && o.toast) toast(`🧍 ${c.name}: fișa corpului e gata.`, 2500);
         for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
         step('consens'); try{ const n3 = await consFix(c); if(n3 && o.toast) toast(`🤝 ${c.name}: ${n3} ${n3 === 1 ? 'unghi refăcut' : 'unghiuri refăcute'} (ieșiseră din grup).`, 3000); }catch(e){}   // 10.5 (R3)
         if(aiReady()){ step('pasaport2'); try{ await passportMulti(c); }catch(e){} }   // 9.99 (4)
@@ -2472,7 +2524,7 @@ async function kitBuild(c, o = {}){
     }
     if(kitKey(c) === k0){ c.kit = {v:KIT_V, k:k0, at:Date.now(), gen:!!o.gen || !!(c.kit && c.kit.gen && c.kit.k === k0)}; await saveChars(); }
     return true;
-  } finally { kitBusy.delete(c.id); step(''); }
+  } finally { kitBusy.delete(c.id); step(''); if(o.gen) keepAwake(false); }
 }
 // dacă pachetul e vechi sau incomplet: se completează în fundal (Runware îl lasă după pozele tale)
 const kitRan = new Map();
@@ -3143,11 +3195,14 @@ function statsAllSheet(){
     <div class="btns"><button class="btn" data-close>Închide</button></div></div>`);
   refsAllWire();
 }
+let refsAllT = 0;
 function refsAllWire(){   // 11.0 (C1)
   const b = $('#rAllBox'); if(!b) return; b.innerHTML = refsAllHTML();
   const go = b.querySelector('#rAllGo'), st = b.querySelector('#rAllStop');
   if(go) go.onclick = () => { refsAllRun(() => refsAllWire()).catch(() => {}); refsAllWire(); };
   if(st) st.onclick = () => { if(refsAll) refsAll.stop = true; st.disabled = true; st.textContent = 'Se oprește după personajul ăsta…'; };
+  const gp = b.querySelector('#rAllGpu'); if(gp) gp.onclick = () => { try{ localStorage.removeItem('taifas-tfbe'); }catch(e){} toast('Închide și redeschide aplicația: recunoașterea încearcă placa video.', 5000); };
+  clearTimeout(refsAllT); if(refsAll) refsAllT = setTimeout(refsAllWire, 1500);   // progresul se actualizează singur
 }
 function drawEtalon(c, box){
   if(S.imgProv !== 'worker') return;
@@ -3201,7 +3256,7 @@ function tfStall(what){
   try{ localStorage.setItem('taifas-tfbe', JSON.stringify({be:'wasm', at:Date.now(), what})); }catch(e){}
   try{ toast('⚠️ Recunoașterea din telefon s-a blocat (placa video nu mai răspunde). Închide și redeschide aplicația: de acum merge pe procesor.', 8000); }catch(e){}
 }
-const tfOrder = () => { try{ const x = JSON.parse(localStorage.getItem('taifas-tfbe') || 'null'); if(x && x.be === 'wasm' && Date.now() - x.at < 30 * 864e5) return ['wasm', 'webgl', 'cpu']; }catch(e){} return ['webgl', 'wasm', 'cpu']; };
+const tfOrder = () => { try{ const x = JSON.parse(localStorage.getItem('taifas-tfbe') || 'null'); if(x && x.be === 'wasm' && Date.now() - x.at < 864e5) return ['wasm', 'webgl', 'cpu']; }catch(e){} return ['webgl', 'wasm', 'cpu']; };
 const FA = 'vendor/face-api/';
 let faP = null;
 function faceApi(){
@@ -3213,7 +3268,7 @@ function faceApi(){
         // placa video (webgl) → WebAssembly (fișierele .wasm stau lângă bibliotecă) → procesor
         try{ if(f.tf.setWasmPaths) f.tf.setWasmPaths(new URL(FA, location.href).href); }catch(e){}
         let be = '';
-        for(const x of tfOrder()){ try{ if(await f.tf.setBackend(x)){ await f.tf.ready(); be = x; break; } }catch(e){} }
+        for(const x of tfOrder()){ try{ if(await f.tf.setBackend(x)){ await f.tf.ready(); be = x; tfBeNow = x; break; } }catch(e){} }
         if(!be) throw new Error('niciun motor de calcul disponibil');
         await Promise.all([f.nets.tinyFaceDetector.loadFromUri(FA + 'model'), f.nets.faceLandmark68Net.loadFromUri(FA + 'model'), f.nets.faceRecognitionNet.loadFromUri(FA + 'model')]);
         res(f);
@@ -3889,8 +3944,8 @@ function rwSize(size){ return String(size || S.wkSize || '768x1024').split('x').
 async function rwImage(prompt, ref, ref2, opt, signal, model){
   // aceleași repere ca pe Worker: 2 repere = fața (image) + poza de profil (image_1) + unghiurile; reper unic = poza de profil
   const two = opt.force ? !!opt.force.two && !!ref : !!(ref && ref2), refs = [];
-  if(two){ refs.push(await toJpeg(ref, opt.px1 || 512, .92)); if(ref2) refs.push(await toJpeg(ref2, opt.px2 || 512, .92)); for(const x of (opt.extra || []).slice(0, 2)) refs.push(await toJpeg(x, 512, .92)); }
-  else { const one = opt.one || (ref2 || ref); if(one) refs.push(await toJpeg(one, (opt.force && opt.force.px) || 1024, .92)); }
+  if(two){ refs.push(await toJpegC(ref, opt.px1 || 512, .92)); if(ref2) refs.push(await toJpegC(ref2, opt.px2 || 512, .92)); for(const x of (opt.extra || []).slice(0, 2)) refs.push(await toJpegC(x, 512, .92)); }
+  else { const one = opt.one || (ref2 || ref); if(one) refs.push(await toJpegC(one, (opt.force && opt.force.px) || 1024, .92)); }
   const p = two ? prompt : (opt.p1 || prompt.replace(/,? ?image 2 is a close-up of the same face\. ?/i, ' '));
   const [w, h] = rwSize(opt.size);
   const blob = await rwRun(p, refs, w, h, signal, RW_MODEL, opt.multi || 1);   // 9.86: opt.multi → mai multe rezultate deodată (listă)
@@ -3921,12 +3976,12 @@ const RW_TRANSIENT = /temporarily unavailable|high demand|overload|try again|tim
    Aplicația trimitea multe deodată (schițele + fișele + poza întreagă din fundal), iar coada modelului le respingea.
    Acum: cel mult 2 cereri Runware în același timp; ce rulează în fundal (fișe, poza întreagă automată, cadre pentru apel)
    așteaptă cât timp faci o poză tu; la „aglomerat” se așteaptă cât cere Runware (+ decalaj), de cel mult 4 ori. */
-const RW_MAX = 2; let rwActive = 0, rwFg = 0; const rwWait = [];
+const RW_MAX = 2; let rwActive = 0, rwFg = 0, rwBg = 0; const rwWait = [];
 const rwSlot = async fg => {
-  while(rwActive >= RW_MAX || (!fg && rwFg > 0)) await new Promise(r => { rwWait.push(r); setTimeout(r, 1500); });
-  rwActive++;
+  while(rwActive >= (fg ? RW_MAX + (rwBg > 0 ? 1 : 0) : RW_MAX) || (!fg && rwFg > 0)) await new Promise(r => { rwWait.push(r); setTimeout(r, 1500); });
+  rwActive++; if(!fg) rwBg++;
 };
-const rwFree = () => { rwActive = Math.max(0, rwActive - 1); const w = rwWait.splice(0); w.forEach(f => f()); };
+const rwFree = fg => { rwActive = Math.max(0, rwActive - 1); if(fg === false) rwBg = Math.max(0, rwBg - 1); const w = rwWait.splice(0); w.forEach(f => f()); };
 async function rwRun(...a){
   const signal = a[4], fg = !!signal;   // cu signal = ceva ce aștepți tu; fără = lucru din fundal
   if(fg) rwFg++;
@@ -3939,8 +3994,8 @@ async function rwRun(...a){
         const ms = Math.min(15000, (e.retryAfter ? e.retryAfter * 1000 : [2000, 4000, 7000][t] || 7000) + Math.random() * 900);
         rwStats.busy++; S.rwBusyAt = Date.now();
         if(live && live.stage && busy && busy.signal === signal) pstage(signal, `⏳ Runware e aglomerat, reîncerc în ${Math.round(ms / 1000)} s (${t + 2}/4)`, live.stage.p || 90);
-        held = false; rwFree(); await naps(ms, signal);
-      } finally { if(held) rwFree(); }
+        held = false; rwFree(fg); await naps(ms, signal);
+      } finally { if(held) rwFree(fg); }
     }
   } finally { if(fg) rwFg = Math.max(0, rwFg - 1); }
 }
@@ -3952,7 +4007,7 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = RW_MODEL, n = 1){
     : {taskType:'imageInference', taskUUID:crypto.randomUUID(), model:RW_MODEL, positivePrompt:String(prompt).slice(0, 10000),
     width:w, height:h, numberResults:Math.max(1, Math.min(4, n || 1)), outputType:'base64Data', outputFormat:'JPG', outputQuality:94, includeCost:true, acceleration:'none',
     seed:Math.floor(Math.random() * 4294967295)};   // 9.86: JPG (de ~5 ori mai puțin de descărcat); n rezultate într-o singură cerere
-  if(refs.length) task.inputs = {referenceImages: await Promise.all(refs.slice(0, f3 ? 10 : 4).map(async b => 'data:image/jpeg;base64,' + await blobToB64(b)))};
+  if(refs.length) task.inputs = {referenceImages: await Promise.all(refs.slice(0, f3 ? 10 : 4).map(async b => 'data:image/jpeg;base64,' + await b64C(b)))};
   const direct = rwDirect(), url = direct ? RW_URL : wkUrl() + '/proxy/runware/v1';
   const t0 = performance.now();
   const tac = new AbortController(), tT = setTimeout(() => tac.abort(), RW_TO.ms), onAb = () => tac.abort();   // 10.8: limită de timp
@@ -6552,7 +6607,7 @@ function drawSheet(c, box){
     ${!K.ok && S.imgProv !== 'none' ? `<div class="btns"><button class="btn sm pri" id="pfKitGo"${kb ? ' disabled' : ''}>${kb ? '<span class="spin"></span> Se completează…' : '🧬 Completează acum'}</button></div>` : ''}</div>`);
   { const kg = box.querySelector('#pfKitGo'); if(kg) kg.onclick = async () => { kg.disabled = true; kg.innerHTML = '<span class="spin"></span> Se completează…';
       if(kitBusy.has(c.id)) for(let i = 0; i < 240 && kitBusy.has(c.id); i++) await sleep(500);   // 9.93: se completa deja în fundal: îl așteaptă
-      await kitBuild(c, {gen:true, force:true, toast:true, onStep:st => { if(kg.isConnected && st) kg.innerHTML = '<span class="spin"></span> ' + esc((K.items.find(x => x.k === st) || {l:st}).l); }}).catch(() => {});
+      await kitBuild(c, {gen:true, force:true, toast:true, onStep:st => { if(kg.isConnected && st) kg.innerHTML = '<span class="spin"></span> ' + esc((K.items.find(x => x.k === st) || {l:st}).l) + (refProg.n && (st === 'fisa' || st === 'fisaCorp') ? ` · ${refProg.i} din ${refProg.n}` : ''); }}).catch(() => {});
       { const K2 = kitState(c), left = K2.items.filter(x => !x.ok && !x.warn), warn = K2.items.filter(x => x.warn);
         toast(left.length ? '⏳ N-au ieșit încă: ' + left.map(x => x.l.replace(/^\S+\s/, '')).join(', ') + '. Încearcă din nou peste câteva minute.' : warn.length ? '✅ Gata. ⚠️ ' + warn.map(x => x.l.replace(/^\S+\s/, '')).join(', ') + ': vezi motivul în listă.' : '✅ Pachetul de identitate e complet.', 5000); }
       const el = $('#pfKit'); if(el){ const sh = $('#pfSheet'); el.remove(); if(sh) sh.remove(); drawSheet(c, box); } }; }
