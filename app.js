@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.0';
+const APP_VER = '10.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -37,7 +37,7 @@ const DEF = {
   userName:'', userAbout:'', len:'mediu', font:16,
   imgProv:'none',
   wkBase:'', wkTok:'', wkModel:'eco', wkSize:'768x1024',
-  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
+  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
   vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
 };
 let S = {...DEF};
@@ -764,11 +764,11 @@ function genDiagHTML(m){
   return `<details class="gdiag"><summary>🔍 De ce arată așa (ce a primit generatorul)</summary>
     <p>🖼️ ${esc(g.mdl)} · motor ${g.eng === 'id' ? 'identitate (vechi)' : g.eng === 'flux3' ? 'FLUX 3' : 'ca în creator'} · repere: ${esc(g.refs)}</p>
     <p>👤 Fața față de portret: <b>${pct(g.fd)}</b>${g.ret ? ' (după retuș)' : ''}${sil ? ` · 🧍 silueta față de poza întreagă: <b>${sil}</b>${g.bfix ? ' (refăcută o dată)' : ''}` : ''}</p>
-    ${g.look ? `<p>🎨 Măsurat în telefon față de portret: ${esc(lookLineRo(g.look, cur) || 'nimic măsurabil în poza asta')}</p>` : ''}${g.must ? `<p>✅ Trăsături obligatorii: ${g.must.miss && g.must.miss.length ? '<b>au picat: ' + esc(g.must.miss.join('; ')) + '</b>' : g.must.n ? 'toate cele ' + g.must.n + ' vizibile se potrivesc' : 'niciuna vizibilă în cadru'}</p>` : ''}
+    ${g.lk || (g.look && typeof g.look === 'object') ? `<p>🎨 Măsurat în telefon față de portret: ${esc(lookLineRo(g.lk || g.look, cur) || 'nimic măsurabil în poza asta')}</p>` : ''}${g.pov || g.sref || g.pose ? `<p>🎬 Cadrul: ${[g.pov ? '👁️ din ochii tăi' : '', g.sref ? 'decorul luat din poza dinainte' : '', g.pose && poseLineRo(g.pose) ? 'poziția măsurată: ' + esc(poseLineRo(g.pose)) : ''].filter(Boolean).join(' · ')}</p>` : ''}${g.must ? `<p>✅ Trăsături obligatorii: ${g.must.miss && g.must.miss.length ? '<b>au picat: ' + esc(g.must.miss.join('; ')) + '</b>' : g.must.n ? 'toate cele ' + g.must.n + ' vizibile se potrivesc' : 'niciuna vizibilă în cadru'}</p>` : ''}
     <p>🧍 Corpul a venit din: <b>${esc(BODY_SRC_RO[g.src] || g.src)}</b></p>
     ${(g.sheet || []).length ? `<p>🧩 Fișa de identitate: unghiurile <b>${esc(g.sheet.join(' + '))}</b> (pentru scena asta)</p>` : ''}${g.dr ? `<p>✏️ Aleasă din ${g.dr} schițe, apoi refăcută mare${g.dfd != null ? ` (schița: ${pct(g.dfd)})` : ''}</p>` : ''}${(g.fix || []).length ? `<p>🩹 Reparat doar: <b>${esc(g.fix.join(', '))}</b> (restul pozei a rămas)</p>` : ''}${g.skin ? '<p>🎨 Tenul adus la tenul din portret (pe telefon)</p>' : ''}${g.garRet ? '<p>🛡️ Garanția: fața a fost potrivită încă o dată după portret (era prea departe)</p>' : ''}${g.fwarn != null ? `<p>⚠️ Fața a rămas sub prag (${g.fwarn}%).</p>` : ''}${g.fin ? '<p>✨ Finisată pe telefon: balans de alb, expunere, claritate fină, granulație de senzor</p>' : ''}${g.bwarn != null ? `<p>⚠️ Corpul a rămas sub prag (${g.bwarn}%), chiar după refacere.</p>` : ''}${g.tm ? `<p>⏱️ ${g.tm.total ? '<b>' + (g.tm.total / 1000).toFixed(1).replace('.', ',') + ' s</b>: ' : ''}${[['scena', 'scena'], ['schite', 'schițe'], ['variante', 'variante'], ['alegere', 'alegere'], ['final', 'poza mare'], ['retus', 'retuș'], ['verificare', 'verificare'], ['reparare', 'reparare'], ['garantie', 'garanție'], ['masurare', 'măsurare'], ['finisare', 'finisare']].filter(([k]) => g.tm[k] > 50).map(([k, l]) => l + ' ' + (g.tm[k] / 1000).toFixed(1).replace('.', ',') + ' s').join(' · ')}${g.fast ? ' · fără verificare (deja măsurată ca bună)' : ''}</p>` : ''}${g.miss ? `<p>🎲 Ai respins varianta de dinainte pentru: <b>${esc(PFB_RO[g.miss] || g.miss)}</b></p>` : ''}${g.corr ? `<p style="color:var(--tx3);font-size:.8rem">Corectura trimisă: ${esc(g.corr)}</p>` : ''}
     ${g.pf != null && g.pf > FACE_OK ? `<p>⚠️ Portretul și poza întreagă nu par aceeași față (${pct(g.pf)}). Pozele din chat iau fața din portret. Dacă vrei fața din poza întreagă, deschide-o și apasă „👤 Față”.</p>` : g.pf != null ? `<p>✅ Portretul și poza întreagă: aceeași față (${pct(g.pf)})</p>` : ''}
-    <p style="color:var(--tx3);font-size:.8rem;line-height:1.45">${esc(g.look)}</p></details>`;
+    <p style="color:var(--tx3);font-size:.8rem;line-height:1.45">${typeof g.look === 'string' ? esc(g.look) : ''}</p></details>`;
 }
 // expresia: cea obișnuită (din poza de profil), în afară de cazul în care ai cerut tu alta în conversație
 const EXPR_ASK = 'Facial expression requested: ';
@@ -801,8 +801,241 @@ function idPrompt(c, shot, fr, R, fix, two){
   return `${stilLead(c.stil)}${fr.p}. ${shot}.${fix ? ` Important corrections from the previous attempt: ${fix}.` : ''} IDENTITY LOCK — the reference images define one specific character, not a lookalike. Reproduce the same individual: preserve face shape, eye spacing and shape, eyebrows, nose, lips, jaw, apparent age, skin tone and texture, hairline, hair color, curl/strand texture and hairstyle. BODY IDENTITY LOCK — match the body reference, not a generic default body. Preserve the same visible body build and proportions, including the exact relative bust size and shape, shoulders, waist, hips, belly, arms and legs. ${bodyChangePriority} ${refs}.${phys} SCENE FLEXIBILITY — do not copy the reference photo's background, outfit, pose, expression, camera angle or framing. Those are allowed to change and must follow the current scene description above. Change only temporary details required by the scene; the character's identity and natural body proportions stay fixed. ${STIL_TAG[c.stil || 'photo']}`;
 }
 // încadrarea scrisă explicit la început (altfel modelul copiază încadrarea referinței)
+/* ═════════ 🎬 10.1 cadrul scenei: poza arată exact momentul din conversație ═════════
+   (S2) Starea scenei, ținută la zi: personajul notează singur, doar când se schimbă ceva, [cadru: unde, pe ce | poziția | ce poartă |
+        ce ține în mâini | cu tine: da/nu] (ca [stare:] și [acum:]); planificatorul pozei pornește de la cadrul notat, nu doar de la
+        ultimele mesaje. Fără apeluri în plus.
+   (S1) Camera din ochii tăi: când ești fizic lângă personaj în scenă, poza e ce vezi tu de unde ești (nu un selfie de-al ei).
+   (S4) Cadrul propus: la pozele cerute de tine, vezi pe scurt ce a înțeles planificatorul și corectezi înainte să se facă poza.
+   (S5) Decorul pozei dinainte: dacă locul e același, generatorul primește și camera din poza anterioară, cu persoana acoperită
+        (ca să nu-i copieze poziția sau hainele), deci pereții, mobila și lumina rămân aceleași.
+   (S8) Poziția măsurată în telefon (MoveNet): fiecare schiță e clasificată (în picioare, așezată, întinsă, în genunchi; unde sunt
+        mâinile) și comparată cu planul; o contradicție clară pierde la alegere. Gratuit. */
+const FRAME_RE = /\s*\[cadru:\s*([^\]\n]{3,320})\]/gi;
+const FRAME_EMPTY = /^(nimic|niciuna|nici una|-|—|nu|n\/a|\?)$/i;
+function parseFrame(raw, mid){
+  const parts = String(raw || '').split('|').map(x => x.trim());
+  let w = null; const mw = (parts[parts.length - 1] || '').match(/^cu\s+[^:|]{1,40}:\s*(da|nu)\b/i);
+  if(mw){ w = /^da$/i.test(mw[1]); parts.pop(); }
+  const cl = x => FRAME_EMPTY.test(x || '') ? '' : String(x || '').slice(0, 140);
+  return {t:String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 320), loc:cl(parts[0]), pos:cl(parts[1]), out:cl(parts[2]), hands:cl(parts[3]), w, ts:Date.now(), mid:mid || null};
+}
+const frameFresh = ch => ch && ch.frame && ch.frame.t && Date.now() - (ch.frame.ts || 0) < 12 * 36e5 ? ch.frame : null;
+// pentru planificator: cadrul notat + câte mesaje au mai trecut de atunci (ele pot schimba ceva)
+function frameLine(c, ch, exclude){
+  const f = frameFresh(ch); if(!f) return '';
+  const ms = ch.msgs.filter(x => x !== exclude && x.text && !x.err && !x.pending), i = f.mid ? ms.findIndex(x => x.id === f.mid) : -1, n = i >= 0 ? ms.length - 1 - i : null;
+  return `Live frame noted by ${c.name} about the scene, kept up to date message by message (Romanian: where and on what | body position | outfit | in the hands | with ${S.userName.trim() || 'User'}: da/nu): ${f.t}\nThis live frame is the current truth for the place, the body position, the outfit and the objects in the hands${n ? `, unless one of the ${n} message${n > 1 ? 's' : ''} written after it changed something` : ''}.\n`;
+}
+const povOn = (together) => S.pov !== 'off' && !together;
+const POV_RE = /point[- ]of[- ]view|\bpov\b|through (his|her|their|\w+'s) eyes|seen by (him|the person (who is )?with)/i;
+const povRule = (c, u, together) => povOn(together) ? `\n4c. Point of view: if ${u} is physically with ${c.name} in the scene right now (in the same room, next to each other: the live frame or the latest messages say so), the camera is "photo from ${u}'s point of view": the picture shows exactly what ${u} sees from where he is (sitting beside her: close, from the side; across the table: from across the table; standing in the doorway: from the doorway), at his eye level. ${c.name} is NOT holding a phone and is NOT taking a selfie: she is doing what the scene says and may look at ${u}, into the camera. ${u} is never visible in the picture, except his hand or forearm entering the frame when the action involves it. Use the selfie cameras only when they are apart, or when ${c.name} explicitly takes a selfie.` : '';
+const camEnum = (u, together) => `${povOn(together) ? `photo from ${u}'s point of view | ` : ''}selfie | mirror selfie | phone propped up with timer | close-up selfie`;
+// cheile în plus din răspunsul planificatorului: mâinile, poziția pe categorii, dacă ești de față, dacă locul și ținuta sunt aceleași, rezumatul în română
+const PLAN_WHERE_X = `,"hands":"what is in the hands, or empty","posture":"standing | sitting | lying | kneeling | other","with_user":false`;
+const planKeysX = ch => `\n "same_place":${ch.where ? 'true or false: is this photo in exactly the same place and room as the last known state' : 'false'},"same_outfit":${ch.where ? 'true or false: is the outfit exactly the same as in the last known state' : 'false'},\n "ro":{"camera":"în română, 2-6 cuvinte: cine face poza și de unde","loc":"în română: locul și pe ce stă","pozitie":"în română: poziția corpului","tinuta":"în română: ce poartă","maini":"în română: ce ține în mâini sau ce fac mâinile"},`;
+const CAM_FORCE = {pov:u => `photo from ${u}'s point of view (he is with her; she is not holding a phone)`, selfie:() => 'selfie taken by her at arm\'s length', mirror:() => 'mirror selfie, standing in front of a mirror', timer:() => 'phone propped up with timer, whole body visible', close:() => 'close-up selfie, head and shoulders'};
+const CAM_RO = {pov:'👁️ Din ochii tăi', selfie:'🤳 Selfie', mirror:'🪞 Oglindă', timer:'⏱️ Telefon sprijinit', close:'🔍 Prim-plan'};
+const planFixBlock = (u, fix, cam) => (fix || cam) ? `\n${u.toUpperCase()} CORRECTED THE PROPOSED FRAME (this overrides the conversation, the live frame and the last known state; change only what the correction says and keep the rest):${cam && CAM_FORCE[cam] ? `\n- camera must be: ${CAM_FORCE[cam](u)}` : ''}${fix ? `\n- in Romanian: «${String(fix).slice(0, 400)}»` : ''}\n` : '';
+const camKey = (cam, shot) => { const t = String(cam || '') + ' ' + String(shot || '').slice(0, 160); return POV_RE.test(t) ? 'pov' : /close[- ]?up/i.test(cam || '') ? 'close' : /mirror/i.test(cam || '') ? 'mirror' : /propped|timer|tripod/i.test(cam || '') ? 'timer' : /selfie/i.test(cam || '') ? 'selfie' : ''; };
+const POSTURES = ['standing', 'sitting', 'lying', 'kneeling'];
+function postureFromText(t){
+  t = String(t || '').toLowerCase(); let best = null, at = 1e9;
+  const R = {lying:/\b(lying|lies|laying|sprawled|stretched out|reclining flat|on (her|his) (back|stomach|belly|side))\b/, sitting:/\b(sitting|seated|sits|perched|curled up|cross-legged|straddling)\b/, kneeling:/\b(kneeling|kneels|on (her|his) knees|on all fours|crouching|squatting)\b/, standing:/\b(standing|stands|walking|leaning against|dancing|on tiptoe)\b/};
+  for(const [k, re] of Object.entries(R)){ const m = t.match(re); if(m && m.index < at){ at = m.index; best = k; } }
+  return best;
+}
+// după răspunsul planificatorului: camera POV ajunge sigur în descriere; starea primește mâinile, poziția și dacă ești de față
+function planPost(c, ch, j, shot, cam, u){
+  const key = camKey(cam, shot), pov = key === 'pov';
+  if(pov && !POV_RE.test(shot)) shot = `Photo from the point of view of ${u}, who is with ${c.name} in the scene; she is not holding a phone. ${shot}`;
+  const W = j.where && typeof j.where === 'object' ? j.where : {};
+  const posture = POSTURES.includes(String(W.posture || '').toLowerCase().trim()) ? String(W.posture).toLowerCase().trim() : postureFromText((W.position || '') + '. ' + shot);
+  if(ch.where){ if(W.hands) ch.where.hands = String(W.hands).slice(0, 160); if(posture) ch.where.posture = posture; ch.where.cam = key || undefined; if(W.with_user === true || pov) ch.where.withUser = true; }
+  const ro = j.ro && typeof j.ro === 'object' ? Object.fromEntries(['camera', 'loc', 'pozitie', 'tinuta', 'maini'].map(k => [k, faraLiniute(String(j.ro[k] || '').replace(/[<>]/g, '').trim()).slice(0, 160)])) : null;
+  return {shot, pov, cam:key, posture, ro, samePlace:j.same_place === true, sameOutfit:j.same_outfit === true};
+}
+/* ── (S4) cadrul propus, înainte de poză ── */
+const prevWanted = (ch, spont, target, mode) => S.shotPrev !== 'off' && spont !== true && (!target || mode === 'new') && !(typeof call !== 'undefined' && call)
+  && chat === ch && !$('#vChat').hidden && document.visibilityState === 'visible';
+const FRAME_ROWS = [['camera', '📷 Camera'], ['loc', '📍 Locul'], ['pozitie', '🧍 Poziția'], ['tinuta', '👗 Ținuta'], ['maini', '✋ În mâini']];
+function frameRows(pl){
+  const w = pl.where || {}, ro = pl.ro || {};
+  const fb = {camera:CAM_RO[pl.cam] ? CAM_RO[pl.cam].replace(/^\S+\s/, '') : '', loc:[w.place, w.room].filter(Boolean).join(', '), pozitie:w.position || '', tinuta:w.outfit || '', maini:w.hands || ''};
+  return FRAME_ROWS.map(([k, l]) => [l, ro[k] || fb[k] || '']).filter(x => x[1]);
+}
+// întoarce {go:true} | {fix, cam} (reface cadrul) | {cancel:true}; dacă nu atingi nimic 30 s, poza pornește singură
+function shotPreview(c, pl, n, signal){
+  return new Promise(res => {
+    const rows = frameRows(pl), cams = ['pov', 'selfie', 'mirror', 'timer', 'close'].filter(k => k !== 'pov' || povOn(pl.together));
+    openSheet(`<h4>🎬 Cadrul propus</h4><div class="pad frp">
+      <div class="frl">${rows.map(r => `<div><b>${r[0]}</b><span>${esc(r[1])}</span></div>`).join('') || '<div><span>' + esc(String(pl.shot || '').slice(0, 220)) + '</span></div>'}</div>
+      <label>Altă cameră</label>
+      <div class="chipset" id="fpCam">${cams.map(k => `<button type="button" data-cam="${k}"${k === pl.cam ? ' class="on"' : ''}>${CAM_RO[k]}</button>`).join('')}</div>
+      <textarea id="fpFix" rows="2" maxlength="400" placeholder="Ce nu e bine? ex.: stă pe scaun, nu pe canapea; are rochia roșie"></textarea>
+      <div class="btns" style="margin-top:10px"><button class="btn" id="fpNo">Renunță</button><button class="btn pri" id="fpGo">📸 Fă poza<span id="fpT"></span></button></div>
+      <label class="hint frpoff"><input type="checkbox" id="fpOff"> Nu mai întreba înainte de poză (repornești din Setări → Poze)</label>
+      ${n ? '<p class="hint">Cadrul a fost refăcut după corectura ta.</p>' : ''}</div>`);
+    const scrim = [...$$('.scrim')].pop(); let done = false, left = 30, cam = '';
+    const fin = v => { if(done) return; done = true; clearInterval(iv);
+      if($('#fpOff') && $('#fpOff').checked && !v.cancel){ S.shotPrev = 'off'; saveSettings(); toast('Nu mai întreb înainte de poză. Repornești din Setări → Poze.', 3500); }
+      if(scrim && document.body.contains(scrim)) scrim.remove(); res(v); };
+    const stop = () => { left = -1; const e = $('#fpT'); if(e) e.textContent = ''; };
+    const send = () => { const fix = ($('#fpFix').value || '').trim(); fin(fix || cam ? {fix, cam} : {go:true}); };
+    const iv = setInterval(() => {
+      if(signal && signal.aborted) return fin({go:true});                           // ⏹ Oprește: framePreview vede semnalul și oprește poza
+      if(!scrim || !document.body.contains(scrim)) return fin({go:true});          // închisă din afară: poza merge mai departe
+      if(left < 0) return; left--; const e = $('#fpT'); if(e) e.textContent = left > 0 ? ` (${left})` : '';
+      if(left <= 0) fin({go:true});
+    }, 1000);
+    $('#fpT').textContent = ' (30)';
+    $('#fpGo').onclick = send;
+    $('#fpNo').onclick = () => fin({cancel:true});
+    $('#fpFix').oninput = () => { stop(); $('#fpGo').firstChild.textContent = ($('#fpFix').value.trim() || cam) ? '✏️ Reface cadrul' : '📸 Fă poza'; };
+    $('#fpFix').onfocus = stop;
+    $$('#fpCam button').forEach(b => b.onclick = () => { stop(); cam = b.dataset.cam === pl.cam ? '' : b.dataset.cam; $$('#fpCam button').forEach(x => x.classList.toggle('on', x.dataset.cam === (cam || pl.cam)));
+      $('#fpGo').firstChild.textContent = ($('#fpFix').value.trim() || cam) ? '✏️ Reface cadrul' : '📸 Fă poza'; });
+  });
+}
+async function framePreview(c, ch, m, pl, o){
+  if(!prevWanted(ch, o.spont, o.target, o.mode)) return pl;
+  for(let n = 0; n < 4; n++){
+    pstage(o.signal, '🎬 Așteaptă să confirmi cadrul', 30);
+    const d = await shotPreview(c, pl, n, o.signal);
+    if(o.signal && o.signal.aborted){ const e = new Error('Oprit'); e.name = 'AbortError'; throw e; }
+    if(d.cancel){ const e = new Error('Renunțat'); e.name = 'AbortError'; e.cancelFrame = true; throw e; }
+    if(d.go || n === 3) return pl;
+    pstage(o.signal, '🎬 Reface cadrul după corectura ta', 26);
+    pl = await planShot(c, ch, {promised:o.promised, exclude:m, signal:o.signal, together:o.together, fix:d.fix || '', cam:d.cam || ''});
+    pl.fixed = (pl.fixed || 0) + 1;
+  }
+  return pl;
+}
+/* ── (S5) decorul pozei dinainte ── */
+const sceneRefOn = (c, opt = {}) => S.sceneRef !== 'off' && S.imgProv === 'worker' && !opt.together && !opt.partner && (c.stil || 'photo') === 'photo';
+// poza dinainte cu persoana acoperită cu gri: rămâne doar camera (pereți, mobilă, lumină); null dacă persoana ocupă aproape tot cadrul
+async function sceneBackdrop(blob){
+  const u = URL.createObjectURL(blob);
+  try{
+    const im = await loadImgEl(u), W0 = im.naturalWidth, H0 = im.naturalHeight, k = Math.min(1, 768 / Math.max(W0, H0)), W = Math.round(W0 * k), H = Math.round(H0 * k);
+    const mask = await segMask(im), N = 256, on = new Uint8Array(N * N); let cnt = 0;
+    for(let i = 0; i < N * N; i++) if(mask[i] >= .35) on[i] = 1;
+    const dil = new Uint8Array(N * N), R = 4;   // puțin mai lat decât persoana, ca să nu rămână conturul ei
+    for(let y = 0; y < N; y++) for(let x = 0; x < N; x++){ let v = 0; for(let dy = -R; dy <= R && !v; dy++){ const yy = y + dy; if(yy < 0 || yy >= N) continue; for(let dx = -R; dx <= R; dx++){ const xx = x + dx; if(xx >= 0 && xx < N && on[yy * N + xx]){ v = 1; break; } } } dil[y * N + x] = v; cnt += v; }
+    const frac = cnt / (N * N); if(frac > .62 || frac < .01) return null;
+    const mc = document.createElement('canvas'); mc.width = mc.height = N; const mg = mc.getContext('2d'), id = mg.createImageData(N, N);
+    for(let i = 0; i < N * N; i++){ id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = 128; id.data[i * 4 + 3] = dil[i] ? 255 : 0; }
+    mg.putImageData(id, 0, 0);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+    g.drawImage(im, 0, 0, W, H); g.imageSmoothingEnabled = true; g.drawImage(mc, 0, 0, W, H);
+    const out = await new Promise(r => cv.toBlob(r, 'image/jpeg', .9)); if(out) out.frac = Math.round(frac * 100) / 100;
+    return out;
+  }catch(e){ return null; } finally { URL.revokeObjectURL(u); }
+}
+// ultima poză din aceeași scenă (cel mult 6 ore în urmă), doar dacă planificatorul spune că locul e același
+function prevSceneMsg(ch, m){
+  const i = ch.msgs.indexOf(m), list = (i >= 0 ? ch.msgs.slice(0, i) : ch.msgs).filter(x => x !== m);
+  for(let k = list.length - 1; k >= 0 && k >= list.length - 40; k--){ const x = list[k];
+    if(x.role === 'ai' && x.img && !x.err && !x.pendingImg){ return !x.together && !x.people && x.where && Date.now() - (x.ts || 0) < 6 * 36e5 ? x : null; } }
+  return null;
+}
+async function sceneOptOf(c, ch, m, pl, together){
+  const o = {posture:pl.posture || null, pov:!!pl.pov};
+  try{
+    if(sceneRefOn(c, {together}) && pl.samePlace && !(pl.people && pl.people.length)){
+      const pm = prevSceneMsg(ch, m), b = pm ? await DB.get(pm.img).catch(() => null) : null;
+      if(b && framingOf(pm.scene || '').k !== 'close'){ const bd = await sceneBackdrop(b); if(bd){ o.sref = bd; o.srefOutfit = !!pl.sameOutfit; } }
+    }
+  }catch(e){}
+  return o;
+}
+// „🎲 Altă variantă (aceeași scenă)”: decorul vine chiar din poza respinsă, în afară de cazul în care ai respins-o pentru scenă
+async function sceneOptSame(c, target, opt = {}){
+  const w = target.where || {}, o = {posture:w.posture || postureFromText(target.scene), pov:POV_RE.test(target.scene || '')};
+  try{
+    if(sceneRefOn(c, {together:!!target.together}) && opt.miss !== 'scene' && target.img && !target.people && framingOf(target.scene || '').k !== 'close'){
+      const b = await DB.get(target.img).catch(() => null), bd = b ? await sceneBackdrop(b) : null; if(bd) o.sref = bd; }
+  }catch(e){}
+  return o;
+}
+const srefText = n => ` Image ${n} shows the room of this same scene from the previous photo, with the person covered by a flat grey shape: reproduce the same room exactly (walls, furniture, objects, colours, materials and light). The grey shape is not part of the scene: ignore it, and take the person's position, pose, outfit and the camera angle only from this text.`;
+/* ── (S8) poziția, măsurată în telefon ── */
+const postureCache = new WeakMap();
+async function postureOf(blob){
+  if(!blob) return null;
+  if(postureCache.has(blob)) return postureCache.get(blob);
+  const p = (async () => {
+    const b = (await personCrop(blob).catch(() => null)) || blob, u = URL.createObjectURL(b);
+    try{ const im = await loadImgEl(u); return postureFromKp(await crPose(im), im.naturalWidth, im.naturalHeight); }
+    catch(e){ return null; } finally { URL.revokeObjectURL(u); }
+  })();
+  postureCache.set(blob, p); return p;
+}
+// din cele 17 puncte MoveNet: k = poziția (null dacă picioarele nu se văd destul), h = unde e fiecare mână care se vede
+function postureFromKp(kp, W, H){
+  if(!kp) return null;
+  const ok = i => kp[i] && kp[i][2] >= .3; if(![5, 6, 11, 12].every(ok)) return null;
+  const mid = (a, b) => [(kp[a][0] + kp[b][0]) / 2, (kp[a][1] + kp[b][1]) / 2], sh = mid(5, 6), hp = mid(11, 12);
+  const sw = Math.hypot(kp[5][0] - kp[6][0], kp[5][1] - kp[6][1]), len = Math.hypot(hp[0] - sh[0], hp[1] - sh[1]); if(len < H * .04) return null;
+  const tilt = Math.atan2(Math.abs(hp[0] - sh[0]), Math.abs(hp[1] - sh[1])) * 180 / Math.PI;   // 0 = trunchi vertical, 90 = orizontal
+  const o = {tilt:Math.round(tilt), k:null, h:[]};
+  const kn = ok(13) && ok(14) ? mid(13, 14) : ok(13) ? kp[13] : ok(14) ? kp[14] : null, an = ok(15) && ok(16) ? mid(15, 16) : ok(15) ? kp[15] : ok(16) ? kp[16] : null;
+  if(tilt >= 62) o.k = 'lying';
+  else if(kn && tilt <= 35){
+    const thV = (kn[1] - hp[1]) / len, thH = Math.abs(kn[0] - hp[0]) / len;                      // coapsa: cât coboară, cât merge lateral
+    if(an){ const shV = (an[1] - kn[1]) / len;
+      if(thV >= .5 && shV >= .45) o.k = 'standing';
+      else if(thV >= .5 && shV < .2) o.k = 'kneeling';
+      else if(thV < .38) o.k = 'sitting'; }
+    else if(thV < .3 && (thH > .25 || thV < .15)) o.k = 'sitting';
+  }
+  const hw = Math.max(sw, len * .5);
+  for(const [w, s] of [[9, 5], [10, 6]]){ if(!ok(w)) continue; const p = kp[w];
+    if(ok(0) && Math.hypot(p[0] - kp[0][0], p[1] - kp[0][1]) < hw * .7) o.h.push('face');
+    else if(p[1] < Math.min(kp[5][1], kp[6][1]) - hw * .15) o.h.push('up');
+    else if(Math.hypot(p[0] - kp[s + 6][0], p[1] - kp[s + 6][1]) < hw * .45) o.h.push('hips');
+    else o.h.push('down'); }
+  return o;
+}
+const HANDS_WANT = [['up', /\b(arms? (raised|up|above)|hands? (raised|above|behind (her|his) head|in (her|his) hair|through (her|his) hair)|stretching|waving)\b/i],
+  ['face', /\bhand (on|under|against|at|covering) (her|his) (chin|cheek|face|mouth|lips)\b|\bchin (resting )?(on|in) (her|his) hand\b/i],
+  ['hips', /\bhands? on (her|his) (hips?|waist)\b/i]];
+// cât pierde o schiță la alegere când poziția măsurată contrazice clar planul (0 = se potrivește sau nu se poate ști)
+function poseCmp(ps, want, shot){
+  if(!ps) return {pen:0};
+  const o = {pen:0, k:ps.k, want:want || null};
+  if(want && ps.k && ps.k !== want){
+    const pair = [want, ps.k].sort().join('+');
+    // întinsă văzută de sus poate părea verticală, iar „șade” și „în genunchi” se confundă: se penalizează doar contradicțiile clare
+    if(pair === 'lying+standing' || pair === 'sitting+standing' || pair === 'kneeling+standing'){ o.pen = .09; o.bad = true; }
+    else if(pair === 'lying+sitting' && ps.k === 'lying' && ps.tilt >= 72){ o.pen = .05; o.bad = true; }
+  }
+  const hw = HANDS_WANT.find(x => x[1].test(String(shot || '')));
+  if(hw && ps.h && ps.h.length){ o.hw = hw[0]; if(!ps.h.includes(hw[0])){ o.pen += .03; o.hbad = true; } }
+  return o;
+}
+const poseOn = (c, opt = {}) => S.poseCheck !== 'off' && !opt.together && !opt.partner && (c.stil || 'photo') === 'photo';
+async function poseOfDraft(c, x, shot, opt = {}){
+  if(!poseOn(c, opt) || framingOf(shot).k === 'close') return null;
+  try{ return poseCmp(await postureOf(x.blob), opt.posture || postureFromText(shot), shot); }catch(e){ return null; }
+}
+const posePen = x => x && x.ps ? x.ps.pen || 0 : 0;
+const POSE_RO = {standing:'în picioare', sitting:'așezată', lying:'întinsă', kneeling:'în genunchi'};
+const HAND_RO = {up:'mâna ridicată', face:'mâna la față', hips:'mâna pe șold'};
+function poseLineRo(ps){
+  if(!ps || (!ps.k && !ps.hw)) return '';
+  const a = [];
+  if(ps.k) a.push(ps.want && ps.want !== ps.k ? `${POSE_RO[ps.k]} (planul: ${POSE_RO[ps.want] || ps.want})${ps.bad ? ' ⚠️' : ''}` : POSE_RO[ps.k] + (ps.want ? ' ✓' : ''));
+  if(ps.hw) a.push(HAND_RO[ps.hw] + (ps.hbad ? ': nu se vede ⚠️' : ' ✓'));
+  return a.join(' · ');
+}
 function framingOf(shot){
   const t = String(shot || '').toLowerCase();
+  if(POV_RE.test(t)){   // 10.1 (S1): din ochii tăi, nu selfie
+    if(/close[- ]?up|headshot|face only/.test(t)) return {k:'close', pov:true, p:'Close-up photo from the point of view of the person facing her, at eye level: head and shoulders; she is not holding a phone and it is not a selfie'};
+    if(/full[- ]?body|head to (toe|feet)|whole body|wide shot|from the doorway|from across the room|from afar|walking|dancing/.test(t)) return {k:'full', pov:true, p:'Full-body photo from the point of view of the person who is with her in the room, seen from where he is, at eye level: her entire body visible from head to toe, the room around clearly visible; she is not holding a phone, no selfie arm, no mirror'};
+    return {k:'mid', pov:true, p:'Photo from the point of view of the person who is with her, seen from where he is in the scene, at eye level: her body visible from head to thighs, the furniture she is on and the room around clearly visible; she is not holding a phone, no selfie arm, no mirror'};
+  }
   if(/close[- ]?up|headshot|face only|portrait of (her|his) face|prim[- ]plan/.test(t)) return {k:'close', p:'Close-up selfie, head and shoulders, phone held at arm\'s length'};
   // 9.27: stă jos sau e întinsă (canapea, pat, fotoliu, scaun): selfie de aproape, cu locul pe care stă bine vizibil, nu oglindă
   const seated = /\b(sitting|seated|lying|lies|reclining|curled up|on the (sofa|couch|bed|armchair|chair|floor)|in bed)\b/.test(t);
@@ -864,7 +1097,7 @@ function photoAsk(ch, exclude){
 }
 // cuvintele importante dintr-un detaliu cerut („red dress” → red, dress): lipsește din descriere dacă niciunul nu apare
 const askMissing = (asked, shot) => { const t = String(shot || '').toLowerCase(); return (asked || []).filter(a => { const w = String(a).toLowerCase().match(/[a-z]{4,}/g) || []; return w.length && !w.some(x => t.includes(x.replace(/(ing|ed|es|s)$/, ''))); }); };
-async function planShot(c, ch, {promised = '', exclude = null, signal, together = false} = {}){
+async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = ''} = {}){
   pstage(signal, '🎬 Își alege locul și cadrul', 22);
   const u = S.userName.trim() || 'User';
   const hist = ch.msgs.filter(x => x !== exclude && x.text && !x.err && !x.pending);
@@ -877,16 +1110,16 @@ async function planShot(c, ch, {promised = '', exclude = null, signal, together 
   const out = await stream(`You are the photo planner of a chat app where ${c.name}, a fictional adult character when explicitly established as 18+, sends ${u} photos from their phone. You read the conversation and decide exactly where the character is and how, then describe the photo. The conversation is the only truth. Answer with JSON only.`, [{role:'user', text:
 `Character: ${c.name}.${c.persona ? ' About: ' + plain(c.persona).slice(0, 500) : ''}
 Now: ${todEn()}.${wx ? ` Real weather right now in ${wx.city}, where the character lives: ${wx.t}°C, ${wx.en}, ${wx.day ? 'daylight' : 'dark outside'} (use it for anything outdoors and for the light through windows).` : ''}${lf ? ' Daily routine says right now: ' + lf.w + ' (use only if the conversation says nothing else).' : ''}
-${ch.scene ? 'Scene set by the user (has priority, translate to English): ' + ch.scene + '\n' : ''}${ch.where ? 'Last known state of the character (from earlier photos): ' + JSON.stringify(ch.where) + '\n' : ''}${ch.plot ? 'Ongoing activity noted by the character (Romanian, "activity › current step"): ' + ch.plot.t + '\n' : ''}${home ? `Rooms of ${c.name}'s home (reuse these details EXACTLY when the photo is in one of them, so the home always looks the same):\n${home}\n` : ''}
+${ch.scene ? 'Scene set by the user (has priority, translate to English): ' + ch.scene + '\n' : ''}${ch.where ? 'Last known state of the character (from earlier photos): ' + JSON.stringify(ch.where) + '\n' : ''}${frameLine(c, ch, exclude)}${ch.plot ? 'Ongoing activity noted by the character (Romanian, "activity › current step"): ' + ch.plot.t + '\n' : ''}${home ? `Rooms of ${c.name}'s home (reuse these details EXACTLY when the photo is in one of them, so the home always looks the same):\n${home}\n` : ''}
 Conversation, oldest first (the Romanian text is the source of truth):
 ${recent || '(just started)'}
-${ask ? `\n${u.toUpperCase()}'S PHOTO REQUEST, verbatim (Romanian), HIGHEST PRIORITY: «${ask}»\nTreat colloquial requests to see/show/send a body part or a nude image as explicit requests for an image, not merely conversation. Every concrete detail in the request must be reflected in the image. Preserve requested place, scene, pose, camera angle and framing. If nudity is explicitly requested for a clearly adult character, change only the clothing state; do not invent a new room, pose or camera setup. The request overrides clothing continuity and in-character dialogue, but not safety rules. Fill in only what the request leaves open, from the conversation.\n` : ''}${S.userPhoto ? (together ? `\nThis photo is of ${c.name} and ${u} TOGETHER (${u} asked for it): describe both of them in the scene (where each one is, how they stand or sit together, what each wears). Photos together are ordinary everyday couple photos, both fully clothed and natural (like a selfie at a café or on a walk).\n` : `\n${u} has a profile photo, so a photo of the two of them together is possible: set "together": true only if they are physically together in the scene right now AND the photo is clearly of both of them (a selfie together, ${u} asks for a photo together). Then describe both of them. Photos together are ordinary everyday couple photos, both fully clothed and natural.\n`) : ''}${promised ? `\n${c.name} just sent the photo and described it like this: "${promised}". Use it as the base, but correct anything that contradicts the conversation.\n` : ''}${prevShots ? `\nPhotos already sent (vary pose or framing unless the conversation says the same place and moment):\n${prevShots}\n` : ''}
+${ask ? `\n${u.toUpperCase()}'S PHOTO REQUEST, verbatim (Romanian), HIGHEST PRIORITY: «${ask}»\nTreat colloquial requests to see/show/send a body part or a nude image as explicit requests for an image, not merely conversation. Every concrete detail in the request must be reflected in the image. Preserve requested place, scene, pose, camera angle and framing. If nudity is explicitly requested for a clearly adult character, change only the clothing state; do not invent a new room, pose or camera setup. The request overrides clothing continuity and in-character dialogue, but not safety rules. Fill in only what the request leaves open, from the conversation.\n` : ''}${S.userPhoto ? (together ? `\nThis photo is of ${c.name} and ${u} TOGETHER (${u} asked for it): describe both of them in the scene (where each one is, how they stand or sit together, what each wears). Photos together are ordinary everyday couple photos, both fully clothed and natural (like a selfie at a café or on a walk).\n` : `\n${u} has a profile photo, so a photo of the two of them together is possible: set "together": true only if they are physically together in the scene right now AND the photo is clearly of both of them (a selfie together, ${u} asks for a photo together). Then describe both of them. Photos together are ordinary everyday couple photos, both fully clothed and natural.\n`) : ''}${promised ? `\n${c.name} just sent the photo and described it like this: "${promised}". Use it as the base, but correct anything that contradicts the conversation.\n` : ''}${prevShots ? `\nPhotos already sent (vary pose or framing unless the conversation says the same place and moment):\n${prevShots}\n` : ''}${planFixBlock(u, fix, camForce)}
 Rules:
 1. If ${u} asked for a specific photo (place, pose, outfit, activity, angle), that is the photo, with every requested detail.
 2. Otherwise: where ${c.name} is RIGHT NOW according to the most recent messages (room, what she/he sits/lies/stands on, what the hands do, what is worn). The latest statement wins over older ones; if the latest messages say nothing, keep the last known state.
 3. Clothing continuity: keep the last known outfit unless the conversation changes it. For a clearly adult (18+) fictional character, follow a direct request for toplessness or nudity precisely. If explicit anatomical nudity is requested, describe visible external adult anatomy plainly and non-graphically only when the selected image provider permits it; do not substitute underwear, towels, strategically placed objects, or clothing. Never depict nudity for minors or characters whose age is ambiguous. Do not bypass provider moderation or retry a blocked sexual request through another provider.
 4. The character is alone unless the conversation says someone is with them, so the camera is: "selfie", "mirror selfie", or "phone propped up with timer" (for full-body shots without a mirror). Never "photo taken by someone" when alone, unless ${u} asks for it.
-4b. The photo must show EXACTLY the current moment of the latest messages: the same place and room, the same piece of furniture the character is on (e.g. on the sofa, in bed, at the kitchen table), the same body position, the same activity and the objects in the hands. The camera must fit that position: sitting or lying (sofa, bed, armchair, chair, floor) = "selfie" taken from arm's length (or "phone propped up with timer" for the whole body), never "mirror selfie"; "mirror selfie" only when the character is standing and a mirror fits the place.
+4b. The photo must show EXACTLY the current moment of the latest messages: the same place and room, the same piece of furniture the character is on (e.g. on the sofa, in bed, at the kitchen table), the same body position, the same activity and the objects in the hands. The camera must fit that position: sitting or lying (sofa, bed, armchair, chair, floor) = "selfie" taken from arm's length (or "phone propped up with timer" for the whole body), never "mirror selfie"; "mirror selfie" only when the character is standing and a mirror fits the place.${povRule(c, u, together)}
 5. Default to showing the body (selfie down to the thighs, timer shot, or a mirror selfie when standing); "close-up selfie" only if the face is asked for.
 6. Light must match the time of day and the place (at night indoors: lamps, warm and a bit dim).
 7. Make it look like a real, ordinary moment: real furniture and objects, a bit of everyday mess, nothing staged.
@@ -896,9 +1129,9 @@ Rules:
 
 JSON, keys in exactly this order, nothing else:
 {"self":true,"people":[],
- ${ask ? '"asked":["each concrete detail of the photo request as a short English phrase, e.g. \"red dress\", \"on the balcony\", \"from behind\""],\n ' : ''}"camera":"selfie | mirror selfie | phone propped up with timer | close-up selfie",${S.userPhoto ? '\n "together":false,' : ''}
+ ${ask ? '"asked":["each concrete detail of the photo request as a short English phrase, e.g. \"red dress\", \"on the balcony\", \"from behind\""],\n ' : ''}"camera":"${camEnum(u, together)}",${S.userPhoto ? '\n "together":false,' : ''}
  "shot":"ONE English description for the image generator, 50-80 words: camera and framing, the place with concrete details (reuse the room description), body position and hands, outfit, expression, light",
- "where":{"place":"home / office / café / street …","room":"bedroom | living room | kitchen | bathroom | hallway | balcony | office | other","position":"exact body position and what it rests on","outfit":"what is worn now","activity":"what is being done","light":"light now"},
+ "where":{"place":"home / office / café / street …","room":"bedroom | living room | kitchen | bathroom | hallway | balcony | office | other","position":"exact body position and what it rests on","outfit":"what is worn now","activity":"what is being done","light":"light now"${PLAN_WHERE_X}},${planKeysX(ch)}
  "home":{"<room>":"English description, max 45 words; only rooms that are new or changed"}}`}], {max:1500, signal, cid:c.id, aux:true, meta, tag:'pozeai'});
   // 7.1: refuzul filtrului lui Claude se spune ca atare (nu se ocolește); un răspuns tăiat sau fără JSON nu mai oprește poza
   if(meta.stop === 'refusal' && !promised) throw new Error('Claude a refuzat să descrie poza asta (filtrul lui de siguranță). Încearcă altă scenă.');
@@ -936,8 +1169,9 @@ JSON, keys in exactly this order, nothing else:
     saveChars();
   }
   const cam = String(j.camera || '');
+  const px = planPost(c, ch, j, shot, cam, u); shot = px.shot;   // 10.1: camera din ochii tăi, poziția, mâinile, rezumatul în română
   const people = Array.isArray(j.people) ? j.people.map(x => ({name:String(x && x.name || '').trim().slice(0, 40), relation:String(x && x.relation || '').trim().slice(0, 60), look:String(x && x.look || '').trim().slice(0, 300)})).filter(x => x.name || x.relation).slice(0, 2) : [];
-  return {people, self: j.self !== false, planned: planned.length >= 15 ? planned : shot, asked, shot: cam && !shot.toLowerCase().includes(cam.toLowerCase().split(' ')[0]) ? cam + ', ' + shot : shot, where: ch.where, together: !!S.userPhoto && (together || j.together === true || /"together"\s*:\s*true/.test(out))};
+  return {pov:px.pov, cam:px.cam, posture:px.posture, ro:px.ro, samePlace:px.samePlace, sameOutfit:px.sameOutfit, people, self: j.self !== false, planned: planned.length >= 15 ? planned : shot, asked, shot: cam && !shot.toLowerCase().includes(cam.toLowerCase().split(' ')[0]) ? cam + ', ' + shot : shot, where: ch.where, together: !!S.userPhoto && (together || j.together === true || /"together"\s*:\s*true/.test(out))};
 }
 /* ───────── 9.42: motorul „ca în creator” pentru pozele din chat (S.photoEngine = 'creator', implicit) ─────────
    De ce: în chat, generatorul primea până la 4 imagini de model (fața, corpul, unghiurile) și ~250 de cuvinte de reguli care
@@ -995,34 +1229,44 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     : bodyRef
     ? `Image 1 is the exact face reference for ${c.name}; preserve the same facial identity. Image 2 is the body/proportion reference for ${c.name}; preserve the same build and silhouette, especially bust size and shape, but do not copy its clothing, pose, framing or background.`
     : 'The reference image is a close-up of this person’s face only: keep exactly this face and identity (face shape, eyes, eyebrows, nose, lips, skin tone and texture, age); everything else comes from this text, not from the reference.';
+  // 10.1 (S5): camera din poza dinainte (cu persoana acoperită) intră într-un loc de reper rămas liber; corpul și fața au prioritate
+  let sref = null, srefN = 0;
+  if(opt.sref && !bodyRef && sceneRefOn(c, opt)){
+    if(clothedBody){ const used = [angRef, clothedBody.full2].filter(Boolean).length; if(used < 2){ sref = opt.sref; srefN = 3 + used; } }
+    else { sref = opt.sref; srefN = angRef ? 3 : 2; }
+  }
+  const fiS = !sref ? faceInstruction : (srefN === 2 ? 'Image 1 is a close-up of this person’s face only: keep exactly this face and identity (face shape, eyes, eyebrows, nose, lips, skin tone and texture, age).' : faceInstruction) + srefText(srefN);
   const prompt = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
   if(useF3()){   // 9.43/9.53: FLUX 3 folosește fața + reperul de corp și prioritizează proporțiile bustului la cereri topless/nud
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
     const body = bodyRef || (fb ? await fullBodyRef(fb, c.fullBox) : null);
     const face2 = await cropFace(full, id && !id.none ? id : null);
     const p3 = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s face: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
-    let b3 = await f3Image(p3, [face2, body], S.wkSize, signal), ret = false;
+    const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
+    let b3 = await f3Image(s3 ? p3 + srefText(body ? 3 : 2) : p3, [face2, body, s3].filter(Boolean), S.wkSize, signal), ret = false;
     // 9.50: și pe FLUX 3 fața se măsoară în telefon și se retușează dacă s-a îndepărtat (înainte, pe FLUX 3 nu se verifica)
     if(st === 'photo' && rwReady()){
       const lf = await localFace(b3, c);
       if(lf.d != null && lf.d > FACE_OK){ try{ const r = await retouchBest(c, b3, signal, 'ancorat', shot, 'retus'); if(r && r.used){ b3 = r.blob; ret = true; addUsage(c.id, imgPrice(), 'img', null, 'retus'); } }catch(e){ if(e.name === 'AbortError') throw e; } }
     }
-    return {prompt:p3, blob:b3, engine:'flux3', refs:body ? 'față + corp' : 'față', retouched:ret};
+    return {prompt:p3, blob:b3, engine:'flux3', refs:(body ? 'față + corp' : 'față') + (s3 ? ' + decorul pozei dinainte' : ''), retouched:ret, sref:!!s3};
   }
   const genOpt = bodyRef
     ? {model, one:face, p1:prompt, why:opt.why || 'chat', size:opt.size} // încearcă față + corp; la eroare revine automat la față, nu pierde identitatea
     : {model, force:{two:false, px:512}, p1:prompt, why:opt.why || 'chat', size:opt.size};   // 9.83: size = schița, când e cazul
   const genOpt2 = {...(clothedBody ? {model, one:face, p1:prompt, why:opt.why || 'chat', size:opt.size, extra:[angRef, clothedBody.full2].filter(Boolean), px2:768}
     : angRef ? {model, force:{two:true}, p1:prompt, why:opt.why || 'chat', size:opt.size} : genOpt), multi:opt.multi || 0};
-  let blob = await genImage(prompt, face, signal, clothedBody ? clothedBody.blob : angRef || bodyRef, genOpt2);
-  const refsTxt = ['față', clothedBody && 'corp: ' + BSHEET_RO[clothedBody.pose], angRef && 'unghi din fișă (' + angName + ')'].filter(Boolean).join(' + ');
-  if(Array.isArray(blob)) return {prompt, blob:blob[0], blobs:blob, engine:'creator', refs:refsTxt};   // 9.86: schițele, toate deodată
+  const promptS = sref ? prompt.replace(faceInstruction, fiS) : prompt;   // 10.1 (S5); p1 (rezerva cu un singur reper) rămâne fără decor
+  if(sref){ if(clothedBody) genOpt2.extra = [...(genOpt2.extra || []), sref]; else if(angRef) genOpt2.extra = [sref]; else genOpt2.force = {two:true}; }
+  let blob = await genImage(promptS, face, signal, clothedBody ? clothedBody.blob : angRef || bodyRef || sref, genOpt2);
+  const refsTxt = ['față', clothedBody && 'corp: ' + BSHEET_RO[clothedBody.pose], angRef && 'unghi din fișă (' + angName + ')', sref && 'decorul pozei dinainte'].filter(Boolean).join(' + ');
+  if(Array.isArray(blob)) return {prompt:promptS, blob:blob[0], blobs:blob, engine:'creator', refs:refsTxt, sref:!!sref};   // 9.86: schițele, toate deodată
   // fața: dacă s-a îndepărtat de personaj, retușul obișnuit (doar fața; cadrul și hainele rămân); cu „identitate maximă” îl face idBoost
   if(st === 'photo' && !idBoostOn(c, opt)){
     const lf = await localFace(blob, c);
     if(lf.d != null && lf.d > .45){ var crRet = true; try{ const r = await retouchBest(c, blob, signal, model, shot, 'retus'); if(r && r.used){ blob = r.blob; addUsage(c.id, imgPrice(), 'img', null, 'retus'); } }catch(e){ if(e.name === 'AbortError') throw e; } }
   }
-  return {prompt, blob, engine:'creator', refs:refsTxt, retTried:typeof crRet !== 'undefined' && !!crRet};
+  return {prompt:promptS, blob, engine:'creator', refs:refsTxt, sref:!!sref, retTried:typeof crRet !== 'undefined' && !!crRet};
 }
 // cât respectă fiecare variantă cererea și scena (un singur apel, toate pozele deodată)
 async function adhScores(c, list, shot, asked, signal){
@@ -1708,7 +1952,11 @@ async function finishPerson(c, r, shot, signal, opt = {}){
     try{ r.lk = await lookOf(c, r.blob, shot, opt); }catch(e){} if(tm && tm.s) tm.s.masurare = (tm.s.masurare || 0) + performance.now() - tL;
     const lb = lookBadOf(r.lk); r.lookWarn = lb ? lb.map(k => LOOK_RO[k]) : null; }
   if(photo && S.photoFinish !== 'off' && !opt.noFinish){ const tF = performance.now(); const f2 = await photoFinish(r.blob); if(f2 && f2 !== r.blob){ r.blob = f2; r.fin = true; } if(tm && tm.s) tm.s.finisare = (tm.s.finisare || 0) + performance.now() - tF; }
-  if(r.gen){ r.gen.fin = !!r.fin; r.gen.fwarn = r.faceWarn ?? null; r.gen.bwarn = r.bodyWarn ?? null; r.gen.garRet = !!r.garRet; r.gen.kind = opt.kind || 'chat'; if(r.fd != null) r.gen.fd = Math.round(r.fd * 1000) / 1000; r.gen.look = lookLite(r.lk); if(r.check && r.check.must) r.gen.must = {n:r.check.must.filter(x => x != null).length, miss:(r.check.mustMiss || []).map(x => x.en)}; }
+  if(photo && !opt.noChar && S.imgProv === 'worker' && opt.kind !== 'edit'){   // 10.1 (S8): poziția, și când n-au fost schițe
+    try{ if(r.ps === undefined) r.ps = await poseOfDraft(c, r, shot, opt); }catch(e){}
+    if(r.ps && r.ps.bad) r.lookWarn = (r.lookWarn || []).concat('poziția'); }
+  if(r.gen){ if(r.ps && (r.ps.k || r.ps.hw)) r.gen.pose = {k:r.ps.k, want:r.ps.want, bad:r.ps.bad, hw:r.ps.hw, hbad:r.ps.hbad}; if(opt.pov) r.gen.pov = true; if(r.sref) r.gen.sref = true;
+    r.gen.fin = !!r.fin; r.gen.fwarn = r.faceWarn ?? null; r.gen.bwarn = r.bodyWarn ?? null; r.gen.garRet = !!r.garRet; r.gen.kind = opt.kind || 'chat'; if(r.fd != null) r.gen.fd = Math.round(r.fd * 1000) / 1000; r.gen.lk = lookLite(r.lk); if(r.check && r.check.must) r.gen.must = {n:r.check.must.filter(x => x != null).length, miss:(r.check.mustMiss || []).map(x => x.en)}; }
   if(photo && S.imgProv === 'worker' && !opt.noLog) r.fidE = fidLog(c, r, opt);   // 10.0 (F11)
   if(tm && tm.s) tm.s.garantie = (tm.s.garantie || 0) + performance.now() - t0;
   return r;
@@ -2741,14 +2989,14 @@ async function bestScene(c, shot, signal, corr, opt = {}){
   if(!ok.length) throw rs[0].reason;
   pstage(signal, '🎯 Alege poza cea mai reușită', 93);
   const tP = performance.now();
-  for(const x of ok){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.lk = await lookOf(c, x.blob, shot, opt); }   // 9.87 (4): și claritatea   // 10.0: și culorile, proporțiile feței, vârsta aparentă
+  for(const x of ok){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); }   // 9.87 (4): și claritatea   // 10.0: și culorile, proporțiile feței, vârsta aparentă
   // 9.36: și silueta (piept, talie, șolduri) față de poza întreagă, măsurată în telefon; fața rămâne criteriul principal
   const rb = framingOf(shot).k !== 'close' ? await refBodySig(c).catch(() => null) : null;
   const rbs = rb ? await refBodySigs(c).catch(() => []) : []; if(rb) for(const x of ok){ x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); }   // 9.85: față de poza de corp cu aceeași poziție
   // 9.42: cu motorul „ca în creator”, contează și cât respectă cererea (altfel câștiga varianta care copia poza de profil)
   // 9.86 (d): cât respectă cererea se întreabă doar dacă ai cerut detalii sau dacă primele două sunt aproape (altfel e clar cine câștigă)
   const shMax = () => Math.max(0, ...ok.map(x => x.sh || 0));
-  const pre = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x);
+  const pre = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) + posePen(x);
   const ord = ok.map(pre).sort((a, b) => a - b), close2 = ord.length > 1 && ord[1] - ord[0] < .06;
   if(S.photoEngine !== 'id' && ok.length > 1 && aiReady() && S.imgCheck !== 'off' && ((opt.asked && opt.asked.length) || close2)){ const sc = await adhScores(c, ok, shot, opt.asked, signal); if(sc) ok.forEach((x, k) => x.adh = sc[k]); }
   // 9.86 (corp): dacă în nicio schiță corpul nu trece, încă o tură, cu corectura de corp, înainte de poza mare (o dată)
@@ -2758,13 +3006,13 @@ async function bestScene(c, shot, signal, corr, opt = {}){
       const rs2 = await batch([corr, `the body must match the full-body reference exactly: ${bodyOnly(c, id) || 'the same build and proportions'}`].filter(Boolean).join('; '), n);
       const ab2 = rs2.find(r => r.status === 'rejected' && r.reason && r.reason.name === 'AbortError'); if(ab2) throw ab2.reason;
       const ok2 = rs2.filter(r => r.status === 'fulfilled').map(r => r.value);
-      for(const x of ok2){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); x.lk = await lookOf(c, x.blob, shot, opt); x.round2 = true; }
+      for(const x of ok2){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.round2 = true; }
       ok.push(...ok2); opt.bodyRound = true;
     }catch(e){ if(e.name === 'AbortError') throw e; } }
-  const tot = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) - (x.adh != null ? x.adh * .03 * pfbW(c, 'scene') : 0);   // 9.85 (4): corpul cântărește cât fața   // 9.83 (8): ce respingi des cântărește mai mult
+  const tot = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) + posePen(x) - (x.adh != null ? x.adh * .03 * pfbW(c, 'scene') : 0);   // 9.85 (4): corpul cântărește cât fața   // 9.83 (8): ce respingi des cântărește mai mult
   ok.sort((a, b) => tot(a) - tot(b));
   if(ok.length > 1) addUsage(c.id, imgPrice() * (ok.length - 1), 'img', null, opt.tag || 'poze');   // prima e numărată de cine a cerut poza
-  let best = ok[0]; best.cands = ok.map(x => x.fd); best.shCands = ok.map(x => x.sh); if(rb) best.bodyCands = ok.map(x => x.bd); if(ok.some(x => x.adh != null)) best.adhCands = ok.map(x => x.adh); if(ok.some(x => x.lk)) best.lkCands = ok.map(x => x.lk ? x.lk.pen : null);
+  let best = ok[0]; best.cands = ok.map(x => x.fd); best.shCands = ok.map(x => x.sh); if(rb) best.bodyCands = ok.map(x => x.bd); if(ok.some(x => x.adh != null)) best.adhCands = ok.map(x => x.adh); if(ok.some(x => x.lk)) best.lkCands = ok.map(x => x.lk ? x.lk.pen : null); if(ok.some(x => x.ps)) best.psCands = ok.map(x => x.ps ? x.ps.pen : null);   // 10.1
   tmAdd(opt, 'alegere', tP);
   if(dr){ const tF = performance.now(); best = await draftFinal(c, best, shot, signal, opt); best.drafts = ok.length; tmAdd(opt, 'final', tF); }
   return best;
@@ -4538,6 +4786,7 @@ function turnExtras(c, ch, opts = {}){
   else if(rnd > .9) x += ' (de data asta, dacă ai ceva de spus, poți fi mai povestitor decât de obicei)';
   // 7.6: scena în desfășurare: personajul continuă de unde ați rămas, cu pasul următor mic
   if(chat && chat.plot && Date.now() - (chat.plot.ts || 0) < 12 * 36e5) x += ` (scena în desfășurare: „${chat.plot.t}”. Continuă de unde ați rămas, cu pasul următor, mic și firesc, fără să sari peste etape; dacă ${S.userName.trim() || 'el'} a schimbat planul sau subiectul, urmează-l)`;
+  { const fr = frameFresh(chat); if(fr) x += ` (cadrul notat: „${fr.t}”)`; }   // 10.1 (S2)
   // 6.7: întrebările din ultimul tău mesaj sunt numite explicit, ca personajul să nu le ocolească
   const lu = [...(chat && chat.msgs || [])].reverse().find(m => m.role === 'user' && m.text && !m.err);
   if(lu && freshTurn){ const qs = plain(lu.text).split(/(?<=[?])/).map(x => x.trim()).filter(x => x.endsWith('?') && x.length > 3).slice(-4);
@@ -6350,7 +6599,7 @@ const SHOW_RE = /\s*\[ar[ăa]t:\s*(\d{1,2})\s*\]/gi;   // 9.23: în apelul video
 const SHOT_RE = /\s*\[poz[ăa]:\s*([^\]]{8,2000})\]/gi;
 const SHOT_OPEN = /\s*\[poz[ăa]:[^\]]*$/i;   // etichetă începută, încă neînchisă (în timpul scrierii) sau tăiată
 const CORR_RE_S = /\s*\[corectur[ăa]:\s*[^\]\n]{3,300}\]/gi;
-const stripMood = t => String(t || '').replace(/\s*\[fa[țt][ăa]:\s*[^\]\n]{1,20}\]\s*/gi, ' ').replace(MOOD_RE, '').replace(PLOT_RE, '').replace(VERD_RE, '').replace(/\s*\[acum:[^\]]*$/i, '').replace(SCHED_RE, '').replace(SUN_RE, '').replace(/\s*\[sun(:[^\]\n]*)?$/i, '').replace(SHOT_RE, '').replace(SHOT_OPEN, '').replace(STK_RE, '').replace(SHOW_RE, '').replace(CROSS_RE, '').replace(JOIN_RE, '').replace(NEWS_ME_RE, '').replace(NEWS_HIM_RE, '').replace(/\s*\[(?:(?:î|i)i\s+s|intr|vest)[^\]\n]*$/i, '').replace(/\s*\[ar([ăa](t(:[^\]\n]*)?)?)?$/i, '')
+const stripMood = t => String(t || '').replace(FRAME_RE, '').replace(/\s*\[cadru:[^\]\n]*$/i, '').replace(/\s*\[fa[țt][ăa]:\s*[^\]\n]{1,20}\]\s*/gi, ' ').replace(MOOD_RE, '').replace(PLOT_RE, '').replace(VERD_RE, '').replace(/\s*\[acum:[^\]]*$/i, '').replace(SCHED_RE, '').replace(SUN_RE, '').replace(/\s*\[sun(:[^\]\n]*)?$/i, '').replace(SHOT_RE, '').replace(SHOT_OPEN, '').replace(STK_RE, '').replace(SHOW_RE, '').replace(CROSS_RE, '').replace(JOIN_RE, '').replace(NEWS_ME_RE, '').replace(NEWS_HIM_RE, '').replace(/\s*\[(?:(?:î|i)i\s+s|intr|vest)[^\]\n]*$/i, '').replace(/\s*\[ar([ăa](t(:[^\]\n]*)?)?)?$/i, '')
   .replace(CORR_RE_S, '').replace(/\s*\[c(o(r(e(c(t(u(r([aă](:[^\]\n]*)?)?)?)?)?)?)?)?)?$/i, '').replace(/\s*\[s(t(a(r(e(:[^\]\n]*)?)?)?)?)?$/i, '').replace(/\s*\[p(r(o(g(r(a(m(e(z(:[^\]\n]*)?)?)?)?)?)?)?)?)?$/i, '').replace(/\s*\[p(o(z([ăa](:[^\]\n]*)?)?)?)?$/i, '').replace(/\s*\[s(t(i(c(k(e(r(:[^\]\n]*)?)?)?)?)?)?)?$/i, '').trimEnd();
 // starea din antet: online / ultima dată + dispoziția (scrisă de personaj sau dedusă din ultimul răspuns)
 const MOODS = [
@@ -7118,7 +7367,7 @@ ${chatM ? `- Fiecare are ziua lui: povestești scurt ce faci tu acum, unde ești
 - Pune detalii mici, omenești, ale momentului: ezitări, răzgândiri, lucruri mărunte care se întâmplă (oglinda, cheile, vremea de afară, coada de la casă).
 - Vorbește ca într-o discuție reală, nu ca într-un interviu: nu încheia fiecare mesaj cu o întrebare (cel mult unul din trei mesaje). Mai des povestește ceva de-al tău, comentează, glumește, reacționează sau vino cu o idee; lasă loc ca ${u} să continue singur.
 - Ții cont de momentul zilei și de pauzele dintre mesaje, notate între paranteze în mesajele lui ${u}; nu le menționa ca note.
-${S.vmsg !== 'off' ? `- Uneori, când e firesc (cam o dată la ${S.vmsg === 'des' ? '4' : '10'} mesaje), sau oricând ${u} îți cere, poți trimite un mesaj vocal: începe răspunsul cu [vocal] și scrie exact ce spui cu voce tare, ca o persoană care vorbește liber la telefon: propoziții scurte, ezitări firești (păi, adică, mă rog, știi?), reluări, fără *acțiuni* și fără emoji. Unde e firesc, rar, poți pune [râde], [chicotește], [oftează], [șoptește] sau ... pentru o pauză scurtă. 1-4 propoziții.\n` : ''}${ch ? `- Dacă îi promiți lui ${u} că îi scrii tu la un anumit moment (de exemplu „îți scriu mâine la 7:25”, „te caut diseară la 9”), sau el îți cere asta și accepți, adaugă la final, pe un rând separat: [programez: ZIUA HH:MM | despre ce îi scrii], unde ZIUA e azi, mâine, poimâine sau AAAA-LL-ZZ. La ora aceea aplicația îți dă ocazia să-i scrii. Nu programa nimic fără o promisiune clară.\n` : ''}${ch && S.callIn !== 'off' && c.callIn !== false ? `- Dacă îi spui lui ${u} că îl suni chiar acum sau în câteva minute (sau el îți cere să-l suni și accepți), adaugă la final, pe un rând separat: [sun] pentru apel de voce sau [sun: video] pentru apel video. Aplicația îl sună atunci de-adevăratelea, în câteva secunde. Pentru o oră anume, mai târziu, folosește [programez:] cu „apel” sau „video” în text.\n` : ''}${ch ? `- Starea ta: DOAR când ți se schimbă față de cea notată la ultimul mesaj (sau dacă nu e notată niciuna), adaugă la final, pe un rând separat: [stare: un emoji și 1-3 cuvinte], de exemplu [stare: 😊 bine dispusă]. Dacă e aceeași, nu mai scrie eticheta. Starea evoluează firesc din ce se întâmplă și din pauze, fără salturi bruște fără motiv.\n- Scena: DOAR când începe o activitate nouă sau trece la alt pas față de scena notată, adaugă pe rândul următor: [acum: activitatea sau planul în curs › pasul de acum], de exemplu [acum: ieșim la o cafenea › mă îmbrac, aleg ce să port]. Când scena notată s-a încheiat, scrie o dată [acum: discuție liberă]. Altfel nu scrie eticheta.\n` : ''}- Dacă un mesaj al lui ${u} te amuză sau te emoționează, poți începe răspunsul cu o reacție scrisă exact așa: [❤️] [😂] [😮] [😢] [👍] [🔥] sau [🥰]. Cel mult o dată la câteva mesaje, nu de fiecare dată.
+${S.vmsg !== 'off' ? `- Uneori, când e firesc (cam o dată la ${S.vmsg === 'des' ? '4' : '10'} mesaje), sau oricând ${u} îți cere, poți trimite un mesaj vocal: începe răspunsul cu [vocal] și scrie exact ce spui cu voce tare, ca o persoană care vorbește liber la telefon: propoziții scurte, ezitări firești (păi, adică, mă rog, știi?), reluări, fără *acțiuni* și fără emoji. Unde e firesc, rar, poți pune [râde], [chicotește], [oftează], [șoptește] sau ... pentru o pauză scurtă. 1-4 propoziții.\n` : ''}${ch ? `- Dacă îi promiți lui ${u} că îi scrii tu la un anumit moment (de exemplu „îți scriu mâine la 7:25”, „te caut diseară la 9”), sau el îți cere asta și accepți, adaugă la final, pe un rând separat: [programez: ZIUA HH:MM | despre ce îi scrii], unde ZIUA e azi, mâine, poimâine sau AAAA-LL-ZZ. La ora aceea aplicația îți dă ocazia să-i scrii. Nu programa nimic fără o promisiune clară.\n` : ''}${ch && S.callIn !== 'off' && c.callIn !== false ? `- Dacă îi spui lui ${u} că îl suni chiar acum sau în câteva minute (sau el îți cere să-l suni și accepți), adaugă la final, pe un rând separat: [sun] pentru apel de voce sau [sun: video] pentru apel video. Aplicația îl sună atunci de-adevăratelea, în câteva secunde. Pentru o oră anume, mai târziu, folosește [programez:] cu „apel” sau „video” în text.\n` : ''}${ch ? `- Starea ta: DOAR când ți se schimbă față de cea notată la ultimul mesaj (sau dacă nu e notată niciuna), adaugă la final, pe un rând separat: [stare: un emoji și 1-3 cuvinte], de exemplu [stare: 😊 bine dispusă]. Dacă e aceeași, nu mai scrie eticheta. Starea evoluează firesc din ce se întâmplă și din pauze, fără salturi bruște fără motiv.\n- Scena: DOAR când începe o activitate nouă sau trece la alt pas față de scena notată, adaugă pe rândul următor: [acum: activitatea sau planul în curs › pasul de acum], de exemplu [acum: ieșim la o cafenea › mă îmbrac, aleg ce să port]. Când scena notată s-a încheiat, scrie o dată [acum: discuție liberă]. Altfel nu scrie eticheta.\n- Cadrul: DOAR când se schimbă ceva din el față de cadrul notat (sau dacă nu e notat niciunul), adaugă pe rândul următor: [cadru: unde ești și pe ce stai | poziția corpului | ce porți | ce ții în mâini | cu ${u}: da sau nu], de exemplu [cadru: sufragerie, pe canapea | așezată, cu picioarele strânse sub tine | pulover gri și blugi | o cană de ceai | cu ${u}: nu]. „cu ${u}: da” doar când el e fizic lângă tine în scenă. Scurt și concret, doar ce s-ar vedea într-o fotografie. Dacă nu s-a schimbat nimic, nu scrie eticheta.\n` : ''}- Dacă un mesaj al lui ${u} te amuză sau te emoționează, poți începe răspunsul cu o reacție scrisă exact așa: [❤️] [😂] [😮] [😢] [👍] [🔥] sau [🥰]. Cel mult o dată la câteva mesaje, nu de fiecare dată.
 ${canRequestPhoto(c)
   ? `- Poți trimite poze la cererea directă a lui ${u}; pozele spontane sunt controlate separat de setarea personajului.  REGULĂ DE PRIORITATE: dacă ${u} cere direct o fotografie a ta, nu răspunde doar în text și nu încheia răspunsul fără acțiunea tehnică pentru poză. Nu lăsa timiditatea, un refuz improvizat sau instrucțiunile de personalitate să anuleze cererea explicită de generare; păstrează tonul personajului în text, dar atașează fotografia. Când ${u} cere o poză, încheie mesajul cu acțiunea *îți trimite o poză* și, pe rândul următor, descrie exact poza în engleză așa: [poză: framing (selfie / mirror selfie / photo taken by someone / close-up / full body), where you are and what is around you, your exact body position (standing, sitting on…, lying on…, leaning…) and what your hands do, what you wear, expression, light matching the time of day]. Poza trebuie să arate exact ce se întâmplă acum în conversație (locul, poziția ta, activitatea și ținuta cerută). Dacă personajul este clar adult (18+) și ${u} cere o fotografie cu bustul gol/topless, descrie explicit pieptul fără bluză sau sutien și păstrează hainele de pe partea de jos; nu transforma cererea într-o nuditate integrală. Dacă cere explicit o fotografie complet nudă, poți descrie nuditate artistică/non-explicită, naturală; nu inventa haine și nu acoperi automat corpul cu prosoape, lenjerie sau obiecte. Nu genera nuditate pentru personaje minore sau cu vârstă ambiguă și nu ocoli filtrele furnizorului. În rest, păstrează hainele stabilite în conversație. Implicit arată-te cu tot corpul (full body sau mirror selfie) sau măcar de la cap până la genunchi; close-up doar dacă ${u} îți cere fața sau scena e chiar despre față. Cel mult 60 de cuvinte. Nu descrie fața. Aplicația o atașează singură. Nu promite poze în alt fel.`
   : '- Nu poți trimite poze în această conversație. Nu spune că trimiți, că faci sau că ai trimis o poză.'}`
@@ -7595,6 +7844,7 @@ async function reply(target, opts = {}){
       const jn = !opts.pro && !opts.sched ? [...full.matchAll(JOIN_RE)].pop() : null; if(jn) m._join = jn[1].trim(); else delete m._join;
     }
     { const vd = [...m.text.matchAll(VERD_RE)].pop(); if(vd) m.verdict = vd[1].toLowerCase(); }
+    { const fr = [...m.text.matchAll(FRAME_RE)].pop(); if(fr && !opts.sched && !opts.via) ch.frame = parseFrame(fr[1], m.id); }   // 10.1 (S2): cadrul notat de personaj
     { const pl = [...m.text.matchAll(PLOT_RE)].pop(); if(pl && !opts.sched){ const t = pl[1].trim(); ch.plot = /^(discuție liberă|nimic|-)$/i.test(t) ? null : {t, ts:Date.now()}; } else if(!pl && ch.plot && !opts.sched && Date.now() - ch.plot.ts < 3 * 36e5) ch.plot.ts = Date.now(); }
     { let mo = null; m.text.replace(MOOD_RE, (a, x) => { mo = x.trim(); return ''; });
       if(mo){ ch.mood = {t:mo, ts:Date.now()}; m.mood = mo; c.moodNow = {t:mo, ts:Date.now()}; }
@@ -8257,7 +8507,7 @@ async function askPhoto(spont, target, mode, opt = {}){
   try{
     const promised = !target && spont && ch.nextShot ? ch.nextShot.t : '';      // descrierea scrisă chiar de personaj când a trimis poza
     if(promised) delete ch.nextShot;
-    let shot, where = null, asked = [], together = !!(opt.together || (target && target.together)) && !!S.userPhoto;
+    let shot, where = null, asked = [], together = !!(opt.together || (target && target.together)) && !!S.userPhoto; let sceneOpt = {};   // 10.1
     const tm = {t0:performance.now(), s:{}};   // 9.86 (g): cronometrul pașilor
     let edited = null, editLog = null, peopleIn = null;
     if(target && mode === 'edit' && opt.edit){   // 9.40: ✏️ Modifică poza
@@ -8280,8 +8530,11 @@ async function askPhoto(spont, target, mode, opt = {}){
       }
       if(!edited){ const r = await makeScenePhoto(cx, shot, busy.signal, {together:false, asked}); edited = r; }
     }
-    else if(target && mode === 'same' && target.scene){ shot = target.scene; where = target.where || null; asked = target.asked || []; }
-    else { const tS = performance.now(); const pl = await planShot(c, ch, {promised, exclude:m, signal:busy.signal, together}); tm.s.scena = performance.now() - tS; shot = pl.shot; where = pl.where; together = pl.together; asked = pl.asked || []; shot = giftDetail(c, shot, where);
+    else if(target && mode === 'same' && target.scene){ shot = target.scene; where = target.where || null; asked = target.asked || []; sceneOpt = await sceneOptSame(c, target, opt); }
+    else { const tS = performance.now(); let pl = await planShot(c, ch, {promised, exclude:m, signal:busy.signal, together}); tm.s.scena = performance.now() - tS;
+      pl = await framePreview(c, ch, m, pl, {spont, target, mode, promised, together, signal:busy.signal});   // 10.1 (S4): confirmi sau corectezi cadrul
+      sceneOpt = await sceneOptOf(c, ch, m, pl, pl.together);   // 10.1 (S5, S8)
+      shot = pl.shot; where = pl.where; together = pl.together; asked = pl.asked || []; shot = giftDetail(c, shot, where);
       // 9.56: leagă cererea explicită de expunere din ultimele mesaje de fotografia generată, chiar dacă planificatorul a omis-o.
       const recentPhotoRequest = photoAsk(ch, m);
       const requestedExposure = exposureMode(recentPhotoRequest);
@@ -8304,7 +8557,7 @@ async function askPhoto(spont, target, mode, opt = {}){
     }
     // 9.92: motorul unic: generarea + garanția + finisarea (și pentru editări și pozele împreună)
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && !peopleIn.self)})
-      : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat'});
+      : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt});
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
     if(gdiag && gdiag.tm) gdiag.tm.total = performance.now() - tm.t0;
     const k = await saveImg(blob);
@@ -8336,12 +8589,13 @@ async function askPhoto(spont, target, mode, opt = {}){
     const msg = e.message || '';
     const flag = /3030|flagged|safety|blocked|prohibit|nsfw|SAFETY|IMAGE_OTHER|refuzat/i.test(msg);
     if(target && m.img){ if(e.name !== 'AbortError') toast(flag ? 'Serviciul de imagini a respins varianta asta.' : 'Poza nouă n-a mers: ' + msg, 4000); }   // poza veche rămâne
-    else if(e.name === 'AbortError') m.err = 'Oprit.';
+    else if(e.name === 'AbortError'){ m.err = 'Oprit.'; if(e.cancelFrame) m._drop = true; }   // 10.1: „Renunță” la cadrul propus: mesajul gol dispare
     else if(flag){ m.err = /refuzat/.test(msg) ? msg : 'Serviciul de imagini a respins poza asta.'; m.errKind = 'flag'; }
     else m.err = msg || 'Eroare la poză';
   }
   clearInterval(pT);
   delete m.pendingImg; busy = null; live = null;
+  if(m._drop){ delete m._drop; const di = ch.msgs.indexOf(m); if(di >= 0 && !m.img) ch.msgs.splice(di, 1); }
   if(!m.err && !(chat === ch && !$('#vChat').hidden)) c.unread = (c.unread || 0) + 1;
   await saveChat(c, ch);
   if(!$('#vHome').hidden) renderHome();
@@ -11565,7 +11819,7 @@ const aiReady = () => hasKey('anthropic');
 const FIELDS = {stKey:'key', stModel:'model', stUser:'userName', stAbout:'userAbout', stBday:'userBday',
   stWkBase:'wkBase', stWkTok:'wkTok', stWkModel:'wkModel', stWkSize:'wkSize',
   stPin:'pIn', stPout:'pOut', stVkBase:'wkBase', stVkTok:'wkTok', stRwKey:'rwKey'};
-const SEGS = {stCallFill:'callFill', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallGlitch:'callGlitch', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror'};
+const SEGS = {stCallFill:'callFill', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallGlitch:'callGlitch', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
 let setPanel = null, setPanelPushed = false;
 /* 8.7: actualizare din aplicație. Codul vine oricum din rețea la pornire;
    asta prinde versiunile apărute cât aplicația a stat deschisă și forțează reîncărcarea curată. */

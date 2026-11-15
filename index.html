@@ -1686,6 +1686,9 @@ details.sdanger>summary{color:var(--err)}
 .shgrid figure.moff img,.shgrid figure.moff .mnoimg{opacity:.3}.shgrid .mnoimg{aspect-ratio:3/4;border-radius:10px;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:1.3rem}
 .audl{display:flex;flex-direction:column;gap:10px}.audi{padding:10px 12px;border-radius:12px;background:var(--bg2);border:1px solid var(--hair)}.audi>b{display:block;font-size:.9rem;margin-bottom:4px}.audi p{font-size:.82rem;line-height:1.45;margin:0 0 8px;color:var(--tx2)}.audi .btns{flex-wrap:wrap;gap:6px}
 .ftab{width:100%;border-collapse:collapse;font-size:.78rem;margin:8px 0}.ftab th,.ftab td{padding:5px 4px;text-align:center;border-bottom:1px solid var(--hair);vertical-align:top}.ftab th:first-child,.ftab td:first-child{text-align:left}.ftab th{color:var(--tx3);font-weight:600}.ftab small{display:block;color:var(--tx3);font-size:.66rem;font-weight:400;line-height:1.25}.ftab tr.tot td{border-bottom:0;padding-top:7px}
+/* 10.1: cadrul propus */
+.frp .frl{display:flex;flex-direction:column;gap:6px;margin:2px 0 12px}.frp .frl>div{display:flex;gap:10px;align-items:baseline;font-size:.88rem;line-height:1.35}.frp .frl b{flex:none;width:92px;color:var(--tx2);font-weight:600;font-size:.8rem}.frp .frl span{flex:1;min-width:0}
+.frp .chipset{margin:4px 0 10px}.frp .chipset button{padding:7px 12px;font-size:.82rem}.frp textarea{width:100%;min-height:0}.frp .frpoff{display:flex;align-items:center;gap:8px;margin-top:12px}.frp .frpoff input{width:auto;flex:none}
 </style>
 </head>
 <body>
@@ -2066,6 +2069,12 @@ details.sdanger>summary{color:var(--err)}
         <div class="seg" id="stPeople"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
         <label style="margin-top:14px">Poze spontane (doar personajele cu portret generat cu 🎨)</label>
         <div class="seg" id="stSpont"><button data-v="off">Niciodată</button><button data-v="rar">Rar</button><button data-v="des">Des</button></div>
+        <label style="margin-top:14px">🎬 Cadrul propus: înainte de o poză cerută de tine, vezi ce a înțeles și poți corecta</label>
+        <div class="seg" id="stShotPrev"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label style="margin-top:14px">👁️ Când ești lângă ea în scenă, poza e din ochii tăi (nu selfie)</label>
+        <div class="seg" id="stPov"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label style="margin-top:14px">🛋️ Același loc ca în poza dinainte: păstrează decorul ei</label>
+        <div class="seg" id="stSceneRef"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
       </div>
       <div id="stCfSec">
         <h3 class="sh">☁️ Cloudflare</h3>
