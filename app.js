@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '11.2';
+const APP_VER = '11.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1569,6 +1569,44 @@ async function etalonRedo(c, key){
     return row;
   } finally { etalonJob = null; keepAwake(false); }
 }
+/* ═════════ 🎯 11.3 setul-etalon = verificarea fișei ═════════
+   (E1) Setul stă în „📷 Reperele”, imediat după fișa de identitate: „🎯 Verifică fișa”.
+   (E2) Fiecare rulare ține minte reperele cu care s-a făcut (amprenta reperelor). Dacă nu s-au schimbat, nota e la zi și setul
+        nu se mai propune; dacă s-au schimbat (fișa, ✕, alt corp, alt portret, poze în plus), se propune o singură dată.
+   (E3) O poză din set care iese foarte bine (fața ≥ 95%, corpul ≥ 95% unde se măsoară, fără altcineva în poză) primește
+        „📌 Fă-o reper”: fața intră între pozele tale în plus, iar corpul întreg / așezată / din profil în fișa de corp. */
+function refsSig(c){
+  if(!c || !c.photo) return '';
+  const cr = closeOf(c), parts = [c.photo, c.photoFull || '', 'b' + bodyVer(c), cr ? cr.img : '', ...sheetOf(c).flatMap(x => [x.ang, x.k, x.k2 || '']), ...bsheetOf(c).map(x => x.pose + ':' + x.k), ...(c.refs || [])];
+  let h = 2166136261 >>> 0; for(const ch of parts.join('|')){ h ^= ch.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  return h.toString(36);
+}
+const etalonFresh = c => { const r = etalonOf(c).slice(-1)[0]; return !!(r && r.sig && r.sig === refsSig(c)); };
+const ET_BODY = {full:'front', sit:'sit', side:'side'};   // scena din set → poziția din fișa de corp
+const etalonRefOk = x => !!(x && x.img && !x.err && !(x.np > 0) && !x.isRef && x.fd != null && idPct(x.fd) >= 95 && (x.bd == null || bodyPct(x.bd) >= 95));
+async function etalonToRef(c, k){
+  const run = etalonOf(c).slice(-1)[0], row = run && (run.rows || []).find(x => x.k === k); if(!etalonRefOk(row)) return {ok:false, why:'nu e destul de apropiată'};
+  const b = await DB.get(row.img).catch(() => null); if(!b) return {ok:false, why:'poza nu mai există'};
+  const pd = await profDesc(c).catch(() => null), fs = pd ? await faceDescs(b).catch(() => []) : [];
+  const f = fs.length ? fs.map(x => ({x, d:fdist(x.d, pd)})).sort((a, z) => a.d - z.d)[0] : null;
+  const done = [];
+  if(f && f.d <= .38 && f.x.box.w >= 60){   // fața: între pozele tale în plus (cel mult 2)
+    const box = {x:f.x.box.x / f.x.W, y:f.x.box.y / f.x.H, w:f.x.box.w / f.x.W, h:f.x.box.h / f.x.H};
+    let refs = c.refsAuto ? [] : (c.refs || []).slice(0, 2), drop = c.refsAuto ? (c.refs || []).slice() : [];
+    if(refs.length >= 2){ const rs = c.refSet && c.refSet.e ? c.refSet.e : [], dpOf = kk => { const y = rs.find(z => z.key === kk); return y && y.dp != null ? y.dp : .4; };
+      const worst = refs.slice().sort((a, z) => dpOf(z) - dpOf(a))[0]; if(dpOf(worst) > f.d){ refs = refs.filter(x => x !== worst); drop.push(worst); } else refs = null; }
+    if(refs){ const kk = await saveImg(b); refs.push(kk); c.refs = refs; delete c.refsAuto; c.refBoxes = {...(c.refBoxes || {}), [kk]:box}; for(const d of drop) delImg(d).catch(() => {}); done.push('fața'); }
+  }
+  const pose = ET_BODY[k];
+  if(pose && row.bd != null && c.photoFull){   // corpul: în fișa de corp, dacă e mai apropiată decât ce e acolo
+    const v = bsheetOf(c), h = v.find(x => x.pose === pose);
+    if(!h || h.weak || h.bd == null || row.bd < h.bd){ const kk = await saveImg(b), sig = await bodySig(b).catch(() => null), e = {pose, k:kk, bd:row.bd, sig, bv:bodyVer(c), from:'etalon'};
+      c.bsheet.v = h ? v.map(x => x === h ? e : x) : v.concat(e); c.bsheet.v.sort((a, z) => Object.keys(BSHEET_VIEWS).indexOf(a.pose) - Object.keys(BSHEET_VIEWS).indexOf(z.pose)); if(h) delImg(h.k).catch(() => {}); done.push('corpul (' + BSHEET_RO[pose] + ')'); }
+  }
+  if(!done.length) return {ok:false, why:'reperele de acum sunt deja mai apropiate'};
+  row.isRef = 1; await saveChars(); try{ headCache.clear(); }catch(e){}
+  return {ok:true, done};
+}
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
   const asked = (opt.asked || []).filter(Boolean);
@@ -2572,6 +2610,7 @@ async function kitBuild(c, o = {}){
       if(o.gen){ step('culori'); try{ await lookRefOf(c); }catch(e){} }   // 10.0: culorile și proporțiile feței, calibrate pe tot pachetul (ultimul pas: nu ține în loc ce costă); altfel se măsoară la prima poză
     }
     if(kitKey(c) === k0){ c.kit = {v:KIT_V, k:k0, at:Date.now(), gen:!!o.gen || !!(c.kit && c.kit.gen && c.kit.k === k0)}; await saveChars(); }
+    if(o.gen && etalonOf(c).length && !etalonFresh(c)){ const sg = refsSig(c); if(c.etalonAsk !== sg){ c.etalonAsk = sg; await saveChars(); if(o.toast) toast(`🎯 Reperele lui ${c.name} s-au schimbat. Când vrei, verifică-le: profil → Poze → Reperele → „Verifică fișa”.`, 5000); } }   // 11.3 (E2): o singură dată pe set de repere
     return true;
   } finally { kitBusy.delete(c.id); step(''); if(o.gen) keepAwake(false); }
 }
@@ -3133,7 +3172,7 @@ async function etalonGo(c, onStep = () => {}){
   etalonJob = {cid:c.id, ac, i:0};
   try{
     try{ await lookRefOf(c); }catch(e){}
-    const outfit = await outfitOf(c); run.set = 2; run.outfit = outfit;   // 10.2
+    const outfit = await outfitOf(c); run.set = 2; run.outfit = outfit; run.sig = refsSig(c);   // 10.2; 11.3 (E2)
     for(let i = 0; i < ETALON.length; i++){
       const [key, , tpl] = ETALON[i], shot = etalonShot(tpl, outfit); etalonJob.i = i; onStep(i, key);
       const row = {k:key}, t0 = performance.now();
@@ -3257,18 +3296,23 @@ function drawEtalon(c, box){
   const runs = etalonOf(c).slice(-3), last = runs[runs.length - 1], me = etalonJob && etalonJob.cid === c.id, P = S.rwPhoto, est = P && P.n >= 3 && P.avg > 0 ? ` La media ta de acum (${usd(P.avg)} pe poză), cam ${usd(P.avg * ETALON.length)}.` : '';
   const cell = x => !x ? '—' : x.err ? '✕' : `<b>${x.s ?? '—'}${x.np > 0 ? ' 👥' : ''}</b><small>${x.fd != null ? '👤' + idPct(x.fd) : ''}${x.bd != null ? ' 🧍' + bodyPct(x.bd) : ''}${x.lk ? ' 🎨' + lookPct(x.lk) : ''}</small>`;
   const day = t => fmtD({day:'numeric', month:'short'}, new Date(t));
-  box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfEtalon"><b>🎯 Set-etalon</b>
+  box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfEtalon"><b>🎯 Verifică fișa · set-etalon</b>${runs.length ? (etalonFresh(c) ? '<small style="margin-top:2px">✅ Nota e la zi: reperele nu s-au schimbat de la ultima rulare.</small>' : '<small style="margin-top:2px">🔄 Reperele s-au schimbat de la ultima rulare: rulează setul ca să vezi nota lor.</small>') : ''}
     <small>6 scene fixe, aceleași de fiecare dată (selfie, corp întreg, așezată, din profil, afară, seara), cu hainele din poza ei${c.outfitRef && c.outfitRef.t ? ': <i>' + esc(c.outfitRef.t) + '</i>' : ' (le citește la prima rulare)'}.${runs.some(r => r.set !== 2) ? ' Rulările de dinainte de 10.2 aveau alte scene și dispar la prima rulare nouă.' : ''} Fiecare poză e notată automat (fața 50%, corpul 30%, culorile și proporțiile 20%). Rulezi setul înainte și după o schimbare (alt portret, altă fișă, alt model din Setări → Poze) și compari cifrele, nu impresiile. Costă cât 6 poze din chat.${est}</small>
     ${runs.length ? `<table class="ftab et"><tr><th></th>${runs.map(r => `<th>${esc(day(r.at))}<small>${esc(r.mdl || '')} · ${esc(r.ver || '')}</small></th>`).join('')}</tr>
       ${ETALON.map(([k, l]) => `<tr><td>${esc(l)}</td>${runs.map(r => `<td>${cell((r.rows || []).find(x => x.k === k))}</td>`).join('')}</tr>`).join('')}
       <tr class="tot"><td>Nota setului</td>${runs.map(r => `<td><b>${r.score ?? '—'}</b><small>👤${r.face ?? '—'} 🧍${r.body ?? '—'} 🎨${r.look ?? '—'}${r.usd ? ' · ' + usd(r.usd) : ''}${r.part ? ' · oprit' : ''}</small></td>`).join('')}</tr></table>
-      <div class="shgrid">${(last.rows || []).filter(x => x.img).map(x => `<figure><img data-k="${esc(x.img)}" data-fk="${esc(x.img)}" alt="">${me ? '' : `<button type="button" class="shx" data-etr="${esc(x.k)}" aria-label="Refă poza asta">↻</button>`}<figcaption>${esc((ETALON.find(e => e[0] === x.k) || [])[1] || x.k)}<br>${x.s ?? '—'}</figcaption></figure>`).join('')}</div>
+      <div class="shgrid">${(last.rows || []).filter(x => x.img).map(x => `<figure><img data-k="${esc(x.img)}" data-fk="${esc(x.img)}" alt="">${me ? '' : `<button type="button" class="shx" data-etr="${esc(x.k)}" aria-label="Refă poza asta">↻</button>${etalonRefOk(x) ? `<button type="button" class="btn sm etref" data-etref="${esc(x.k)}">📌 Fă-o reper</button>` : x.isRef ? '<small class="etref">📌 reper</small>' : ''}`}<figcaption>${esc((ETALON.find(e => e[0] === x.k) || [])[1] || x.k)}<br>${x.s ?? '—'}</figcaption></figure>`).join('')}</div>
       ${(last.rows || []).some(x => x.err) ? `<small>✕ = poza n-a ieșit: ${esc((last.rows.find(x => x.err) || {}).err || '')}</small>` : ''}` : ''}
-    <div class="btns"><button class="btn sm pri" id="pfEtGo">${me ? '⏹ Oprește' : '▶ Rulează setul (6 poze)'}</button>${runs.length && !me ? '<button class="btn sm" id="pfEtX">🗑 Șterge rulările</button>' : ''}</div>
+    <div class="btns"><button class="btn sm${me || !etalonFresh(c) ? ' pri' : ''}" id="pfEtGo">${me ? '⏹ Oprește' : etalonFresh(c) ? '▶ Rulează oricum (6 poze)' : '▶ Rulează setul (6 poze)'}</button>${runs.length && !me ? '<button class="btn sm" id="pfEtX">🗑 Șterge rulările</button>' : ''}</div>
     <small id="pfEtSt" style="margin-top:6px">${me ? `<span class="spin"></span> Poza ${etalonJob.i + 1} din ${ETALON.length}…` : ''}</small></div>`);
   const el = box.lastElementChild; hydrate(el);
   const imgs = last ? (last.rows || []).filter(x => x.img).map(x => x.img) : [];
   el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.fk, imgs); });
+  el.querySelectorAll('[data-etref]').forEach(bt => bt.onclick = async e => {   // 11.3 (E3)
+    e.stopPropagation(); const k = bt.dataset.etref, nm = (ETALON.find(x => x[0] === k) || [])[1] || k; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
+    const r = await etalonToRef(c, k).catch(er => ({ok:false, why:er.message}));
+    toast(r.ok ? `📌 „${nm}” a devenit reper: ${r.done.join(' și ')}.` : `„${nm}” n-a intrat ca reper: ${r.why}.`, 4500);
+    if(profId === c.id) drawPics(c); });
   el.querySelectorAll('[data-etr]').forEach(bt => bt.onclick = async e => {   // 11.2: o singură poză din set, refăcută
     e.stopPropagation(); if(etalonJob){ toast('Setul rulează deja.'); return; }
     const k = bt.dataset.etr, nm = (ETALON.find(x => x[0] === k) || [])[1] || k; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
@@ -3279,6 +3323,7 @@ function drawEtalon(c, box){
   const re = () => fidRedraw(c, 'pfEtalon', drawEtalon);
   el.querySelector('#pfEtGo').onclick = async () => {
     if(etalonJob){ if(etalonJob.cid === c.id){ etalonStop(); toast('Se oprește după poza în lucru…'); } else toast('Setul rulează deja pentru alt personaj.'); return; }
+    if(etalonFresh(c) && !el.dataset.sure){ confirmSheet('Reperele nu s-au schimbat de la ultima rulare, deci nota e la zi. Rulezi oricum (6 poze)?', 'Rulează', () => { el.dataset.sure = '1'; el.querySelector('#pfEtGo').click(); }); return; }   // 11.3 (E2)
     const p = etalonGo(c, (i, key) => { const s = $('#pfEtSt'); if(s && profId === c.id) s.innerHTML = `<span class="spin"></span> Poza ${i + 1} din ${ETALON.length}: ${esc((ETALON[i] || [])[1] || key)}…`; });
     re();
     try{ const r = await p; toast(r.part ? 'Set oprit: am păstrat ce s-a făcut.' : `🎯 Set gata: nota ${r.score ?? '—'}${r.usd ? ' · ' + usd(r.usd) : ''}`, 4500); }catch(e){ toast(e.message || 'Setul n-a mers.', 4000); }
@@ -6782,7 +6827,7 @@ function drawFidCard(c, box){
   if(c.photo && S.imgProv === 'worker'){ drawFaceRef(c, R); drawCloseRef(c, R); drawDetail(c, R); drawCons(c, R); }   // 10.5
   drawRefs(c, R);          // + pachetul de identitate și fișa (drawSheet)
   drawBodyNote(c, D);
-  if(c.photo && photo){ drawAudit(c, D); drawStats(c, Z); drawEtalon(c, Z); }
+  if(c.photo && photo){ drawEtalon(c, R); drawAudit(c, D); drawStats(c, Z); }   // 11.3 (E1): setul verifică fișa, deci stă lângă ea
   $$('#pfFidDesc .fidclamp').forEach(e => e.onclick = () => e.classList.toggle('all'));
   $$('#pfFid .fidt').forEach(b => b.onclick = () => { const s = b.parentNode; s.classList.toggle('open'); fidOpen[s.dataset.fs] = s.classList.contains('open'); });
   fidHead(c);
@@ -6798,6 +6843,7 @@ function fidHead(c){
   if(c.photo && photo && !a) todo.push('descrierea nu e verificată cu pozele');
   else if(c.photo && photo && !fresh) todo.push('descrierea sau pozele s-au schimbat: verifică din nou');
   if(open.length) todo.push(plural(open.length, 'contradicție', 'contradicții') + ' între text și poze');
+  if(last && last.set === 2 && !etalonFresh(c) && !kb && K && K.ok) todo.push('reperele s-au schimbat: verifică fișa (set-etalon)');   // 11.3 (E2)
   const chip = (t, v, w) => v == null ? '' : `<span class="fidchip${w ? ' w' : ''}">${t} <b>${v}${typeof v === 'number' ? '%' : ''}</b></span>`;
   const act = !c.photo ? '' : K && !K.ok && !kb ? '🧬 Completează și verifică' : c.photo && photo && (!a || !fresh) ? '🔎 Verifică descrierea cu pozele' : open.length ? '✍️ Rezolvă contradicțiile' : '';
   h.innerHTML = `<b>🎯 Fidelitatea · ${esc(c.name)}</b>
