@@ -1728,6 +1728,15 @@ button:focus-visible,summary:focus-visible{outline:2px solid var(--acc);outline-
 details>summary{list-style:none}details>summary::-webkit-details-marker{display:none}
 details:not(.sadv)>summary::before{content:'›';display:inline-block;width:1em;margin-right:4px;transition:transform .2s;color:var(--tx3);font-weight:700}
 details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
+/* 11.6 */
+.edpair{display:flex;gap:8px;margin:8px 0}.edpair figure{flex:1;margin:0;text-align:center;min-width:0}
+.edpair img,.edpair .crph{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:12px;background:var(--bg2);display:block}
+.edpair figcaption{font-size:.78rem;color:var(--tx2);margin-top:4px}
+#edPair small{display:block;color:var(--tx2);font-size:.82rem}
+.ltcmp{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}.ltcmp>div>small{color:var(--tx3);font-weight:700}
+.igStats.n4{grid-template-columns:repeat(4,1fr)}.idsc{cursor:pointer}.idsc b{color:var(--acc)}
+.idbig{display:flex;align-items:center;gap:10px;margin:8px 0 4px}.idbig>b{font-size:1.9rem;font-weight:800;color:var(--acc);line-height:1}
+.idbig span{display:flex;flex-direction:column;font-size:.85rem;color:var(--tx2)}.idbig small{color:var(--tx3);font-size:.78rem}
 </style>
 </head>
 <body>
@@ -1909,6 +1918,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
           <div class="crchosen" id="edChosen" hidden>
             <div class="btns"><button type="button" class="btn sm" id="edViewChosen">🔍 Vezi mare</button><button type="button" class="btn sm" id="edMore">🔁 Mai multe ca asta</button></div>
             <div class="angview" id="edAngleView"></div>
+            <div id="edPair"></div>
             <label for="edAdjTxt">🪄 Ajustează: aceeași persoană, se schimbă doar ce scrii</label>
             <div class="chipset adj" id="edAdjChips"><button type="button" data-adj="altă ținută">👗 Altă ținută</button><button type="button" data-adj="altă coafură">💇 Alt păr</button><button type="button" data-adj="corp mai suplu, cu proporții firești">🪶 Mai suplă</button><button type="button" data-adj="corp mai plin, cu proporții firești">🍑 Mai plinuță</button><button type="button" data-adj="corp mai atletic, tonifiat">🏋️ Mai atletică</button><button type="button" data-adj="bust mai mare, natural">⬆️ Bust mai mare</button><button type="button" data-adj="bust mai mic, natural">⬇️ Bust mai mic</button><button type="button" data-adj="mai înaltă, cu proporții firești">📏 Mai înaltă</button><button type="button" data-adj="altă poziție a corpului, la fel de naturală">🕺 Altă poziție</button><button type="button" data-adj="alt loc în fundal">🏙️ Alt loc</button><button type="button" data-adj="un zâmbet cald, natural">😊 Zâmbet</button></div>
             <div class="adjrow"><input id="edAdjTxt" maxlength="200" placeholder="ex. rochie neagră scurtă și cizme"><button type="button" class="btn sm pri" id="edAdjGo">Aplică</button></div>
@@ -2089,8 +2099,8 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
           <p class="hint" id="stRwHint"></p>
           <div id="stRwBox" hidden>
             <label style="margin-top:10px">Modelul pozelor pe Runware</label>
-            <div class="seg" id="stPhotoModel"><button data-v="klein">⚡ Klein 9B · ~$0,004</button><button data-v="flux3">💎 FLUX 3 · ~$0,041</button></div>
-            <p class="hint">💎 FLUX 3 Image: model mare, făcut pentru editări („Modifică poza”) și pentru a păstra aceeași persoană din fața și corpul ei; o singură poză în loc de 3 variante + retușuri. Klein: de ~10 ori mai ieftin.</p>
+            <div class="seg" id="stPhotoModel"><button data-v="klein">⚡ Klein 9B KV · ~$0,003</button><button data-v="klein2">Klein 9B clasic</button><button data-v="flux3">💎 FLUX 3 · ~$0,041</button></div>
+            <p class="hint">💎 FLUX 3 Image: model mare, făcut pentru editări („Modifică poza”) și pentru a păstra aceeași persoană din fața și corpul ei; o singură poză în loc de 3 variante + retușuri. Klein: de ~10 ori mai ieftin. Klein 9B KV (implicit) e același model, mai rapid cu repere; „clasic” = varianta de dinainte de 11.6.</p>
             <label style="margin-top:10px">Ce merge pe Runware</label>
             <div class="seg" id="stImgRoute"><button data-v="rw">⚡ Totul</button><button data-v="mix">Doar pozele 9B</button></div>
             <label style="margin-top:10px">Rezervă pe Cloudflare (când Runware nu merge sau atingi plafonul)</label>
