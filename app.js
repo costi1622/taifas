@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.1';
+const APP_VER = '10.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -650,19 +650,31 @@ function bodySrc(c, id){
 }
 const stripBodyPhys = t => String(t || '').replace(/(?:^|;\s*)body:[^;]*/i, '').replace(/^;\s*/, '').trim();
 const stripBodyEn = t => String(t || '').replace(EN_BODY_RE, (a) => a.startsWith('.') ? '.' : '').replace(/^\.\s*/, '').trim();
+const IDT_MAX = 2400;
+const idCut = (t, n) => { t = String(t || ''); if(t.length <= n) return t; const x = t.slice(0, n), k = Math.max(x.lastIndexOf('. '), x.lastIndexOf(', '), x.lastIndexOf('; ')); return (k > n * .5 ? x.slice(0, k) : x).trim(); };
+const hairOf = id => { const m = String(id && !id.none && id.phys || '').match(/(?:^|;\s*)hair:\s*([^;]+)/i); return m ? m[1].trim() : ''; };
+// 10.2: ordinea contează și nimic important nu se mai pierde: ce ai ales tu, părul, fața, ochelarii, corpul, descrierea, semnele din cadru
 function idText(c, id, shot){
-  const B = bodySrc(c, id), parts = [];
-  { const ov = mustOver(c); if(ov.length) parts.push('IMPORTANT, this overrides the reference photos: ' + ov.join('; ')); }   // 10.0 (F5): ai ales textul în locul pozei
-  const user = B.src === 'intreaga' || B.src === 'portret' ? stripBodyEn(c && c.physEn) : (c && c.physEn || '');
-  if(B.t) parts.push('Body: ' + B.t);
-  if(user) parts.push(user);
-  const face = id && !id.none && id.phys ? stripBodyPhys(id.phys) : '';
-  if(face) parts.push(face);
-  if(id && id.glasses) parts.push('always wears ' + id.glasses);
-  { const mk = id ? marksFor(c, id, shot) : []; if(mk.length) parts.push('permanent marks, always in the same place when visible: ' + mk.join('; ')); }   // 10.0 (F7): doar cele din zonele din cadru
-  if(id && id.plain && id.plain.length) parts.push('keep plain: ' + id.plain.join('; '));   // 9.99 (4): ce NU are, spus pozitiv
-  return {t:parts.join('. ').replace(/\.\s*\./g, '.').replace(/\s+/g, ' ').slice(0, 1500), src:B.src};
+  const B = bodySrc(c, id), head = [], tail = [];
+  { const ov = mustOver(c); if(ov.length) head.push('IMPORTANT, this overrides the reference photos: ' + ov.join('; ')); }   // 10.0 (F5)
+  const userRaw = B.src === 'intreaga' || B.src === 'portret' ? stripBodyEn(c && c.physEn) : (c && c.physEn || '');
+  const mine = !!(userRaw && c.physUser && c.physAuto !== true);   // scris de tine la „Cum arată”: are prioritate
+  const fp = id && !id.none && id.phys ? stripBodyPhys(id.phys) : '', hair = hairOf(id), face = fp.replace(/(?:^|;\s*)hair:[^;]*/i, '').replace(/^;\s*/, '').trim();
+  if(mine) head.push('Written by the owner, this wins over anything below: {U}');
+  if(hair) head.push('Hair: ' + hair);
+  if(face) head.push('Face: ' + face);
+  if(id && id.glasses) head.push('always wears ' + id.glasses);
+  if(B.t) head.push('Body: ' + B.t);
+  if(userRaw && !mine) head.push('{U}');
+  { const mk = id ? marksFor(c, id, shot) : []; if(mk.length) tail.push('permanent marks, always in the same place when visible: ' + mk.join('; ')); }   // 10.0 (F7)
+  if(id && id.plain && id.plain.length) tail.push('keep plain: ' + id.plain.join('; '));   // 9.99 (4)
+  const fixed = head.join('. ').replace('{U}', '').length + tail.join('. ').length + 8;
+  const u = idCut(userRaw, Math.max(280, IDT_MAX - fixed));
+  const t = head.map(x => x.replace('{U}', u)).filter(x => x.replace(/^[^:]*:\s*$/, '').trim()).concat(tail).join('. ');
+  return {t:t.replace(/\.\s*\./g, '.').replace(/\s+/g, ' ').trim(), src:B.src};
 }
+// 10.2: părul, spus și la începutul descrierii pentru generator (nu doar la coadă, unde se pierdea)
+const hairLead = (c, id) => { const h = hairOf(id); return h ? `${c.name}'s hair: ${idCut(h, 220)}; the same color, length, volume and texture as in the reference, only the styling may follow the scene. ` : ''; };
 const bodyOnly = (c, id) => { const B = bodySrc(c, id); if(B.t) return B.t; if(B.src === 'creator'){ const m = String(c.physEn || '').match(EN_BODY_RE); return m ? m[1].trim() : ''; } return B.src === 'tu' ? c.physEn : ''; };
 const BODY_SRC_RO = {tu:'ce ai scris tu la „Cum arată”', intreaga:'poza întreagă', creator:'alegerile din creator (din ele s-a făcut și poza întreagă)', portret:'portret (ghicit, nu există poză întreagă)', '':'nicio sursă'};
 // pătrat în jurul feței, lărgit cât să prindă părul și puțin gâtul; fără față găsită: partea de sus, la mijloc
@@ -1183,7 +1195,7 @@ JSON, keys in exactly this order, nothing else:
    cu fața apropiată ȘI care respectă cererea (un singur apel Haiku pentru toate); (6) fără potrivirea de corp de după.
    Motorul vechi rămâne: Setări → Poze → „Motorul pozelor: Identitate maximă (vechi)”. */
 function lookText(c, id, shot){
-  return idText(c, id, shot).t.slice(0, 1400);   // 9.50
+  return idText(c, id, shot).t;   // 9.50; 10.2: fără tăierea la 1.400 de caractere (lua părul și semnele)
   const p = [];
   if(c.physEn) p.push(c.physEn);
   if(id && !id.none && id.phys){ let t = String(id.phys).replace(/(?:^|; )body: not visible/i, ''); if(/\bBody:/.test(c.physEn || '')) t = t.replace(/(?:^|;\s*)body:[^;]*/i, ''); p.push(t); }   // 9.43: corpul din „Cum arată” e singurul
@@ -1236,12 +1248,12 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     else { sref = opt.sref; srefN = angRef ? 3 : 2; }
   }
   const fiS = !sref ? faceInstruction : (srefN === 2 ? 'Image 1 is a close-up of this person’s face only: keep exactly this face and identity (face shape, eyes, eyebrows, nose, lips, skin tone and texture, age).' : faceInstruction) + srefText(srefN);
-  const prompt = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
+  const prompt = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
   if(useF3()){   // 9.43/9.53: FLUX 3 folosește fața + reperul de corp și prioritizează proporțiile bustului la cereri topless/nud
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
     const body = bodyRef || (fb ? await fullBodyRef(fb, c.fullBox) : null);
     const face2 = await cropFace(full, id && !id.none ? id : null);
-    const p3 = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s face: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
+    const p3 = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s face: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
     let b3 = await f3Image(s3 ? p3 + srefText(body ? 3 : 2) : p3, [face2, body, s3].filter(Boolean), S.wkSize, signal), ret = false;
     // 9.50: și pe FLUX 3 fața se măsoară în telefon și se retușează dacă s-a îndepărtat (înainte, pe FLUX 3 nu se verifica)
@@ -2436,13 +2448,13 @@ async function refGrow(c, m){
   return ok;
 }
 // (F10) set-etalon: 6 scene fixe, îmbrăcate, de zi cu zi; aceleași de fiecare dată, ca cifrele să se poată compara
-const ETALON = [
-  ['selfie', 'Selfie de aproape', 'close-up selfie at home in the living room, wearing a plain t-shirt, relaxed friendly smile, soft daylight from a window'],
-  ['full', 'Corp întreg', 'full-body photo taken by someone, standing on a city sidewalk, wearing jeans, a plain t-shirt and sneakers, arms relaxed, daylight'],
-  ['sit', 'Așezată', 'sitting on the couch at home, wearing jeans and a sweater, photo taken with the phone propped up on a shelf with the self-timer, afternoon light'],
-  ['side', 'Din profil', 'full-body photo taken by someone, side view, in profile, walking in a park, wearing a light jacket and jeans, daylight'],
-  ['sun', 'Afară, ziua', 'outdoors on a terrace in bright sunlight, wearing a light summer shirt, medium shot, smiling at the camera'],
-  ['warm', 'Seara, lumină caldă', 'in a cozy restaurant in the evening, warm lamp light, wearing a casual shirt, medium shot, looking at the camera']];
+const ETALON = [   // 10.2: {o} = hainele din poza ei, citite o dată; telefonul sprijinit în loc de „făcută de altcineva” (apărea a doua persoană)
+  ['selfie', 'Selfie de aproape', 'close-up selfie at home in the living room, wearing {o}, relaxed friendly smile, soft daylight from a window, nobody else in the photo'],
+  ['full', 'Corp întreg', 'full-body photo taken with the phone propped up on a shelf with the self-timer, standing in the living room at home, wearing {o}, arms relaxed, daylight from a window, the whole body visible from head to feet, nobody else in the photo'],
+  ['sit', 'Așezată', 'sitting on the couch at home, wearing {o}, photo taken with the phone propped up on a shelf with the self-timer, the whole body visible, afternoon light, nobody else in the photo'],
+  ['side', 'Din profil', 'full-body photo taken with the phone propped up with the self-timer, side view, in profile, standing by the window at home, wearing {o}, daylight, nobody else in the photo'],
+  ['sun', 'Afară, ziua', 'selfie outdoors on a sunny terrace in bright daylight, wearing {o}, medium shot from the head to the waist, smiling at the camera, nobody else in the photo'],
+  ['warm', 'Seara, lumină caldă', 'selfie at home in the evening, warm lamp light, wearing {o}, medium shot from the head to the waist, looking at the camera, nobody else in the photo']];
 const ETALON_KEEP = 4;
 let etalonJob = null;
 const etalonOf = c => c && Array.isArray(c.etalon) ? c.etalon : [];
@@ -2461,8 +2473,9 @@ async function etalonGo(c, onStep = () => {}){
   etalonJob = {cid:c.id, ac, i:0};
   try{
     try{ await lookRefOf(c); }catch(e){}
+    const outfit = await outfitOf(c); run.set = 2; run.outfit = outfit;   // 10.2
     for(let i = 0; i < ETALON.length; i++){
-      const [key, , shot] = ETALON[i]; etalonJob.i = i; onStep(i, key);
+      const [key, , tpl] = ETALON[i], shot = etalonShot(tpl, outfit); etalonJob.i = i; onStep(i, key);
       const row = {k:key}, t0 = performance.now();
       try{
         const r = await renderPerson(c, shot, ac.signal, {kind:'etalon', tag:'etalon', tm:{t0, s:{}}});
@@ -2476,7 +2489,7 @@ async function etalonGo(c, onStep = () => {}){
     run.score = avg(x => x.s); run.face = avg(x => x.fd != null ? idPct(x.fd) : null); run.body = avg(x => x.bd != null ? bodyPct(x.bd) : null); run.look = avg(x => lookPct(x.lk));
     run.usd = Math.round((rwDay().usd - rw0) * 1e4) / 1e4;
     if(run.rows.length && charById(c.id)){
-      const all = etalonOf(c).concat(run), drop = all.slice(0, Math.max(0, all.length - ETALON_KEEP));
+      const prev = etalonOf(c), all = prev.filter(r => r.set === 2).concat(run), drop = prev.filter(r => r.set !== 2).concat(all.slice(0, Math.max(0, all.length - ETALON_KEEP)));   // 10.2: rulările cu scenele vechi nu se mai compară
       c.etalon = all.slice(-ETALON_KEEP); await saveChars();
       for(const d of drop) for(const x of d.rows || []) if(x.img) delImg(x.img).catch(() => {});
     } else for(const x of run.rows) if(x.img) delImg(x.img).catch(() => {});
@@ -2501,7 +2514,7 @@ function drawFidel(c, box){
   if(!c.photo || (c.stil || 'photo') !== 'photo') return;
   drawAudit(c, box); drawStats(c, box); drawEtalon(c, box);
 }
-const fidRedraw = (c, id, fn) => { const el = $('#' + id); if(!el || profId !== c.id) return; const box = el.parentNode, nx = el.nextSibling; el.remove(); const tmp = document.createElement('div'); fn(c, tmp); while(tmp.firstChild) box.insertBefore(tmp.firstChild, nx); };
+const fidRedraw = (c, id, fn) => { const el = $('#' + id); if(!el || profId !== c.id) return; const box = el.parentNode, nx = el.nextSibling; el.remove(); const tmp = document.createElement('div'); fn(c, tmp); while(tmp.firstChild) box.insertBefore(tmp.firstChild, nx); fidHead(c); };
 function drawAudit(c, box){
   const a = auditOf(c), fresh = auditFresh(c), open = auditOpen(c), must = mustOf(c), marks = marksPosOf(c) || [], R = c.lookRef && c.lookRef.k === lookKey(c) && !c.lookRef.none ? c.lookRef : null;
   const st = !a ? 'Încă neverificat.' : !fresh ? '⚠️ Descrierea sau pozele s-au schimbat de la ultima verificare.' : open.length ? `⚠️ ${open.length} ${open.length === 1 ? 'contradicție' : 'contradicții'} de rezolvat.` : '✅ Descrierea și pozele spun același lucru.';
@@ -2514,7 +2527,7 @@ function drawAudit(c, box){
     <div class="mustl">${must.map(x => `<span class="mchip${x.over ? ' over' : ''}" title="${esc(x.en)}">${x.over ? '✍️ ' : ''}${esc(x.ro)}<button type="button" data-mx="${esc(x.id)}" aria-label="Scoate">✕</button></span>`).join('')}${must.length < MUST_MAX ? '<button type="button" class="mchip add" id="pfMustAdd">＋ Adaugă</button>' : ''}</div>
     ${must.some(x => x.over) ? '<small style="margin-top:6px">✍️ = ai ales textul în locul pozei: trăsătura trece peste reper.</small>' : ''}
     ${marks.length ? `<small style="margin-top:12px"><b>📍 Semne cu poziție</b>: ajung la generator și la verificare doar când zona lor e în cadru. Atinge ✕ pe un semn care nu există.</small>
-    <div class="shgrid">${marks.map(m => `<figure class="${m.off ? 'moff' : ''}">${m.crop ? `<img data-k="${esc(m.crop)}" alt="">` : '<div class="mnoimg">📍</div>'}<button type="button" class="shx" data-mkx="${esc(m.id)}" aria-label="${m.off ? 'Pune la loc' : 'Nu are semnul ăsta'}">${m.off ? '↺' : '✕'}</button><figcaption>${esc(m.ro)}<br>${esc(MARK_ZONE_RO[m.zone] || m.zone)}${m.off ? ' · scos' : ''}</figcaption></figure>`).join('')}</div>` : ''}
+    <div class="shgrid">${marks.map(m => `<figure class="${m.off ? 'moff' : ''}">${m.crop ? `<img data-k="${esc(m.crop)}" data-fk="${esc(m.crop)}" alt="">` : '<div class="mnoimg">📍</div>'}<button type="button" class="shx" data-mkx="${esc(m.id)}" aria-label="${m.off ? 'Pune la loc' : 'Nu are semnul ăsta'}">${m.off ? '↺' : '✕'}</button><figcaption>${esc(m.ro)}<br>${esc(MARK_ZONE_RO[m.zone] || m.zone)}${m.off ? ' · scos' : ''}</figcaption></figure>`).join('')}</div>` : ''}
     <small style="margin-top:12px"><b>🎨 Măsurat în telefon</b> din portret${R && R.n > 1 ? ` și încă ${R.n - 1} ${R.n - 1 === 1 ? 'poză' : 'poze'} din pachet` : ''}, comparat la fiecare schiță și la poza finală:</small>
     <div class="fswl" id="pfLookRef">${R ? [sw(R.skin, 'ten'), sw(R.hairAbs, 'păr'), sw(R.eye ? [R.eye[0] + R.skin[0], R.eye[1] + R.skin[1], R.eye[2] + R.skin[2]] : null, 'ochi'), R.hl != null ? `<span class="fsw">💇 ${esc(hlRo(R.hl, R.hlCut))}</span>` : '', R.age != null ? `<span class="fsw">🎂 pare ~${Math.round(R.age)} ani</span>` : '', R.geo && R.geo.length ? `<span class="fsw">📐 proporțiile feței din ${R.geo.length} ${R.geo.length === 1 ? 'unghi' : 'unghiuri'}</span>` : ''].join('') || '<span class="fsw">fața nu s-a putut măsura în portret</span>' : '<span class="fsw"><span class="spin"></span> se măsoară…</span>'}</div>
     ${R && !R.eye ? '<small style="margin-top:6px">Culoarea ochilor nu se poate măsura în portret (ochii sunt prea mici sau acoperiți): rămâne verificată doar de AI, prin trăsăturile obligatorii.</small>' : ''}</div>`);
@@ -2534,7 +2547,7 @@ function drawAudit(c, box){
       try{ await mustAdd(c, t); closeSheet(); re(); toast('✅ Adăugată: se verifică de la următoarea poză'); }catch(er){ toast(er.message || 'N-a mers.', 3500); b.disabled = false; b.textContent = 'Adaugă'; } };
   };
   el.querySelectorAll('[data-mkx]').forEach(b => b.onclick = async e => { e.stopPropagation(); const m = c.marksPos.v.find(x => x.id === b.dataset.mkx); if(!m) return; m.off = !m.off; await saveChars(); re(); toast(m.off ? 'Semnul nu mai e cerut în poze.' : 'Semnul e din nou cerut în poze.'); });
-  el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.k, marks.filter(m => m.crop).map(m => m.crop)); });
+  el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.fk, marks.filter(m => m.crop).map(m => m.crop)); });   // 10.2: data-k dispare după încărcare
 }
 function auditSheet(c){
   const open = auditOpen(c);
@@ -2579,17 +2592,17 @@ function drawEtalon(c, box){
   const cell = x => !x ? '—' : x.err ? '✕' : `<b>${x.s ?? '—'}</b><small>${x.fd != null ? '👤' + idPct(x.fd) : ''}${x.bd != null ? ' 🧍' + bodyPct(x.bd) : ''}${x.lk ? ' 🎨' + lookPct(x.lk) : ''}</small>`;
   const day = t => new Date(t).toLocaleDateString('ro-RO', {day:'numeric', month:'short'});
   box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfEtalon"><b>🎯 Set-etalon</b>
-    <small>6 scene fixe, îmbrăcate, aceleași de fiecare dată: selfie, corp întreg, așezată, din profil, afară, seara. Fiecare poză e notată automat (fața 50%, corpul 30%, culorile și proporțiile 20%). Rulezi setul înainte și după o schimbare (alt portret, altă fișă, alt model din Setări → Poze) și compari cifrele, nu impresiile. Costă cât 6 poze din chat.${est}</small>
+    <small>6 scene fixe, aceleași de fiecare dată (selfie, corp întreg, așezată, din profil, afară, seara), cu hainele din poza ei${c.outfitRef && c.outfitRef.t ? ': <i>' + esc(c.outfitRef.t) + '</i>' : ' (le citește la prima rulare)'}.${runs.some(r => r.set !== 2) ? ' Rulările de dinainte de 10.2 aveau alte scene și dispar la prima rulare nouă.' : ''} Fiecare poză e notată automat (fața 50%, corpul 30%, culorile și proporțiile 20%). Rulezi setul înainte și după o schimbare (alt portret, altă fișă, alt model din Setări → Poze) și compari cifrele, nu impresiile. Costă cât 6 poze din chat.${est}</small>
     ${runs.length ? `<table class="ftab et"><tr><th></th>${runs.map(r => `<th>${esc(day(r.at))}<small>${esc(r.mdl || '')} · ${esc(r.ver || '')}</small></th>`).join('')}</tr>
       ${ETALON.map(([k, l]) => `<tr><td>${esc(l)}</td>${runs.map(r => `<td>${cell((r.rows || []).find(x => x.k === k))}</td>`).join('')}</tr>`).join('')}
       <tr class="tot"><td>Nota setului</td>${runs.map(r => `<td><b>${r.score ?? '—'}</b><small>👤${r.face ?? '—'} 🧍${r.body ?? '—'} 🎨${r.look ?? '—'}${r.usd ? ' · ' + usd(r.usd) : ''}${r.part ? ' · oprit' : ''}</small></td>`).join('')}</tr></table>
-      <div class="shgrid">${(last.rows || []).filter(x => x.img).map(x => `<figure><img data-k="${esc(x.img)}" alt=""><figcaption>${esc((ETALON.find(e => e[0] === x.k) || [])[1] || x.k)}<br>${x.s ?? '—'}</figcaption></figure>`).join('')}</div>
+      <div class="shgrid">${(last.rows || []).filter(x => x.img).map(x => `<figure><img data-k="${esc(x.img)}" data-fk="${esc(x.img)}" alt=""><figcaption>${esc((ETALON.find(e => e[0] === x.k) || [])[1] || x.k)}<br>${x.s ?? '—'}</figcaption></figure>`).join('')}</div>
       ${(last.rows || []).some(x => x.err) ? `<small>✕ = poza n-a ieșit: ${esc((last.rows.find(x => x.err) || {}).err || '')}</small>` : ''}` : ''}
     <div class="btns"><button class="btn sm pri" id="pfEtGo">${me ? '⏹ Oprește' : '▶ Rulează setul (6 poze)'}</button>${runs.length && !me ? '<button class="btn sm" id="pfEtX">🗑 Șterge rulările</button>' : ''}</div>
     <small id="pfEtSt" style="margin-top:6px">${me ? `<span class="spin"></span> Poza ${etalonJob.i + 1} din ${ETALON.length}…` : ''}</small></div>`);
   const el = box.lastElementChild; hydrate(el);
   const imgs = last ? (last.rows || []).filter(x => x.img).map(x => x.img) : [];
-  el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.k, imgs); });
+  el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.fk, imgs); });   // 10.2: pozele negre din set-etalon
   const re = () => fidRedraw(c, 'pfEtalon', drawEtalon);
   el.querySelector('#pfEtGo').onclick = async () => {
     if(etalonJob){ if(etalonJob.cid === c.id){ etalonStop(); toast('Se oprește după poza în lucru…'); } else toast('Setul rulează deja pentru alt personaj.'); return; }
@@ -5990,6 +6003,7 @@ function drawSheet(c, box){
     toast(ok ? '🧩 Fișa de identitate e gata' : 'Fișa n-a ieșit cu aceeași față (sau plafonul zilnic e aproape atins). Încearcă mai târziu.', 3500);
     el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); };
   const x = el.querySelector('#pfPfbX'); if(x) x.onclick = async () => { delete c.pfb; await saveChars(); el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); };
+  fidHead(c);   // 10.2
 }
 /* 🏠 7.0: casa personajului: camerele descrise o dată și refolosite în poze */
 function drawHome(c, box){
@@ -6012,13 +6026,13 @@ function drawHome(c, box){
 // 8.9.2: ce scrii tu despre cum arată (corp, înălțime, piele, păr) are prioritate la fiecare poză
 function drawBodyNote(c, box){
   const fbx = c.faceBox && c.faceBox.k === c.photo ? c.faceBox : null, auto = fbx && fbx.phys ? fbx.phys : '';
-  const mk = fbx && fbx.mode !== 'full' ? [...(fbx.glasses ? ['👓 ' + fbx.glasses] : []), ...(fbx.marks || [])] : [];   // în modul detaliat sunt deja în text
+  const mk = fbx && fbx.mode !== 'full' && !(marksPosOf(c) || []).length ? [...(fbx.glasses ? ['👓 ' + fbx.glasses] : []), ...(fbx.marks || [])] : [];   // în modul detaliat sunt deja în text
   box.insertAdjacentHTML('beforeend', `<div class="refbox bodyn"><b>🧍 Cum arată, pentru poze</b>
-    <small>${auto ? 'Citit automat din poza de profil: <i>' + esc(auto) + '</i>' : 'Se citește automat din poza de profil la prima poză.'}</small>
+    <small class="fidclamp">${auto ? 'Citit automat din portret (atinge ca să vezi tot): <i>' + esc(auto) + '</i>' : 'Se citește automat din poza de profil la prima poză.'}</small>
     ${mk.length ? `<small style="margin-top:6px">Semne care rămân mereu la locul lor: <i>${mk.map(esc).join(' · ')}</i></small>` : ''}
     <small style="margin-top:6px">${c.physAuto && c.physUser ? '🧍 Completat din creator (corpul exact ca la creare). ' : ''}Dacă ceva nu iese cum trebuie (siluetă, înălțime, piele, păr, semne), scrie aici în română. Are prioritate față de ce citește aplicația.</small>
     <textarea id="pfBody2" rows="4" maxlength="700" placeholder="ex. 1,58 m, siluetă plinuță cu șolduri late, piele bronzată, păr negru drept până la mijlocul spatelui, aluniță pe obrazul stâng">${esc(c.physUser || '')}</textarea>
-    <div class="btns"><button class="btn sm pri" id="pfBodySave">Salvează</button>${c.photo ? '<button class="btn sm" id="pfBodyRe">↻ Recitește poza</button>' : ''}${c.appPrompt || c.appZones || c.appEn ? '<button class="btn sm" id="pfBodyCr">🧍 Din creator</button>' : ''}</div></div>`);
+    <div class="btns"><button class="btn sm pri" id="pfBodySave">Salvează</button>${c.appPrompt || c.appZones || c.appEn ? '<button class="btn sm" id="pfBodyCr">🧍 Din creator</button>' : ''}</div></div>`);
   // 9.32: reface textul din ce ai ales la creare (dacă l-ai scris tu între timp, îl înlocuiește doar la cererea ta)
   if($('#pfBodyCr')) $('#pfBodyCr').onclick = async () => {
     const b = $('#pfBodyCr'); b.disabled = true; b.innerHTML = '<span class="spin"></span>';
@@ -6045,20 +6059,105 @@ function drawPics(c){
   box.innerHTML = `<div class="pfVoice"><span>${on ? '✅ Pornit' : '⏸ Oprit'}${why ? ' · ' + why : ''}</span><button class="btn sm" id="pfPicsOn">${on ? '⏸ Oprește' : '▶ Pornește'}</button></div>
     <p class="hint" style="margin-top:6px">${on ? `${esc(c.name)} îți poate trimite poze în chat: când vrea, când i-o ceri, plus cele spontane (Setări → Poze) și cele din statusuri. Fața vine din poza de profil.` : `${esc(c.name)} nu trimite poze singur${c.aiPortrait ? '' : ' (implicit doar personajele cu portret generat în aplicație o fac)'}. 📷 Cere o poză din ＋ merge oricum.`}</p>`;
   $('#pfPicsOn').onclick = async () => { c.sendPics = !on; await saveChars(); drawPics(c); toast(c.sendPics ? '📷 ' + c.name + ' îți poate trimite poze' : c.name + ' nu mai trimite poze singur'); };
-  drawBodyNote(c, box); drawPeople(c, box);   // 9.43
-  drawRefs(c, box);
-  drawFidel(c, box);   // 10.0
+  drawPeople(c, box);   // 9.43
+  drawFidCard(c, box);   // 10.2: tot ce ține de fidelitate, într-un singur card
   drawHome(c, box);
-  if(c.photo && S.imgProv === 'worker'){
-    const fb = c.faceBox && c.faceBox.k === c.photo ? c.faceBox : null;
-    box.insertAdjacentHTML('beforeend', `<div class="faceref"><div class="fimg" id="pfFace">${fb ? '<span class="spin"></span>' : '?'}</div><div><b>Fața (al doilea reper)</b><small>${fb ? (fb.none ? 'Nu am găsit fața; folosesc partea de sus a pozei. Apasă „Caută din nou”. ' : fb.boxSrc === 'telefon' ? '✅ Fața găsită precis (în telefon). ' : '') + (fb.phys ? 'Trăsături citite din poza de profil, trimise la fiecare poză: <i>' + esc(fb.phys) + '</i>' : 'Detaliile feței, pe lângă poza de profil întreagă.') : 'Se citește la prima poză.'}</small><button class="btn sm" id="pfFaceRe">${fb ? '↻ Caută din nou' : '🔍 Caută acum'}</button></div></div>`);
-    const show = async force => { const el = $('#pfFace'); if(!el) return; el.innerHTML = '<span class="spin"></span>';
-      try{ if(force){ delete c.faceLoc; await profFaceBox(c, await DB.get(c.photo)); }   // 9.94 (B): „Caută din nou” caută din nou în telefon
-        const b = await faceRef(c, force); if(profId !== c.id) return; const u = URL.createObjectURL(b); el.innerHTML = `<img src="${u}" alt="">`; if(force) drawPics(c); }catch(e){ el.textContent = '!'; toast('N-am putut decupa fața: ' + e.message, 3500); } };
-    if(fb) show(false);
-    $('#pfFaceRe').onclick = () => show(true);
-  }
 }
+/* ═════════ 🎯 10.2 fidelitatea, într-un singur loc ═════════
+   (1) Profil → Poze: un singur card „🎯 Fidelitatea”: sus cifrele și ce mai e de făcut, cu un singur buton; dedesubt trei părți
+       care se deschid la atingere: 📷 Reperele (fața, poze în plus, pachetul și fișa), ✍️ Descrierea (ce a citit aplicația, ce ai
+       scris tu, verificarea cu pozele, trăsăturile și semnele, culorile măsurate), 📊 Rezultatele (statistica și setul-etalon).
+       Dispar dublurile: pașaportul se arată o singură dată, semnele o singură dată, „Recitește poza” și „Caută din nou” sunt un buton.
+   (2) Set-etalon: hainele vin din poza ei (citite o dată), nu mai sunt impuse (tricou, blugi); nicio scenă „făcută de altcineva”
+       (apărea a doua persoană); fiecare scenă cere explicit să fie singură în cadru. */
+let fidOpen = {};
+function drawFidCard(c, box){
+  const photo = (c.stil || 'photo') === 'photo';
+  const sec = (k, t, id) => `<div class="fids${fidOpen[k] ? ' open' : ''}" data-fs="${k}"><button type="button" class="fidt"><span>${t}</span><em id="pfFs_${k}"></em><i>⌄</i></button><div class="fidb" id="${id}"></div></div>`;
+  box.insertAdjacentHTML('beforeend', `<div class="fidc" id="pfFid"><div class="fidh" id="pfFidH"></div>
+    ${sec('ref', '📷 Reperele', 'pfFidRef')}${sec('desc', '✍️ Descrierea', 'pfFidDesc')}${c.photo && photo ? sec('rez', '📊 Rezultatele', 'pfFidRez') : ''}</div>`);
+  const R = $('#pfFidRef'), D = $('#pfFidDesc'), Z = $('#pfFidRez');
+  if(c.photo && S.imgProv === 'worker') drawFaceRef(c, R);
+  drawRefs(c, R);          // + pachetul de identitate și fișa (drawSheet)
+  drawBodyNote(c, D);
+  if(c.photo && photo){ drawAudit(c, D); drawStats(c, Z); drawEtalon(c, Z); }
+  $$('#pfFidDesc .fidclamp').forEach(e => e.onclick = () => e.classList.toggle('all'));
+  $$('#pfFid .fidt').forEach(b => b.onclick = () => { const s = b.parentNode; s.classList.toggle('open'); fidOpen[s.dataset.fs] = s.classList.contains('open'); });
+  fidHead(c);
+}
+const plural = (n, a, b) => n + ' ' + (n === 1 ? a : b);
+function fidHead(c){
+  const h = $('#pfFidH'); if(!h || profId !== c.id) return;
+  const photo = (c.stil || 'photo') === 'photo', K = c.photo && photo ? kitState(c) : null, kb = kitBusy.has(c.id);
+  const a = auditOf(c), fresh = auditFresh(c), open = auditOpen(c), s = statsOf(c), et = etalonOf(c), last = et[et.length - 1], must = mustOf(c);
+  const todo = [];
+  if(!c.photo) todo.push('pune o poză de profil: după ea se păstrează fața');
+  if(K && !K.ok) todo.push(kb ? 'reperele se completează acum' : plural(K.miss.length, 'reper lipsă', 'repere lipsă') + ': ' + K.items.filter(x => !x.ok && !x.warn).map(x => x.l.replace(/^\S+\s/, '')).slice(0, 3).join(', '));
+  if(c.photo && photo && !a) todo.push('descrierea nu e verificată cu pozele');
+  else if(c.photo && photo && !fresh) todo.push('descrierea sau pozele s-au schimbat: verifică din nou');
+  if(open.length) todo.push(plural(open.length, 'contradicție', 'contradicții') + ' între text și poze');
+  const chip = (t, v, w) => v == null ? '' : `<span class="fidchip${w ? ' w' : ''}">${t} <b>${v}${typeof v === 'number' ? '%' : ''}</b></span>`;
+  const act = !c.photo ? '' : K && !K.ok && !kb ? '🧬 Completează și verifică' : c.photo && photo && (!a || !fresh) ? '🔎 Verifică descrierea cu pozele' : open.length ? '✍️ Rezolvă contradicțiile' : '';
+  h.innerHTML = `<b>🎯 Fidelitatea · ${esc(c.name)}</b>
+    <div class="fidchips">${chip('👤 fața', s.face, s.face != null && s.face < 70)}${chip('🧍 corpul', s.body, s.body != null && s.body < 70)}${chip('🎨 culori', s.look, s.look != null && s.look < 70)}${last && last.score != null ? `<span class="fidchip">🎯 etalon <b>${last.score}</b></span>` : ''}${s.n ? `<span class="fidchip dim">din ${plural(s.n, 'poză', 'poze')}</span>` : '<span class="fidchip dim">cifrele apar de la prima poză</span>'}</div>
+    <small class="fidtodo">${todo.length ? '⚠️ ' + todo.map(esc).join(' · ') : c.photo ? `✅ Reperele sunt complete${a ? ', descrierea e verificată' : ''}${must.length ? ', ' + plural(must.length, 'trăsătură obligatorie', 'trăsături obligatorii') : ''}.` : ''}</small>
+    ${act ? `<div class="btns"><button class="btn sm pri" id="pfFidGo">${act}</button></div>` : ''}`;
+  const st = (k, t) => { const e = $('#pfFs_' + k); if(e) e.textContent = t; };
+  st('ref', !c.photo ? 'fără poză de profil' : !K ? '' : K.ok ? '✅ complete' : kb ? '⏳ se completează' : '⚠️ ' + K.miss.length + ' lipsă');
+  st('desc', !c.photo || !photo ? '' : !a ? 'neverificată' : !fresh ? '⚠️ de reverificat' : open.length ? '⚠️ ' + plural(open.length, 'contradicție', 'contradicții') : '✅ verificată' + (must.length ? ' · ' + must.length + ' obligatorii' : ''));
+  st('rez', [s.face != null ? '👤 ' + s.face + '%' : '', last && last.score != null ? '🎯 ' + last.score : ''].filter(Boolean).join(' · ') || 'încă nimic');
+  const go = $('#pfFidGo'); if(go) go.onclick = () => fidGo(c, go);
+}
+// butonul de sus: completează reperele (dacă lipsește ceva), măsoară reperul în telefon, verifică descrierea cu pozele
+async function fidGo(c, btn){
+  const K = kitState(c), photo = (c.stil || 'photo') === 'photo';
+  if(K.ok && auditFresh(c) && auditOpen(c).length){ auditSheet(c); return; }
+  const say = t => { if(btn.isConnected) btn.innerHTML = '<span class="spin"></span> ' + esc(t); };
+  btn.disabled = true;
+  try{
+    if(!K.ok && S.imgProv !== 'none'){
+      if(kitBusy.has(c.id)) for(let i = 0; i < 240 && kitBusy.has(c.id); i++) await sleep(500);
+      say('Completez reperele…');
+      await kitBuild(c, {gen:true, force:true, toast:false, onStep:k => { if(k) say((K.items.find(x => x.k === k) || {l:k}).l); }}).catch(() => {});
+    }
+    if(photo && c.photo){ say('Măsor portretul…'); try{ await lookRefOf(c); }catch(e){} }
+    let r = null;
+    if(photo && c.photo && aiReady() && !auditFresh(c)){ say('Compar descrierea cu pozele…'); r = await auditRun(c); }
+    if(profId === c.id) drawPics(c);
+    const K2 = kitState(c), left = K2.items.filter(x => !x.ok && !x.warn);
+    if(r && r.n) auditSheet(c);
+    else toast(left.length ? '⏳ N-au ieșit încă: ' + left.map(x => x.l.replace(/^\S+\s/, '')).join(', ') + '. Încearcă din nou peste câteva minute.' : '✅ Reperele sunt complete și descrierea se potrivește cu pozele.', 4500);
+  }catch(e){ toast(e.message || 'N-a mers.', 4000); if(profId === c.id) drawPics(c); }
+}
+// fața decupată din portret (al doilea reper) + un singur buton care recitește tot portretul: trăsăturile, părul, semnele și locul feței
+function drawFaceRef(c, box){
+  const fb = c.faceBox && c.faceBox.k === c.photo ? c.faceBox : null;
+  box.insertAdjacentHTML('beforeend', `<div class="faceref"><div class="fimg" id="pfFace">${fb ? '<span class="spin"></span>' : '?'}</div><div><b>Fața, decupată din portret</b><small>${fb ? (fb.none ? '⚠️ Nu am găsit fața; folosesc partea de sus a pozei. Apasă „Recitește portretul”.' : '✅ Fața găsită. Se trimite la fiecare poză, lângă textul din „✍️ Descrierea”.') : 'Se citește la prima poză.'}</small><button class="btn sm" id="pfFaceRe">${fb ? '↻ Recitește portretul' : '🔍 Citește acum'}</button></div></div>`);
+  const show = async force => { const el = $('#pfFace'); if(!el) return; el.innerHTML = '<span class="spin"></span>';
+    try{
+      if(force){ const bt = $('#pfFaceRe'); if(bt){ bt.disabled = true; bt.innerHTML = '<span class="spin"></span> Citesc portretul…'; }
+        delete c.faceLoc; await profFaceBox(c, await DB.get(c.photo)); try{ await identityOf(c, true); }catch(e){} }
+      const b = await faceRef(c, force); if(profId !== c.id) return; const u = URL.createObjectURL(b); el.innerHTML = `<img src="${u}" alt="">`; if(force){ drawPics(c); toast('↻ Portretul e recitit: fața, părul, trăsăturile și semnele.', 3500); } }
+    catch(e){ el.textContent = '!'; toast('N-am putut citi fața: ' + e.message, 3500); } };
+  if(fb) show(false);
+  $('#pfFaceRe').onclick = () => show(true);
+}
+/* ── (2) set-etalon: hainele ei ── */
+const ETALON_OUT0 = 'the same clothes as in the profile photo';
+async function outfitOf(c){
+  const k = c.photoFull || c.photo; if(!k) return ETALON_OUT0;
+  if(c.outfitRef && c.outfitRef.k === k && c.outfitRef.t) return c.outfitRef.t;
+  if(!aiReady()) return ETALON_OUT0;
+  try{
+    const b = await DB.get(k); if(!b) return ETALON_OUT0;
+    const out = await stream('You describe clothing for an image generator. Answer with the description only.', [{role:'user', image:await blobToB64(await toJpeg(b, 768, .85)), text:
+      'Describe only the clothes the main person wears in this photo: each garment with its exact color, pattern, material and fit, in English, max 30 words, comma-separated. If the legs are not visible, end with plain trousers or a skirt that match the style. No jewelry, no body, no pose, no background.'}], {max:120, aux:true, cid:c.id, tag:'etalon'});
+    const t = faraLiniute(String(out || '').replace(/["\n]/g, ' ').replace(/\s+/g, ' ').trim()).replace(/[.\s]+$/, '').slice(0, 220);
+    if(t.length > 8 && !/^[{[]/.test(t)){ c.outfitRef = {k, t}; await saveChars(); return t; }
+  }catch(e){}
+  return ETALON_OUT0;
+}
+const etalonShot = (tpl, o) => tpl.replace('{o}', o);
 function drawAv(c){
   const box = $('#pfAv'); if(!box) return;
   const can = !!c.aiPortrait && S.imgProv !== 'none' && c.photo;
