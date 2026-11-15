@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.6.2';
+const APP_VER = '10.7.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -641,6 +641,16 @@ JSON: {"physique":"...","hair":"...","marks":["..."],"glasses":"","plain":["..."
 const BODY_WORDS = /\b(body|build|bust|chest|breasts?|waist|hips?|slim|slender|curvy|plump|chubby|heavy|overweight|thin|skinny|weight|figure|petite|tall|short|athletic|muscular|belly|stocky)\b/i;
 const EN_BODY_RE = /(?:^|\.\s)Body:\s*([^]*?)(?=\.\s+[A-Z][a-z]+:|\.$|$)/;
 function bodySrc(c, id){
+  // 10.7: valorile structurate din Character Creation sunt sursa canonică.
+  // O poză întreagă generată anterior poate avea proporții greșite; nu suprascrie alegerile explicite.
+  if(c && c.appZones && c.appZones.body && typeof crBodyEn === 'function'){
+    const selected = crBodyEn(c.appZones);
+    const savedMatch = String(c.physEn || '').match(EN_BODY_RE);
+    const saved = savedMatch && savedMatch[1] ? savedMatch[1].trim() : '';
+    const free = String(c.appZones.zones && c.appZones.zones.corp || '').trim();
+    const merged = [selected, saved, free].filter((x, i, a) => x && a.indexOf(x) === i).join('; ');
+    if(merged) return {src:'creator', t:merged};
+  }
   if(c && c.physEn && c.physAuto !== true && !EN_BODY_RE.test(c.physEn) && BODY_WORDS.test(c.physEn)) return {src:'tu', t:''};   // e deja în textul tău
   if(c && EN_BODY_RE.test(c.physEn || '')) return {src:'creator', t:''};   // cuvintele exacte de pe butoane (poza întreagă e făcută din ele)
   if(c && c.bodyFull && c.photoFull && c.bodyFull.k === c.photoFull && c.bodyFull.t) return {src:'intreaga', t:c.bodyFull.t};
@@ -664,7 +674,8 @@ function idText(c, id, shot){
   if(hair) head.push('Hair: ' + hair);
   if(face) head.push('Face: ' + face);
   if(id && id.glasses) head.push('always wears ' + id.glasses);
-  if(B.t) head.push('Body: ' + B.t);
+  const authoritativeBody = B.t || (B.src === 'creator' ? bodyOnly(c, id) : '');
+  if(authoritativeBody) head.push('AUTHORITATIVE BODY SPECIFICATION (overrides conflicting body proportions in reference images): Body: ' + authoritativeBody);
   if(userRaw && !mine) head.push('{U}');
   { const mk = id ? marksFor(c, id, shot) : []; if(mk.length) tail.push('permanent marks, always in the same place when visible: ' + mk.join('; ')); }   // 10.0 (F7)
   if(id && id.plain && id.plain.length) tail.push('keep plain: ' + id.plain.join('; '));   // 9.99 (4)
@@ -749,6 +760,12 @@ async function wholeRef(blob){
     return await new Promise(r => cv.toBlob(r, 'image/jpeg', .92));
   } finally { URL.revokeObjectURL(u); }
 }
+function matchingToplessBodyReference(c){
+  if(!c || typeof crBodyEn !== 'function') return null;
+  const spec = adultPortfolioBodySpec(c);
+  if(!spec) return null;
+  return (c.adultPortfolioItems || []).find(x => x && x.exposure === 'topless' && x.k && x.bodySpec === spec) || null;
+}
 async function idRefs(c, shot = ''){
   const full = c.photo ? await DB.get(c.photo) : null; if(!full) return null;
   let id = null; if(aiReady()) try{ id = await identityOf(c); }catch(e){}
@@ -756,7 +773,12 @@ async function idRefs(c, shot = ''){
   // 8.5: pozele de referință în plus (alte unghiuri) merg ca repere 3 și 4: fața decupată din fiecare
   const extra = await extraRefs(c, shot);   // 9.83 (2): ale tale, apoi fișa de identitate (unghiurile potrivite scenei)
   let body = null, bodyFrom = 'profil';
-  if(c.photoFull){ const fb = await DB.get(c.photoFull).catch(() => null); if(fb) try{ body = await fullBodyRef(fb, c.fullBox); bodyFrom = 'intreaga'; }catch(e){} }   // 9.32
+  const toplessRef = exposureMode(shot) === 'topless' ? matchingToplessBodyReference(c) : null;
+  if(toplessRef){
+    const tb = await DB.get(toplessRef.k).catch(() => null);
+    if(tb) try{ body = await bodySquare(tb, await faceBoxOf(tb)); bodyFrom = 'topless-portfolio'; }catch(e){}
+  }
+  if(!body && c.photoFull){ const fb = await DB.get(c.photoFull).catch(() => null); if(fb) try{ body = await fullBodyRef(fb, c.fullBox); bodyFrom = 'intreaga'; }catch(e){} }   // 9.32
   if(!body) body = await bodySquare(full, bx);
   return {full, id, face: await cropFace(full, bx), body, bodyFrom, extra};
 }
@@ -807,10 +829,12 @@ function idPrompt(c, shot, fr, R, fix, two){
   const requestedBodyChange = /(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)[^.!?]{0,45}(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)|(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)[^.!?]{0,45}(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)/i.test(String(shot || ''));
   const bodyChangePriority = requestedBodyChange ? ' USER-REQUESTED BODY CHANGE OVERRIDE: this scene explicitly requests a change to bust size. Apply the requested increase or decrease clearly to the bust only; the body reference is a baseline, not a constraint against this explicit change. Keep the face, age, hair, waist, hips and all other unrequested traits unchanged.' : ' Do not reduce a prominent bust, slim the torso, widen/narrow the waist, or otherwise idealize, enlarge, shrink or redesign the body.';
   const nx = two && R && R.extra ? R.extra.length : 0;
+  const bodySpec = bodyText(c, R && R.id);
   const refs = two
-    ? 'image 1 is a close-up of the face (the exact identity to keep: face shape, eyes, eyebrows, nose, lips, skin tone and skin texture), ' + (R && R.bodyFrom === 'intreaga' ? 'image 2 shows the same person\'s exact body: build, weight, bust size and shape, waist, belly, hips, arms and legs, plus hair and skin tone; reproduce that body exactly, but NOT its clothes, pose or background' : 'image 2 is the best available body reference: preserve the exact visible build and proportions, especially bust size and shape, shoulders, waist, hips and overall silhouette; do not shrink or idealize the body') + (nx ? `, image${nx > 1 ? 's 3 and 4 are' : ' 3 is'} the same face from other angles` : '')
-    : 'image 1 is the same person (face and hair); image 2 is the body reference and defines the exact visible build and proportions, especially bust size and shape, shoulders, waist, hips, and overall silhouette';
-  return `${stilLead(c.stil)}${fr.p}. ${shot}.${fix ? ` Important corrections from the previous attempt: ${fix}.` : ''} IDENTITY LOCK — the reference images define one specific character, not a lookalike. Reproduce the same individual: preserve face shape, eye spacing and shape, eyebrows, nose, lips, jaw, apparent age, skin tone and texture, hairline, hair color, curl/strand texture and hairstyle. BODY IDENTITY LOCK — match the body reference, not a generic default body. Preserve the same visible body build and proportions, including the exact relative bust size and shape, shoulders, waist, hips, belly, arms and legs. ${bodyChangePriority} ${refs}.${phys} SCENE FLEXIBILITY — do not copy the reference photo's background, outfit, pose, expression, camera angle or framing. Those are allowed to change and must follow the current scene description above. Change only temporary details required by the scene; the character's identity and natural body proportions stay fixed. ${STIL_TAG[c.stil || 'photo']}`;
+    ? 'image 1 is a close-up of the face (the exact identity to keep: face shape, eyes, eyebrows, nose, lips, skin tone and skin texture), ' + (R && R.bodyFrom === 'topless-portfolio' ? "image 2 is the same character\'s saved topless body reference; preserve its exact bust volume, size and shape as well as the torso proportions" : R && R.bodyFrom === 'intreaga' ? 'image 2 is a useful body-proportion reference for build, shoulders, waist, hips, arms and legs; do not copy an incorrect bust size from it if the authoritative body specification below differs' : 'image 2 is the best available body reference for general build and silhouette; do not let it override the authoritative body specification below') + (nx ? `, image${nx > 1 ? 's 3 and 4 are' : ' 3 is'} the same face from other angles` : '')
+    : 'image 1 is the same person (face and hair); image 2 is a general body reference, subordinate to the authoritative written body specification';
+  const bodyAuthority = bodySpec ? ` AUTHORITATIVE BODY PROPORTIONS — follow this exact specification even if image 2 or an older generated full-body reference conflicts: ${bodySpec}. Preserve the specified relative bust/chest volume and shape; do not normalize it to an average body, reduce it, hide it through framing, or substitute a smaller size.` : '';
+  return `${stilLead(c.stil)}${fr.p}. ${shot}.${fix ? ` Important corrections from the previous attempt: ${fix}.` : ''} IDENTITY LOCK — the reference images define one specific character, not a lookalike. Reproduce the same individual: preserve face shape, eye spacing and shape, eyebrows, nose, lips, jaw, apparent age, skin tone and texture, hairline, hair color, curl/strand texture and hairstyle. BODY IDENTITY LOCK — preserve the character's specified body build and proportions, not a generic default body. ${bodyAuthority} ${bodyChangePriority} ${refs}.${phys} SCENE FLEXIBILITY — do not copy the reference photo's background, outfit, pose, expression, camera angle or framing. Those are allowed to change and must follow the current scene description above. Change only temporary details required by the scene; the character's identity and natural body proportions stay fixed. ${STIL_TAG[c.stil || 'photo']}`;
 }
 // încadrarea scrisă explicit la început (altfel modelul copiază încadrarea referinței)
 /* ═════════ 🎬 10.1 cadrul scenei: poza arată exact momentul din conversație ═════════
@@ -2849,12 +2873,17 @@ async function bodyPass(c, blob, signal, shot, size){   // 9.88: size = mărimea
   let id = null; try{ id = await identityOf(c); }catch(e){}
   const bt = bodyText(c, id); if(!bt && !c.photoFull) return null;
   let bodySource = prof, bodyRef = null;
-  if(c.photoFull){
+  const exposure = exposureMode(shot);
+  const toplessRef = exposure === 'topless' ? matchingToplessBodyReference(c) : null;
+  if(toplessRef){
+    const tb = await DB.get(toplessRef.k).catch(() => null);
+    if(tb){ bodySource = tb; try{ bodyRef = await bodySquare(tb, await faceBoxOf(tb)); }catch(e){} }
+  }
+  if(!bodyRef && c.photoFull){
     const fb = await DB.get(c.photoFull).catch(() => null);
     if(fb){ bodySource = fb; try{ bodyRef = await fullBodyRef(fb, c.fullBox); }catch(e){} }
   }
   if(!bodyRef) bodyRef = await wholeRef(bodySource);
-  const exposure = exposureMode(shot);
   const clothing = exposure === 'explicit'
     ? 'Preserve the exact adult nude state in image 1, including visible external genital anatomy if present; do not add clothes, underwear, lingerie, towels or objects covering the body. Keep it non-graphic and not a sexual act.'
     : exposure === 'full'
@@ -2862,7 +2891,7 @@ async function bodyPass(c, blob, signal, shot, size){   // 9.88: size = mărimea
     : exposure === 'topless'
       ? 'Preserve the exact topless state in image 1: keep the breasts uncovered, with no shirt or bra; preserve the lower-body clothing exactly and do not turn the image into full nudity.'
       : 'Preserve the exact clothing state and outfit in image 1; do not change garments, colors, coverage or accessories.';
-  const prompt = `Edit image 1. Change ONLY the person's body proportions to match the same person's body in image 2${bt ? ': ' + bt : ''}. Match the same build, weight, shoulders, arms, bust size and volume, waist, belly, hips, thighs and legs; never slim down, reduce the bust, enlarge unrelated features or idealize the body. ${clothing} Keep everything else in image 1 unchanged: face and identity, hair, expression, pose, hands, room, background, camera angle, framing, lighting and photo grain. The second image is a BODY reference only; take no clothing, pose, background or camera details from it. One seamless, photorealistic, unretouched phone photo.`
+  const prompt = `Edit image 1. Change ONLY the person's body proportions to match the authoritative body specification${bt ? ': ' + bt : ''}. The written body specification has priority over image 2 whenever they conflict; image 2 is only a secondary guide for general silhouette. Match the specified build, weight, shoulders, arms, bust size and volume, waist, belly, hips, thighs and legs. If the specification says very large bust, render a clearly very large, prominent bust with the same relative volume; do not average, minimize, flatten, compress or conceal it. Never slim down, reduce the bust, enlarge unrelated features or idealize the body. ${clothing} Keep everything else in image 1 unchanged: face and identity, hair, expression, pose, hands, room, background, camera angle, framing, lighting and photo grain. The second image is a BODY reference only; take no clothing, pose, background or camera details from it. One seamless, photorealistic, unretouched phone photo.`
   return await genImage(prompt, blob, signal, bodyRef, {model:'eco', force:{two:true}, size:size || S.wkSize || '768x1024', px1:Math.max(...String(size || S.wkSize || '768x1024').split('x').map(Number)), quiet:true, why:'corp'});
 }
 /* 9.35: poza întreagă și variantele din creator ieșeau des cu „altă față” (fața e mică în cadru și generatorul o redesenează).
@@ -2964,7 +2993,8 @@ async function fullVariants(c, base, signal, draw = () => {}, n = 2, o = {}){   
   const id = c.faceBox && c.faceBox.k === c.photo ? c.faceBox : null;
   const body = bodyOnly(c, id);   // 9.50
   const outfit = c.appZones && c.appZones.zones && c.appZones.zones.tinuta ? '' : 'the same clothes as in the photo, completed naturally down to the shoes';
-  const p = `Edit this photo into a full-body photo of the same person. ${CR_FRAMES.full.p}. Keep exactly the same face and identity, hairstyle, skin and age.${o.change ? ' REQUESTED BODY CHANGE, the purpose of this photo: make the body clearly and visibly ' + o.change + ', with natural realistic proportions; do not keep the previous body where it differs.' : ''}${body ? ' Body: ' + body + '.' : ''} ${outfit ? 'Outfit: ' + outfit + '.' : ''} Natural relaxed standing pose in a fitting everyday place. ${CR_HANDS} ${STIL_TAG[c.stil || 'photo']}`;
+  const bodyPriority = body ? ` AUTHORITATIVE BODY SPECIFICATION: ${body}. This text overrides any conflicting proportions in the source photo. Preserve the exact specified bust volume and shape; if specified as very large, make it visibly very large and prominent, not average or small. Do not slim, flatten or normalize the body.` : '';
+  const p = `Edit this photo into a full-body photo of the same person. ${CR_FRAMES.full.p}. Keep exactly the same face and identity, hairstyle, skin and age.${bodyPriority}${o.change ? ' REQUESTED BODY CHANGE, the purpose of this photo: make the body clearly and visibly ' + o.change + ', with natural realistic proportions; do not keep the previous body where it differs.' : ''} ${outfit ? 'Outfit: ' + outfit + '.' : ''} Natural relaxed standing pose in a fitting everyday place. ${CR_HANDS} ${STIL_TAG[c.stil || 'photo']}`;
   const model = crModel(n, CR_FRAMES.full.size);
   const vars = Array.from({length:n}, () => ({id:uid(), st:'gen', frame:'full', kind:'nou'})); draw(vars);
   await Promise.allSettled(vars.map(async v => {
@@ -8694,7 +8724,12 @@ async function charProfile(id, push = true){
 /* ═════════ 10.4: PORTOFOLIU VIZUAL ADULT — profil separat, aceeași identitate ═════════
    Folosește motorul renderPerson și referințele deja existente; nu ocolește moderarea furnizorului. */
 const adultPortfolioBusy = new Set();
-async function generateAdultPortfolioImage(c, exposure, button){
+function adultPortfolioBodySpec(c){
+  const selected = c && c.appZones && c.appZones.body && typeof crBodyEn === 'function' ? crBodyEn(c.appZones) : '';
+  const saved = c ? bodyOnly(c, c.faceBox && c.faceBox.k === c.photo ? c.faceBox : null) : '';
+  return [selected, saved].filter((x, i, a) => x && a.indexOf(x) === i).join('; ');
+}
+async function generateAdultPortfolioImage(c, exposure, button, options = {}){
   if(!c || !c.id || adultPortfolioBusy.has(c.id)) return;
   if(!c.adultPortfolioEnabled){ toast('Activează mai întâi portofoliul în profil.'); return; }
   if(!c.photo){ toast('Personajul trebuie să aibă o fotografie de profil.'); return; }
@@ -8722,23 +8757,51 @@ async function generateAdultPortfolioImage(c, exposure, button){
       anatomy: 'Create a complete, neutral, non-sexual anatomical figure reference of the same clearly adult fictional character, full body from head to feet, with the entire natural body unobstructed and visible. Include accurate overall anatomy and proportions: head, neck, shoulders, chest, breasts and nipples where applicable, torso, waist, abdomen, back, pelvis, hips, buttocks, thighs, knees, calves, feet, arms and hands. Include visible external adult genital anatomy, anatomically plausible and non-graphic, without underwear, clothing, towels or objects covering the body. Use a neutral standing anatomical-reference pose, arms slightly away from the torso, front-facing, plain studio background and even clinical lighting. No sexual activity, sexualized posing or idealization. Preserve the exact face, identity, age appearance, body build and proportions from the character references. Generate only if the selected image provider explicitly permits all requested visible anatomy; never bypass provider moderation.'
     };
     if(!modes[exposure]) exposure = 'topless';
-    const identity = [c.name, c.aspect, c.look, c.physEn].filter(Boolean).join('. ').slice(0, 1300);
-    const shot = `${modes[exposure]} Preserve the exact identity of the same adult character from the supplied profile and full-body references: same face, apparent adult age, hairstyle, skin tone, body build, body proportions and distinctive features. Use the character profile as the source of truth. Clean neutral studio background, natural lighting, vertical composition. Character description: ${identity}`;
+    const identity = [c.name, c.aspect, c.look, c.physUser, c.physEn].filter(Boolean).join('. ').slice(0, 1500);
+    const bodySpec = adultPortfolioBodySpec(c);
+    const bodyLock = bodySpec ? ` AUTHORITATIVE BODY SPECIFICATION from Character Creation: ${bodySpec}. This written specification overrides any conflicting proportions in an older or generated full-body reference. Preserve the stated bust size and volume exactly; if it is very large, it must remain clearly very large and prominent, not average or small. Keep the waist, hips, shoulders and all other selected proportions unchanged.` : '';
+    const shot = `${modes[exposure]} Preserve the exact identity of the same adult fictional character from the supplied profile and full-body references: same face, apparent adult age, hairstyle, skin tone, body build, body proportions and distinctive features.${bodyLock} Use the written character profile as the source of truth whenever it conflicts with a generated reference image. Clean neutral studio background, natural lighting, vertical composition. Character description: ${identity}`;
     if(button) button.textContent = 'Generez prin motorul personajului…';
     const result = await renderPerson(c, shot, ac.signal, {kind:'profile-portfolio', tag:'portofoliu-adult', noLog:true});
     if(!result || !result.blob) throw new Error('Motorul nu a întors o imagine.');
     const key = await saveImg(result.blob);
     c.adultPortfolioItems = Array.isArray(c.adultPortfolioItems) ? c.adultPortfolioItems : [];
-    c.adultPortfolioItems.unshift({id:uid(), k:key, exposure, ts:Date.now(), provider:lastImgProv || 'configured', model:lastImgModel || 'configured'});
+    c.adultPortfolioItems.unshift({id:uid(), k:key, exposure, bodySpec:adultPortfolioBodySpec(c), ts:Date.now(), provider:lastImgProv || 'configured', model:lastImgModel || 'configured'});
     c.adultPortfolioItems = c.adultPortfolioItems.slice(0, 30);
     await saveChars();
-    toast('Imagine salvată în portofoliul profilului ' + c.name + '.');
-    await charProfile(c.id, false);
+    if(!options.silent) toast('Imagine salvată în portofoliul profilului ' + c.name + '.');
+    if(!options.noRefresh && profId === c.id) await charProfile(c.id, false);
+    return true;
   }catch(e){
-    if(e.name !== 'AbortError') toast('Generarea portofoliului a eșuat: ' + (e.message || e), 6000);
+    if(e.name !== 'AbortError' && !options.silent) toast('Generarea portofoliului a eșuat: ' + (e.message || e), 6000);
+    return false;
   }finally{
     adultPortfolioBusy.delete(c.id);
     if(button && button.isConnected){ button.disabled = false; button.textContent = oldText || '＋ Generează'; }
+  }
+}
+async function generateCharacterReferencePack(c){
+  if(!c || !c.id || !c.adultPortfolioEnabled || !c.adultPortfolioAutoRefs || !c.photo) return false;
+  if(S.imgProv === 'none' || duoOn(c)) return false;
+  try{
+    toast('🧬 Pregătesc referințele vizuale pentru ' + c.name + '…', 4000);
+    // Completează mai întâi reperele standard de identitate și corp.
+    if(S.imgProv === 'worker'){
+      for(let i = 0; i < 240 && kitBusy.has(c.id); i++) await sleep(500);
+      await kitBuild(c, {gen:true, force:false, toast:false}).catch(() => {});
+    }else if(!c.photoFull) await autoFull(c).catch(() => {});
+    // Portofoliul automat creează doar o referință topless non-sexuală; nu generează anatomie genitală explicită.
+    const ok = await generateAdultPortfolioImage(c, 'topless', null, {silent:true, noRefresh:true});
+    if(!ok) throw new Error('Referința topless nu a putut fi generată. Verifică vârsta, descrierea corpului și permisiunile furnizorului.');
+    c.adultPortfolioAutoRefs = false;
+    c.adultPortfolioRefsVersion = 1;
+    await saveChars();
+    toast('✅ Referințele pentru ' + c.name + ' sunt gata: reperul de corp și fotografia topless sunt păstrate în profil.', 5000);
+    if(profId === c.id) await charProfile(c.id, false);
+    return true;
+  }catch(e){
+    toast('Pachetul automat de referințe nu a fost completat: ' + (e.message || e), 6000);
+    return false;
   }
 }
 function profScroll(){
@@ -11213,7 +11276,7 @@ const CR_BODY_EN = {
   tone:{'moale':'soft body with little muscle definition', 'normal':'normal muscle tone', 'tonifiat':'toned body', 'definit':'clearly defined muscles'},
   neck:{'scurt':'short neck', 'mediu':'average neck', 'lung':'long slender neck'}, posture:{'dreaptă':'upright straight posture', 'relaxată':'relaxed natural posture'},
   torsoLen:{'scurt':'short torso', 'mediu':'average torso length', 'lung':'long torso'},
-  bust:{'plat':'flat chest', 'mic':'small bust', 'mediu':'medium bust', 'mare':'large bust', 'foarte mare':'very large bust'},
+  bust:{'plat':'flat chest', 'mic':'small bust', 'mediu':'medium bust', 'mare':'large bust', 'foarte mare':'very large, prominent bust with substantial natural volume, clearly larger than average'},
   bustShape:{'rotund':'round bust shape', 'natural, în formă de lacrimă':'natural teardrop-shaped bust', 'ridicat, ferm':'high firm bust', 'ușor lăsat':'naturally slightly sagging bust', 'depărtat':'wide-set bust', 'apropiat':'close-set bust'},
   waist:{'foarte îngustă':'very narrow waist', 'îngustă':'narrow waist', 'medie':'average waist', 'lată':'wide waist'},
   belly:{'plat':'flat stomach', 'tonifiat':'toned stomach', 'ușor rotunjit':'slightly soft rounded belly', 'rotunjit':'rounded belly'},
@@ -11264,7 +11327,11 @@ function crCompose(P, Z){
 const crTextKey = () => JSON.stringify([$('#edPrompt').value.trim(), ed.cr.z.zones]);
 const crAllText = () => [$('#edPrompt').value, ...Object.values(ed.cr.z.zones)].join(' ');
 const crKey = () => JSON.stringify([$('#edPrompt').value.trim(), ed.cr.z]);
-const crPrompt = (en, frame, mix) => `${stilLead(crStil())}${stilFrame(crStil(), CR_FRAMES[frame].p)}. ${en}${mix ? ' ' + (STIL_LEAD[crStil()] ? mix.replace('real-looking ', '') : mix) : ''} ${frame === 'portrait' ? '' : CR_HANDS + ' '}${STIL_TAG[crStil()]}`;
+const crPrompt = (en, frame, mix) => {
+  const b = ed && ed.cr && ed.cr.z && ed.cr.z.body || {};
+  const bustLock = b.bust === 'foarte mare' ? ' CRITICAL BODY PROPORTION: the character has a VERY LARGE, prominent bust with substantial natural volume, clearly much larger than average. It must remain visibly very large in the generated image; do not reduce, flatten, compress, hide or normalize it. This is a defining permanent identity trait.' : '';
+  return `${stilLead(crStil())}${stilFrame(crStil(), CR_FRAMES[frame].p)}. ${en}${bustLock}${mix ? ' ' + (STIL_LEAD[crStil()] ? mix.replace('real-looking ', '') : mix) : ''} ${frame === 'portrait' ? '' : CR_HANDS + ' '}${STIL_TAG[crStil()]}`;
+};
 function crInit(c){
   const Z = c && c.appZones && c.appZones.zones ? {zones:{...crEmptyZ().zones, ...c.appZones.zones}, body:{...crEmptyZ().body, ...c.appZones.body}} : crEmptyZ();
   ed.cr = {frame:(c && c.frame) || 'full', vars:[], chosen:-1, run:0, busy:false, z:Z, en:(c && c.appEn) || '', enFor:'', manual:false, parts:null, partsFor:''};
@@ -11768,6 +11835,9 @@ function openEditor(id){
   duoFill(c);   // 9.63
   $('#edSpeech').value = c?.speech || ''; $('#edGreet').value = c?.greet || '';
   $('#edAdultPortfolio').checked = !!c?.adultPortfolioEnabled;
+  $('#edAdultRefsAuto').checked = !!c?.adultPortfolioAutoRefs;
+  $('#edAdultRefsAuto').disabled = !$('#edAdultPortfolio').checked;
+  $('#edAdultPortfolio').onchange = () => { $('#edAdultRefsAuto').disabled = !$('#edAdultPortfolio').checked; if(!$('#edAdultPortfolio').checked) $('#edAdultRefsAuto').checked = false; };
   $('#edLook').value = c?.look || ''; $('#edStil').value = c?.stil || 'photo';
   ed.accent = c?.accent || ''; ed.bg = c?.bg || 'clar'; drawLook();
   $('#edDelWrap').hidden = !c;
@@ -12038,7 +12108,8 @@ async function saveEditorNow(){
   const oldGreet = c.greet;
   Object.assign(c, {name, tag:$('#edTag').value.trim(), aspect:$('#edAspect').value.trim(), persona:$('#edPersona').value.trim(),
     speech:$('#edSpeech').value.trim(), greet:$('#edGreet').value.trim(), look:$('#edLook').value.trim(), stil:$('#edStil').value,
-    accent:ed.accent || '', bg:ed.bg || 'clar', adultPortfolioEnabled:!!$('#edAdultPortfolio').checked});
+    accent:ed.accent || '', bg:ed.bg || 'clar', adultPortfolioEnabled:!!$('#edAdultPortfolio').checked,
+    adultPortfolioAutoRefs:!!$('#edAdultPortfolio').checked && !!$('#edAdultRefsAuto').checked});
   if(duo){ c.duo = duo; c.name = duo.a.name + ' & ' + duo.b.name; groups.forEach(g => { if(g.members.includes(c.id)) g.members = g.members.filter(x => x !== c.id); }); saveGroups(); }   // 9.63
   else if(c.duo){ c.duo.on = false; }
   await saveChars();
@@ -12050,6 +12121,9 @@ async function saveEditorNow(){
   const fromChat = ed.fromChat; ed = null;
   // 9.84: fidelitatea se pregătește de la creare: poza întreagă (dacă lipsește), apoi fișa de identitate, în fundal
   if(c.photo && S.imgProv === 'worker') kitEnsure(c, {gen:true, toast:true, delay:2500});   // 9.92: pachetul de identitate (poza întreagă, fișele, măsurătorile), în fundal
+  if(isNew && c.photo && c.adultPortfolioEnabled && c.adultPortfolioAutoRefs && !duoOn(c)){
+    setTimeout(() => generateCharacterReferencePack(c).catch(() => {}), 3500);
+  }
   if(fromChat){ history.back(); return; }      // popstate redeschide conversația, actualizată
   history.replaceState({v:'vChat'}, '');
   openChat(c.id, false);
