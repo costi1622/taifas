@@ -1737,6 +1737,32 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 .igStats.n4{grid-template-columns:repeat(4,1fr)}.idsc{cursor:pointer}.idsc b{color:var(--acc)}
 .idbig{display:flex;align-items:center;gap:10px;margin:8px 0 4px}.idbig>b{font-size:1.9rem;font-weight:800;color:var(--acc);line-height:1}
 .idbig span{display:flex;flex-direction:column;font-size:.85rem;color:var(--tx2)}.idbig small{color:var(--tx3);font-size:.78rem}
+/* 11.7: viteză. Pe telefon, cel mai scump e ce desenează placa video la fiecare cadru de derulare:
+   (a) estomparea fundalului (backdrop-filter) pe barele care stau peste listele derulate → fundal aproape opac, fără estompare;
+   (b) cardurile de pe Acasă și secțiunile profilului din afara ecranului nu se mai așază și nu se mai desenează (content-visibility);
+   (c) umbre mai mici pe bule; animația de culoare a favoritelor (redesenată la fiecare cadru) → oprită;
+   (d) câmpul de scris își potrivește singur înălțimea (field-sizing), fără măsurători la fiecare tastă. */
+#chTop.solid .chathead,.chathead{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:linear-gradient(#0e0c12fa,#0e0c12ee)}
+#chTop:not(.solid) .chathead{background:transparent}
+#chTop:not(.solid) .ib,.pfTop .ib{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:#000000a6}
+#chTop #sceneBar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:#0e0c12eb}
+#composer .field,#btnPlus{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:color-mix(in srgb,var(--bg2) 96%,transparent)}
+#nav{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:color-mix(in srgb,var(--bg2) 97%,transparent)}
+.pfTop.solid{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:color-mix(in srgb,var(--bg) 97%,transparent)}
+.pftabs{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:color-mix(in srgb,var(--bg2) 98%,transparent)}
+#toast{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:color-mix(in srgb,var(--card) 97%,transparent)}
+#intimacyQuick,#sugg button,.under button{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:color-mix(in srgb,var(--bg2) 94%,transparent)}
+.card,.crow{content-visibility:auto;contain-intrinsic-height:auto 220px;overflow-clip-margin:24px}
+.pfSec{content-visibility:auto;contain-intrinsic-height:auto 320px;overflow-clip-margin:24px}
+.m.ai .bub{box-shadow:0 2px 8px #00000026,inset 0 0 0 1px var(--hair)}
+.m.me .bub{box-shadow:0 3px 10px color-mix(in srgb,var(--acc) 14%,transparent)}
+[data-theme=light] .m.ai .bub{box-shadow:0 1px 3px #00000014,inset 0 0 0 1px var(--hair)}
+.card.isfav{animation:none}
+.hero:not(.clear) img,.hhero .hhbg{will-change:transform}
+#inp{field-sizing:content}
+.view.vin-f,.view.vin-b,.view.vout-f,.view.vout-b,.view.vin-b::after{animation-duration:.26s!important}
+.view.vin-z,.view.vout-z{animation-duration:.24s!important}
+.sheet{animation-duration:.22s}
 </style>
 </head>
 <body>
