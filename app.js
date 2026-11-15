@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.6';
+const APP_VER = '10.7';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -151,7 +151,7 @@ function makeThumbs(k, im){
   });
 }
 async function delImg(k){ if(!k) return; for(const x of [k, thKey('m', k), thKey('s', k)]){ const u = urlCache.get(x); if(u) URL.revokeObjectURL(u); urlCache.delete(x); }
-  if(imeta[k]){ delete imeta[k]; imetaSave(); } await DB.del(k); DB.del(thKey('m', k)).catch(() => {}); DB.del(thKey('s', k)).catch(() => {}); DB.del(thKey('x', k)).catch(() => {}); }
+  if(imeta[k]){ delete imeta[k]; imetaSave(); } await DB.del(k); DB.del(thKey('m', k)).catch(() => {}); DB.del(thKey('s', k)).catch(() => {}); DB.del(thKey('x', k)).catch(() => {}); DB.del(thKey('y', k)).catch(() => {}); DB.del(thKey('z', k)).catch(() => {}); }
 // șterge tot ce ține de un mesaj: poza, variantele ei și înregistrările vocale (fără poza de profil)
 async function purgeMsg(m, c){
   const keep = c && c.photo;
@@ -1724,6 +1724,7 @@ async function refSet(c){
       // mediana față de reperele rămase aproape de portret (cele deja departe nu trag nici ele în jos pe altele)
       const ds = e.filter(y => y !== x && y.d && (y === P || y.dp <= CONS_MAX)).map(y => fdist(x.d, y.d)).sort((a, z) => a - z), med = ds.length ? ds[Math.floor(ds.length / 2)] : null;
       x.med = med == null ? null : Math.round(med * 1000) / 1000;
+      if(x.kind === 'unghi' && (x.ang === 'side' || (x.yaw != null && Math.abs(x.yaw) > .3))) continue;   // 10.7: profilul e departe de fața din față prin natura lui
       if(x.dp > CONS_MAX) x.out = 'departe de portret';
       else if(ds.length >= 3 && med > CONS_MED) x.out = 'diferit de celelalte repere';
     }
@@ -1786,9 +1787,9 @@ function drawCons(c, box){
 // (R3) unghiurile din fișă ieșite din grup: scoase și refăcute (o dată pe set de repere)
 async function consFix(c){
   const rs = await refSet(c).catch(() => null); if(!rs) return 0;
-  const bad = rs.e.filter(x => x.kind === 'unghi' && x.out).map(x => x.ang); if(!bad.length) return 0;
-  if(c.consFixed === rs.k) return 0;
-  c.consFixed = rs.k;
+  const now = Date.now(), tr = c.consTry && c.consTry.k === c.photo ? c.consTry.a || {} : {};
+  const bad = rs.e.filter(x => x.kind === 'unghi' && x.out && !(tr[x.ang] && now - tr[x.ang] < 30 * 864e5)).map(x => x.ang); if(!bad.length) return 0;   // 10.7
+  for(const a of bad) tr[a] = now; c.consTry = {k:c.photo, a:tr};
   const v = sheetOf(c), rm = v.filter(x => bad.includes(x.ang)); c.sheet.v = v.filter(x => !rm.includes(x)); await saveChars();
   for(const x of rm) delImg(x.k).catch(() => {});
   await sheetGen(c, false, null, {only:bad}).catch(() => false);
@@ -1800,15 +1801,15 @@ const BSHEET_VIEWS = {'34':'from a three-quarter angle, full body from head to f
 const BSHEET_RO = {'34':'¾', side:'profil', sit:'așezată', back:'din spate', lie:'întinsă', full:'poza întreagă'};
 const bsheetOf = c => c && c.photoFull && c.bsheet && c.bsheet.k === c.photoFull ? c.bsheet.v || [] : [];
 const bsheetMiss = c => Object.keys(BSHEET_VIEWS).filter(p => !bsheetOf(c).some(x => x.pose === p));
+const bsheetTried = (c, pose) => { const t = c.bsheetTry; if(!t || t.k !== c.photoFull) return false; const at = t.p ? t.p[pose] : ((t.n || '').split(',').includes(pose) ? t.at : 0); return !!at && Date.now() - at < 7 * 864e5; };
 // 10.5 (R4): forțat = toată fișa; altfel doar pozițiile lipsă (cele bune rămân); 3 încercări pe poziție, rămâne cea mai apropiată ca siluetă
 async function bsheetGen(c, force, onStep){
   if(!sheetOn(c) || !c.photoFull || sheetBusy || looksYoung(c)) return false;   // 9.94 (D)
-  const all = Object.keys(BSHEET_VIEWS), have = bsheetOf(c), want = force ? all : bsheetMiss(c);
+  const all = Object.keys(BSHEET_VIEWS), have = bsheetOf(c), want = force ? all : bsheetMiss(c).filter(x => !bsheetTried(c, x));   // 10.7: pe poziție
   if(!want.length) return false;
-  if(!force && c.bsheetTry && c.bsheetTry.k === c.photoFull && (c.bsheetTry.n || all.join(',')) === want.join(',') && Date.now() - c.bsheetTry.at < 7 * 864e5) return false;
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat'), need = want.length * 2 + 1;
   if(rwFor(mdl) ? rwCapLeft() < rwPer() * need : capLeft() < (neurPerPhoto(mdl) || 5000) * need) return false;
-  const k0 = c.photoFull; sheetBusy = c.id; c.bsheetTry = {k:k0, at:Date.now(), n:want.join(',')}; await saveChars();
+  const k0 = c.photoFull; sheetBusy = c.id; { const pp = c.bsheetTry && c.bsheetTry.k === k0 && c.bsheetTry.p ? c.bsheetTry.p : {}; for(const x of want) pp[x] = Date.now(); c.bsheetTry = {k:k0, at:Date.now(), n:want.join(','), p:pp}; } await saveChars();
   try{
     const base = await DB.get(k0); if(!base) return false;
     const ref = await bodySig(base).catch(() => null);   // 9.94 (A): fără siluetă măsurabilă, se verifică doar fața
@@ -2067,12 +2068,16 @@ async function srGet(k, alive = () => true, onProg){
   const b = await DB.get(k).catch(() => null); if(!b) return null;
   srBusy = k;
   try{
-    let x = null; try{ x = await srUpscale(b, alive, onProg); }catch(e){ console.warn('mărirea 2× n-a mers', e); }
-    if(!alive()) return null;
-    if(onProg) onProg(1);
-    const e = await srEnhance(x || b);
-    const out = e || x; if(!out) return null;
-    await DB.set(srKey(k), out).catch(() => {});
+    const mid = await DB.get(thKey('z', k)).catch(() => null);   // 10.7: mărirea făcută deja (finisarea fusese întreruptă)
+    let x = mid || null, big = false;
+    if(!x){ try{ x = await srUpscale(b, alive, onProg); }catch(e){ console.warn('mărirea 2× n-a mers', e); }
+      if(!x){ if(!alive()) return null; big = true; }   // null: ori ai ieșit în timpul măririi (se reia), ori poza e deja mare
+      else await DB.set(thKey('z', k), x).catch(() => {}); }
+    // 10.7: de aici nu se mai renunță când ieși din poză (înainte: ieșeai la „100%”, în timpul finisării, și totul se arunca)
+    if(onProg) onProg(1, 'fin');
+    const e = await srEnhance(big ? b : x);
+    const out = e || (big ? null : x); if(!out) return null;
+    await DB.set(srKey(k), out).catch(() => {}); DB.del(thKey('z', k)).catch(() => {});
     return out;
   } finally { srBusy = null; }
 }
@@ -2225,10 +2230,10 @@ function kitState(c){
     if(sheetOn(c)){ const cr = c.closeRef && c.closeRef.k === c.photo ? c.closeRef : null;   // 10.5 (R2)
       add('aproape', '🔍 Portretul de aproape', (!!cr && (!!cr.img || !!cr.skip || !!cr.fail)) || !!(c.closeTry && c.closeTry.k === c.photo && Date.now() - c.closeTry.at < 7 * 864e5), cr ? (cr.img ? (cr.off ? 'oprit de tine' : 'fața ' + idPct(cr.d) + '% · reperul de față la poze') : cr.skip ? 'nu e nevoie (fața e mare în portret)' : cr.fail ? 'n-a ieșit destul de fidel: rămâne decupajul din portret' : '') : 'se face după fișă', sv > 0, !!cr && !!cr.fail && !cr.img); }
     { const rs = c.refSet && c.refSet.e ? c.refSet : null, o = rs ? rs.e.filter(x => x.out).length : 0;   // 10.5 (R3)
-      add('consens', '🤝 Reperele se potrivesc între ele', !o, rs ? (o ? o + (o === 1 ? ' a ieșit din grup și nu e folosit' : ' au ieșit din grup și nu sunt folosite') : 'toate în grup') : 'se compară în telefon', false, o > 0); }
+      add('consens', '🤝 Reperele se potrivesc între ele', true, rs ? (o ? o + (o === 1 ? ' a ieșit din grup și nu e folosit' : ' au ieșit din grup și nu sunt folosite') : 'toate în grup') : 'se compară în telefon', false, o > 0); }
     { const fbm = fb && c.faceBox.multi; add('pasaport2', '🪪 Trăsăturile verificate pe toate pozele', !!fbm && c.faceBox.multi === passKey(c), fbm ? (c.faceBox.multi === passKey(c) ? 'din ' + (c.faceBox.multiN || 2) + ' poze' : 'se recitesc (pozele s-au schimbat)') : 'după fișă', sv > 0); }   // 9.99 (4)
     if(looksYoung(c)) add('fisaCorp', '🧍 Fișa corpului', false, 'oprită: nu pare clar adult(ă)', false, true); else
-    { const nB = Object.keys(BSHEET_VIEWS).length, missB = bsheetMiss(c).join(','), bT2 = !!(c.bsheetTry && c.bsheetTry.k === kf && (c.bsheetTry.n || '') === missB && Date.now() - c.bsheetTry.at < 7 * 864e5);   // 10.5 (R4)
+    { const nB = Object.keys(BSHEET_VIEWS).length, missB = bsheetMiss(c).join(','), bT2 = !!missB && bsheetMiss(c).every(x => bsheetTried(c, x));   // 10.7   // 10.5 (R4)
       add('fisaCorp', '🧍 Fișa corpului', !c.photoFull || bv >= nB || (bv > 0 && (bT2 || !sheetOn(c))), c.photoFull ? (bv ? bv + ' din ' + nB + ' poziții' + (bv < nB ? (bT2 ? ' (celelalte n-au ieșit; se reîncearcă peste 7 zile)' : ' (se adaugă cele noi)') : '') : bTried ? 'n-a ieșit data trecută: apasă „Completează acum”' : 'se face în fundal') : 'după poza întreagă', !!c.photoFull); }
     const measured = c.bodySig && c.bodySig.v3 && c.bodySig.k === kf, sig = measured ? c.bodySig.v : null;
     add('silueta', '📐 Silueta măsurată', !c.photoFull || !!sig, sig ? (bodyRatioRo(sig) || 'măsurată') : measured ? 'nu se poate măsura: ' + (c.bodySig.why || 'în poza întreagă nu se văd clar umerii, șoldurile și genunchii') + ' (se reîncearcă la următoarea poză)' : c.photoFull ? 'se măsoară în telefon' : '—', !!c.photoFull, measured && !sig);
@@ -2272,10 +2277,12 @@ async function kitBuild(c, o = {}){
   } finally { kitBusy.delete(c.id); step(''); }
 }
 // dacă pachetul e vechi sau incomplet: se completează în fundal (Runware îl lasă după pozele tale)
+const kitRan = new Map();
 function kitEnsure(c, o = {}){
   if(!c || !c.photo || S.imgProv === 'none') return;
   const st = kitState(c), fresh = st.fresh && (!o.gen || (c.kit && c.kit.gen));
   if(fresh && st.ok && !o.force) return;
+  if(!o.force){ const r = kitRan.get(c.id), k = kitKey(c) + '|' + (o.gen ? 1 : 0); if(r && r.k === k && Date.now() - r.at < 30 * 60e3) return; kitRan.set(c.id, {k, at:Date.now()}); }   // 10.7: fără bucle
   setTimeout(() => kitBuild(charById(c.id) || c, o).catch(() => {}), o.delay ?? 1500);
 }
 // (3) garanția + finisarea, după orice generare cu personajul
@@ -11157,7 +11164,7 @@ async function viewImg(k, list, meta, vopt = {}){
     // 9.87 (3): mărirea 2× pe telefon (o dată pe poză; apoi se ia din memorie)
     if(!raw && S.sr !== 'off'){ const my = idx, key = list[idx], badge = v.querySelector('.vsr'); badge.hidden = false; badge.classList.remove('done'); badge.textContent = '✨ Îmbunătățesc…';
       badge.onpointerdown = badge.onpointerup = badge.onpointerleave = badge.onpointercancel = null;
-      srGet(key, () => document.body.contains(v) && idx === my, p => { if(idx === my) badge.textContent = `✨ Îmbunătățesc… ${Math.round(p * 100)}%`; }).then(x => {
+      srGet(key, () => document.body.contains(v) && idx === my, (p, st) => { if(idx === my) badge.textContent = st === 'fin' ? '✨ Finisez…' : `✨ Îmbunătățesc… ${Math.round(p * 100)}%`; }).then(x => {
         if(idx !== my || !document.body.contains(v)) return; if(!x){ badge.hidden = true; return; }
         const su = URL.createObjectURL(x), pre = new Image(), lbl = '✨ Îmbunătățită · ține apăsat: originalul';
         pre.onload = () => { if(idx !== my){ URL.revokeObjectURL(su); return; } img.src = su; badge.classList.add('done'); badge.textContent = lbl;   // 10.6 (A): rămâne afișată; ții apăsat → originalul
@@ -12617,7 +12624,7 @@ async function exportAll(share){
   for(const k of await DB.keys()){
     let v = await DB.get(k);
     if(String(k).startsWith('aud:')) continue;   // înregistrările vocale nu intră în backup (se refac la nevoie)
-    if(/^th[msxyf]:/.test(String(k))) continue;      // 9.13: nici miniaturile pozelor (se refac singure); 9.87: nici pozele mărite 2×
+    if(/^th[msxyzf]:/.test(String(k))) continue;      // 9.13: nici miniaturile pozelor (se refac singure); 9.87: nici pozele mărite 2×
     if(k === 'settings'){ v = {...v}; for(const x of SECRET_SETTINGS) delete v[x]; }
     if(v instanceof Blob) v = {__blob:await blobToB64(v), type:v.type};
     out.data[k] = v;
