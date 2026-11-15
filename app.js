@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.2';
+const APP_VER = '10.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -996,9 +996,9 @@ function postureFromKp(kp, W, H){
   else if(kn && tilt <= 35){
     const thV = (kn[1] - hp[1]) / len, thH = Math.abs(kn[0] - hp[0]) / len;                      // coapsa: cât coboară, cât merge lateral
     if(an){ const shV = (an[1] - kn[1]) / len;
-      if(thV >= .5 && shV >= .45) o.k = 'standing';
+      if(thV >= .78 && shV >= .45) o.k = 'standing';   // 10.3: în picioare, coapsa e cam cât trunchiul
       else if(thV >= .5 && shV < .2) o.k = 'kneeling';
-      else if(thV < .38) o.k = 'sitting'; }
+      else if(thV < .68) o.k = 'sitting'; }   // 10.3: așezată, văzută din față: coapsa vine spre aparat și pare scurtă
     else if(thV < .3 && (thH > .25 || thV < .15)) o.k = 'sitting';
   }
   const hw = Math.max(sw, len * .5);
@@ -1204,10 +1204,47 @@ function lookText(c, id, shot){
   if(id && id.marks && id.marks.length) p.push('permanent marks, always in the same place when visible: ' + id.marks.join('; '));
   return p.filter(Boolean).join('. ').replace(/\s+/g, ' ').slice(0, 1400);
 }
+/* ═════════ 💎 10.3 motorul întărit ═════════
+   (1) Reperul de față: în loc de un pătrat strâns pe față (părul creț și ochelarii ieșeau parțial din el), capul întreg: fața, tot
+       părul, ochelarii și puțin din umeri. Când fața e mică în portret (portret cu tot corpul), decupajul e mărit 2× în telefon
+       înainte să plece la generator, ca să nu fie neclar. Se face o dată pe portret.
+   (2) Ochelarii, spuși la începutul descrierii, lângă păr („aceleași rame ca în reper”).
+   (3) Poza mare: refacerea schiței la mărimea întreagă rămâne doar dacă fața nu s-a îndepărtat de schiță; altfel rămâne schița
+       (se mărește în telefon când o deschizi).
+   (4) Corpul: o măsurare ratată nu mai rămâne „nu se poate măsura” pentru totdeauna (se reîncearcă la versiune nouă și după
+       6 ore), iar motivul se vede în pachetul de identitate. */
+const headCache = new Map();
+async function headRefOf(c, full, id){
+  const b = id && !id.none ? id : null, key = (c.photo || '') + '|' + (b ? [b.x, b.y, b.w, b.h].map(v => Math.round(v * 1000)).join(',') : 'x') + '|' + (S.sr === 'off' ? 0 : 1);
+  if(headCache.has(key)) return headCache.get(key);
+  const p = (async () => {
+    const u = URL.createObjectURL(full);
+    try{
+      const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight;
+      let side, cx, cy;
+      if(b){ const fw = b.w * W, fh = b.h * H; side = Math.max(fw, fh) * 2.3; cx = (b.x + b.w / 2) * W; cy = (b.y + b.h / 2) * H + fh * .05; }
+      else { side = Math.min(W, H) * .6; cx = W / 2; cy = side / 2 + H * .02; }
+      side = Math.min(side, W, H);
+      const x = Math.min(Math.max(0, cx - side / 2), W - side), y = Math.min(Math.max(0, cy - side / 2), H - side);
+      const o = Math.min(768, Math.round(side)), cv = document.createElement('canvas'); cv.width = cv.height = o;
+      cv.getContext('2d').drawImage(im, x, y, side, side, 0, 0, o, o);
+      let out = await new Promise(r => cv.toBlob(r, 'image/jpeg', .93));
+      if(b && side < 400 && S.sr !== 'off'){   // fața e mică în portret: decupajul, mărit 2× în telefon (o dată pe portret)
+        try{ const up = await Promise.race([srUpscale(out), sleep(25000).then(() => null)]); if(up){ out = up; out.sr = true; } }catch(e){}
+      }
+      return out;
+    } finally { URL.revokeObjectURL(u); }
+  })();
+  headCache.set(key, p); p.catch(() => headCache.delete(key));
+  return p;
+}
+const HEAD_KEEP = 'face shape, eyes, eyebrows, nose, lips, skin tone and texture, age, and the hair and glasses exactly as shown: the same color, length, curls, volume and parting, the same frames';
+const glassLead = (c, id) => id && !id.none && id.glasses ? `${c.name} always wears ${idCut(id.glasses, 100)}: the same frames as in the reference, never other glasses and never without them. ` : '';
+let bodySigWhy = '';
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
   const asked = (opt.asked || []).filter(Boolean);
-  const face = await cropFace(full, id && !id.none ? id : null);
+  const face = await headRefOf(c, full, id);   // 10.3: capul întreg (fața, părul, ochelarii), nu doar fața
   const exposure = exposureMode(shot);
   const nude = exposure === 'explicit' ? ' The fictional character is clearly an adult (18+), fully nude with visible external genital anatomy as requested; anatomically plausible and non-graphic, not a sexual act. Generate only if the selected image provider permits it.' : exposure === 'full' ? ' The character is clearly an adult (18+); natural, non-explicit artistic nudity, not a sexual act.' : exposure === 'topless' ? ' The character is clearly an adult (18+) and is topless as requested; bare breasts visible, no shirt or bra, lower-body clothing stays as described. Do not turn this into full nudity.' : '';
   // 9.53: pentru cereri explicite de bust gol/nuditate, adaugă un reper separat de corp.
@@ -1235,25 +1272,25 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
       const b = await DB.get(pk.k).catch(() => null); if(b){ angRef = await cropFace(b, pk.box); angName = pk.ang === 'side' ? 'seen in side profile' : 'smiling widely with teeth showing'; } } }
   let ratioTxt = ''; if(clothedBody){ try{ ratioTxt = bodyRatioText(await refBodySig(c)); }catch(e){} }   // 9.89 (a)
   const faceInstruction = clothedBody
-    ? `Image 1 is a close-up of ${c.name}'s face: keep exactly this face and identity (face shape, eyes, eyebrows, nose, lips, skin tone and texture, age). Image 2 shows ${c.name}'s whole body: reproduce exactly the same body, with the same build, weight, height impression and proportions of shoulders, chest, waist, hips, arms and legs; do NOT copy its clothing, pose, framing, background or light, which come only from this text.${clothedBody.full2 ? ` Image ${angRef ? 4 : 3} is the same person's whole body standing, front view: the same body, for its exact proportions.` : ''}${ratioTxt ? ' ' + ratioTxt : ''}${angRef ? ` Image 3 is the same person's face ${angName}: use it for how the face looks from that angle or with that expression.` : ''}`
+    ? `Image 1 is a close-up of ${c.name}'s face: keep exactly this face and identity (${HEAD_KEEP}). Image 2 shows ${c.name}'s whole body: reproduce exactly the same body, with the same build, weight, height impression and proportions of shoulders, chest, waist, hips, arms and legs; do NOT copy its clothing, pose, framing, background or light, which come only from this text.${clothedBody.full2 ? ` Image ${angRef ? 4 : 3} is the same person's whole body standing, front view: the same body, for its exact proportions.` : ''}${ratioTxt ? ' ' + ratioTxt : ''}${angRef ? ` Image 3 is the same person's face ${angName}: use it for how the face looks from that angle or with that expression.` : ''}`
     : angRef
-    ? `Image 1 is a close-up of this person's face only: keep exactly this face and identity (face shape, eyes, eyebrows, nose, lips, skin tone and texture, age). Image 2 is the same person's face ${angName}: use it for how this face looks from that angle or with that expression. Everything else comes from this text, not from the references.`
+    ? `Image 1 is a close-up of this person's face only: keep exactly this face and identity (${HEAD_KEEP}). Image 2 is the same person's face ${angName}: use it for how this face looks from that angle or with that expression. Everything else comes from this text, not from the references.`
     : bodyRef
-    ? `Image 1 is the exact face reference for ${c.name}; preserve the same facial identity. Image 2 is the body/proportion reference for ${c.name}; preserve the same build and silhouette, especially bust size and shape, but do not copy its clothing, pose, framing or background.`
-    : 'The reference image is a close-up of this person’s face only: keep exactly this face and identity (face shape, eyes, eyebrows, nose, lips, skin tone and texture, age); everything else comes from this text, not from the reference.';
+    ? `Image 1 is the exact head reference for ${c.name}; preserve the same facial identity and the hair and glasses exactly as shown. Image 2 is the body/proportion reference for ${c.name}; preserve the same build and silhouette, especially bust size and shape, but do not copy its clothing, pose, framing or background.`
+    : 'The reference image is a close-up of this person’s head: keep exactly this face and identity (' + HEAD_KEEP + '); everything else comes from this text, not from the reference.';
   // 10.1 (S5): camera din poza dinainte (cu persoana acoperită) intră într-un loc de reper rămas liber; corpul și fața au prioritate
   let sref = null, srefN = 0;
   if(opt.sref && !bodyRef && sceneRefOn(c, opt)){
     if(clothedBody){ const used = [angRef, clothedBody.full2].filter(Boolean).length; if(used < 2){ sref = opt.sref; srefN = 3 + used; } }
     else { sref = opt.sref; srefN = angRef ? 3 : 2; }
   }
-  const fiS = !sref ? faceInstruction : (srefN === 2 ? 'Image 1 is a close-up of this person’s face only: keep exactly this face and identity (face shape, eyes, eyebrows, nose, lips, skin tone and texture, age).' : faceInstruction) + srefText(srefN);
-  const prompt = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
+  const fiS = !sref ? faceInstruction : (srefN === 2 ? 'Image 1 is a close-up of this person’s head: keep exactly this face and identity (' + HEAD_KEEP + ').' : faceInstruction) + srefText(srefN);
+  const prompt = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
   if(useF3()){   // 9.43/9.53: FLUX 3 folosește fața + reperul de corp și prioritizează proporțiile bustului la cereri topless/nud
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
     const body = bodyRef || (fb ? await fullBodyRef(fb, c.fullBox) : null);
-    const face2 = await cropFace(full, id && !id.none ? id : null);
-    const p3 = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s face: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
+    const face2 = await headRefOf(c, full, id);   // 10.3
+    const p3 = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair and glasses exactly as shown (the same color, length, curls, volume, parting and frames).${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
     let b3 = await f3Image(s3 ? p3 + srefText(body ? 3 : 2) : p3, [face2, body, s3].filter(Boolean), S.wkSize, signal), ret = false;
     // 9.50: și pe FLUX 3 fața se măsoară în telefon și se retușează dacă s-a îndepărtat (înainte, pe FLUX 3 nu se verifica)
@@ -1265,7 +1302,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   }
   const genOpt = bodyRef
     ? {model, one:face, p1:prompt, why:opt.why || 'chat', size:opt.size} // încearcă față + corp; la eroare revine automat la față, nu pierde identitatea
-    : {model, force:{two:false, px:512}, p1:prompt, why:opt.why || 'chat', size:opt.size};   // 9.83: size = schița, când e cazul
+    : {model, force:{two:false, px:768}, p1:prompt, why:opt.why || 'chat', size:opt.size};   // 9.83: size = schița, când e cazul
   const genOpt2 = {...(clothedBody ? {model, one:face, p1:prompt, why:opt.why || 'chat', size:opt.size, extra:[angRef, clothedBody.full2].filter(Boolean), px2:768}
     : angRef ? {model, force:{two:true}, p1:prompt, why:opt.why || 'chat', size:opt.size} : genOpt), multi:opt.multi || 0};
   const promptS = sref ? prompt.replace(faceInstruction, fiS) : prompt;   // 10.1 (S5); p1 (rezerva cu un singur reper) rămâne fără decor
@@ -1480,6 +1517,7 @@ async function draftFinal(c, x, shot, signal, opt = {}){
     const b = await genImage(p, x.blob, signal, null, {model:sceneModel(opt), size:finalSize(), force:{two:false, px:1024}, p1:p, quiet:true, why:'schite'});   // 9.88: ~1,8 MP
     addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze');
     const fd = (await localFace(b, c)).d;
+    if(x.fd != null && fd != null && fd > x.fd + .03) return {...x, drafted:true, draftOnly:true, finalDrift:Math.round(fd * 1000) / 1000};   // 10.3: refacerea mare a schimbat fața: rămâne schița
     return {...x, blob:b, fd, draftFd:x.fd, drafted:true};
   }catch(e){ if(e.name === 'AbortError') throw e; return {...x, drafted:true, draftOnly:true}; }   // rămâne schița (mai mică), nu pierzi poza
 }
@@ -1561,7 +1599,7 @@ async function refBodySigs(c){
   const full = await refBodySig(c); if(!full) return [];
   const out = [{pose:'full', sig:full}];
   for(const x of bsheetOf(c)){
-    if(x.sig === undefined){ const b = await DB.get(x.k).catch(() => null); x.sig = b ? await bodySig(b).catch(() => null) : null; saveChars(); }
+    if(x.sig === undefined || (x.sig === null && x.sigV !== APP_VER)){ const b = await DB.get(x.k).catch(() => null); x.sig = b ? await bodySig(b).catch(() => null) : null; x.sigV = APP_VER; saveChars(); }   // 10.3
     if(x.sig) out.push({pose:x.pose, sig:x.sig});
   }
   return out;
@@ -1610,7 +1648,7 @@ function photoWarm(c){
   if(!c || !c.photo || S.imgProv !== 'worker' || warmDone.has(c.id + '|' + c.photo)) return;
   warmDone.add(c.id + '|' + c.photo);
   const go = async () => { if(typeof call !== 'undefined' && call){ warmDone.delete(c.id + '|' + c.photo); return; }   // nu în timpul unui apel (încarcă telefonul)
-    try{ await faceApi(); await Promise.all([poseModel(), segModel()]); await refDescs(c); await refBodySigs(c); await bodyNoise(c); }catch(e){} };
+    try{ await faceApi(); await Promise.all([poseModel(), segModel()]); await refDescs(c); if(!(c.bodySig && c.bodySig.v3 && !c.bodySig.v)) await refBodySigs(c); await bodyNoise(c); }catch(e){} };   // 10.3: o măsurare ratată se reîncearcă la poză, nu la deschiderea conversației
   (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => go(), {timeout:5000});
 }
 /* (3) editorul de corp, același în creator și în „Modifică poza”: pe grupuri, cu ‹ › pe fiecare rând, și ce schimbi, înainte să aplici */
@@ -1898,7 +1936,7 @@ function kitState(c){
     if(looksYoung(c)) add('fisaCorp', '🧍 Fișa corpului', false, 'oprită: nu pare clar adult(ă)', false, true); else
     add('fisaCorp', '🧍 Fișa corpului', !c.photoFull || bv > 0, c.photoFull ? (bv ? bv + ' poziții' : bTried ? 'n-a ieșit data trecută: apasă „Completează acum”' : 'se face în fundal') : 'după poza întreagă', !!c.photoFull);
     const measured = c.bodySig && c.bodySig.v3 && c.bodySig.k === kf, sig = measured ? c.bodySig.v : null;
-    add('silueta', '📐 Silueta măsurată', !c.photoFull || !!sig, sig ? (bodyRatioRo(sig) || 'măsurată') : measured ? 'nu se poate măsura: în poza întreagă nu se văd clar umerii, șoldurile și genunchii' : c.photoFull ? 'se măsoară în telefon' : '—', !!c.photoFull, measured && !sig);
+    add('silueta', '📐 Silueta măsurată', !c.photoFull || !!sig, sig ? (bodyRatioRo(sig) || 'măsurată') : measured ? 'nu se poate măsura: ' + (c.bodySig.why || 'în poza întreagă nu se văd clar umerii, șoldurile și genunchii') + ' (se reîncearcă la următoarea poză)' : c.photoFull ? 'se măsoară în telefon' : '—', !!c.photoFull, measured && !sig);
     const tol = bodyTol(c), calib = c.bodyNoise && c.bodyNoise.k === kf;
 { const lr = c.lookRef && c.lookRef.k === lookKey(c) ? c.lookRef : null;   // 10.0
       add('culori', '🎨 Culorile și proporțiile feței, măsurate', !!lr && !lr.none, lr ? (lr.none ? 'fața nu se poate măsura în portret' : [lr.hair ? 'păr' : '', lr.eye ? 'ochi' : '', 'ten', lr.geo && lr.geo.length ? 'proporții' : '', lr.age != null ? 'vârstă aparentă' : ''].filter(Boolean).join(', ') + (lr.n > 1 ? ' · calibrat pe ' + lr.n + ' poze' : '')) : 'se măsoară în telefon', false, !!lr && !!lr.none); }
@@ -2816,19 +2854,19 @@ async function bodySig(blob0){
   const u = URL.createObjectURL(blob);
   try{
     const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight;
-    const kp = await crPose(im); if(!kp) return null;
+    const kp = await crPose(im); if(!kp){ bodySigWhy = 'nu am găsit persoana în poză'; return null; }
     const ok = i => kp[i] && kp[i][2] >= .3;
-    if(![5, 6, 11, 12].every(ok)) return null;   // fără umeri și șolduri vizibile nu se poate măsura
-    const S2 = Math.hypot(kp[5][0] - kp[6][0], kp[5][1] - kp[6][1]); if(S2 < W * .04) return null;
+    if(![5, 6, 11, 12].every(ok)){ bodySigWhy = 'umerii sau șoldurile nu se văd clar'; return null; }   // fără umeri și șolduri vizibile nu se poate măsura
+    const S2 = Math.hypot(kp[5][0] - kp[6][0], kp[5][1] - kp[6][1]); if(S2 < W * .04){ bodySigWhy = 'persoana e prea mică în poză'; return null; }
     const mask = await segMask(im), at = (x, y) => { const mx = Math.max(0, Math.min(255, Math.round(x / W * 255))), my = Math.max(0, Math.min(255, Math.round(y / H * 255))); return mask[my * 256 + mx]; };
-    const shY = (kp[5][1] + kp[6][1]) / 2, hpY = (kp[11][1] + kp[12][1]) / 2, len = hpY - shY; if(len < H * .05) return null;
+    const shY = (kp[5][1] + kp[6][1]) / 2, hpY = (kp[11][1] + kp[12][1]) / 2, len = hpY - shY; if(len < H * .05){ bodySigWhy = 'persoana e prea mică în poză'; return null; }
     const cxAt = t => ((kp[5][0] + kp[6][0]) / 2) * (1 - t) + ((kp[11][0] + kp[12][0]) / 2) * t;
     const width = t => { const y = shY + len * t, cx = cxAt(t), step = Math.max(1, W / 256); let l = cx, r = cx;
       if(at(cx, y) < .5) return 0;
       while(l > 0 && at(l - step, y) >= .5) l -= step; while(r < W - 1 && at(r + step, y) >= .5) r += step; return (r - l) / S2; };
     const sig = [width(.3), width(.62), width(1.02)];
     const hd = ok(3) && ok(4) ? Math.round(Math.hypot(kp[3][0] - kp[4][0], kp[3][1] - kp[4][1]) / S2 * 1000) / 1000 : null;   // 9.83 (4): lățimea capului (urechi) față de umeri
-    if(!sig.every(x => x > .3 && x < 4)) return null;
+    if(!sig.every(x => x > .3 && x < 4)){ bodySigWhy = 'conturul corpului nu s-a putut citi (' + sig.map(x => x.toFixed(2)).join(' / ') + ')'; return null; }
     // 9.85 (3): conturul în 7 puncte, raportat la lungimea trunchiului (nu la umeri, care se îngustează când se întoarce)
     const r3 = x => Math.round(x * 1000) / 1000, w = [.15, .3, .45, .62, .8, 1.02, 1.15].map(t => r3(width(t) * S2 / len));
     const knY = ok(13) && ok(14) ? (kp[13][1] + kp[14][1]) / 2 : null, anY = ok(15) && ok(16) ? (kp[15][1] + kp[16][1]) / 2 : null;
@@ -2836,14 +2874,14 @@ async function bodySig(blob0){
     const leg = !sit && anY != null && anY > hpY ? r3((anY - hpY) / len) : null;
     const yaw = ok(0) ? r3((kp[0][0] - (kp[5][0] + kp[6][0]) / 2) / S2) : 0;
     return {s:sig.map(r3), len:r3(len / S2), hd, w, leg, sit, yaw, sw:r3(S2 / len)};
-  }catch(e){ return null; } finally { URL.revokeObjectURL(u); }
+  }catch(e){ bodySigWhy = 'eroare la măsurare: ' + String(e && e.message || e).slice(0, 80); return null; } finally { URL.revokeObjectURL(u); }
 }
 async function refBodySig(c){
   const k = c.photoFull || (c.photo ? 'p:' + c.photo : '');   // 9.83 (4): fără poză întreagă, poza de profil, dacă se văd umerii și șoldurile
   if(!k) return null;
-  if(c.bodySig && c.bodySig.k === k && c.bodySig.v3) return c.bodySig.v;   // 9.85: conturul în 7 puncte; 9.94: pe persoana decupată
+  if(c.bodySig && c.bodySig.k === k && c.bodySig.v3 && (c.bodySig.v || (c.bodySig.ver === APP_VER && Date.now() - (c.bodySig.at || 0) < 6 * 36e5))) return c.bodySig.v;   // 10.3: o măsurare ratată se reîncearcă   // 9.85: conturul în 7 puncte; 9.94: pe persoana decupată
   const b = await DB.get(c.photoFull || c.photo).catch(() => null); if(!b) return null;
-  const v = await bodySig(b); c.bodySig = {k, v, v2:true, v3:true}; saveChars(); return v;
+  bodySigWhy = ''; const v = await bodySig(b); c.bodySig = {k, v, v2:true, v3:true, ver:APP_VER, at:Date.now(), why:v ? undefined : bodySigWhy || undefined}; saveChars(); return v;
 }
 // distanța siluetelor: diferența relativă medie (0 = identic; ~0,1 = puțin diferit; 0,25+ = alt corp)
 // 9.83 (4): + lungimea trunchiului și lățimea capului față de umeri (cântărite mai puțin: depind de poză și de unghi)
