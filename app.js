@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.4';
+const APP_VER = '10.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1090,7 +1090,7 @@ function exposureMode(text){
   const t = String(text || '');
   // Clasificare separată pentru nuditate anatomică explicită; numai pentru personaje adulte confirmate.
   // Nu echivalează o cerere de topless cu nuditate integrală.
-  if(/(?:explicit nude|explicit nudity|nuditate explicit[ăa]|genital(?:ia)?|genitals|external genital|visible genitals|vulva|vagina|penis|organe genitale|p[aă]r[țt]i(?:le)? intime(?: la vedere)?)/i.test(t)) return 'explicit';
+  if(/(?:explicit nude|explicit nudity|nuditate explicit[ăa]|genital(?:ia)?|genitals|external genital|visible genitals|vulva|vagina|penis|organe genitale|p[aă]r[țt]i(?:le)? intime(?: la vedere)?|complete anatomical figure reference|full[- ]body anatomical reference|anatomie corporal[ăa] complet[ăa]|referinț[ăa] anatomic[ăa] complet[ăa]|anatomie intim[ăa] și corporal[ăa])/i.test(t)) return 'explicit';
   if(/(?:fully nude|completely naked|fully naked|nude|naked|unclothed|without clothes|no clothes|fully undressed|nudity|nuditate|nud[aă]|goal[ăa]|dezbr[aă]cat[ăa]?|scoate-?ți hainele|dezbrac[ăa]-?te|complet goal[ăa]|f[ăa]r[ăa] nimic pe tine|f[ăa]r[ăa] haine|f[ăa]r[ăa] [îi]mbr[aă]c[aă]minte)/i.test(t)) return 'full';
   if(/(?:topless|bare breasts|bare chest|without a top|shirtless|f[ăa]r[ăa] sutien|s[âa]nii? goi|ț[âa]țele goale|t[âa]țele goale|bustul gol|pieptul gol|s[âa]nii? la vedere|bustul la vedere|ar[ăa]t[ăa]-?mi s[âa]nii?|arat[ăa]-?mi bustul|poz[ăa][^.!?]{0,30}(?:s[âa]nii?|bustul|pieptul)[^.!?]{0,25}(?:gol|goi|goale|f[ăa]r[ăa] sutien))/i.test(t)) return 'topless';
   return 'clothed';
@@ -8534,6 +8534,21 @@ async function charProfile(id, push = true){
     ${hiDays.length ? `<div class="igHi">${hiDays.map((h, k) => `<button data-hi="${k}"><span><img data-k="${esc(h.items[0].k)}" alt=""></span><small>${esc(hiLabel(h.d))}</small></button>`).join('')}</div>` : ''}
     <div class="pftabs ig" id="pfTabs"><button data-pt="poze"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Poze</button><button data-pt="despre">✨ Despre</button><button data-pt="memorie">🧠 Memorie</button></div>
     <div class="pfSec igGrid"><div class="pfGal">${pics.length ? pics.map(k => `<button data-view="${esc(k)}">${picMeta[k].story ? '<i>📸</i>' : ''}<img data-lk="${esc(k)}" data-t="m" alt="" loading="lazy"></button>`).join('') : ''}</div>${pics.length ? '' : `<p class="igEmpty">📷<br>Încă nicio poză de la ${esc(c.name)}.<br><small>Cere-i una din ＋ în conversație.</small></p>`}</div>
+    ${!duoOn(c) ? `<div class="pfSec" id="pfAdultPortfolioSec"><h3>🔞 Portofoliu vizual pentru adulți</h3>
+      <p class="hint">Variante separate de fotografiile conversației, păstrate în profilul acestui personaj. Disponibil numai pentru personaje fictive, cu vârstă declarată de minimum 21 de ani și confirmare vizuală 21+; generarea respectă regulile furnizorului.</p>
+      <div class="btns" style="align-items:center;gap:8px">
+        <button type="button" class="btn sm" id="pfAdultEnable">${c.adultPortfolioEnabled ? '✓ Activat' : 'Activează portofoliul'}</button>
+        <select id="pfAdultMode" style="flex:1;min-width:150px" ${c.adultPortfolioEnabled ? '' : 'disabled'}>
+          <option value="topless">Bust gol (topless)</option>
+          <option value="full">Nuditate artistică</option>
+          <option value="explicit">Anatomie intimă vizibilă</option>
+          <option value="anatomy">Anatomie corporală completă + intimă</option>
+        </select>
+        <button type="button" class="btn sm pri" id="pfAdultGenerate" ${c.adultPortfolioEnabled ? '' : 'disabled'}>＋ Generează</button>
+      </div>
+      <div class="pfGal" id="pfAdultGal" style="margin-top:10px">${(c.adultPortfolioItems || []).map(x => `<button type="button" data-adult-view="${esc(x.k)}" title="${esc(x.exposure || 'variantă')}"><img data-k="${esc(x.k)}" data-t="m" alt="" loading="lazy"></button>`).join('')}</div>
+      ${!(c.adultPortfolioItems || []).length ? '<p class="hint" id="pfAdultEmpty">Portofoliul este gol. Activează-l și generează prima variantă.</p>' : ''}
+    </div>` : ''}
     ${c.aspect && !duoOn(c) ? `<div class="pfSec"><h3>Cum arată</h3><p>${esc(c.aspect)}</p></div>` : ''}
     <div class="pfSec"><h3><span>💞 Relația voastră</span></h3><div class="relbox"><span class="lv" id="pfRelName"></span><small id="pfRelSub"></small><button class="btn sm" id="pfRelSet" style="margin-left:auto">Schimbă</button></div><div class="relbar"><i id="pfRelBar"></i></div><div id="pfBond" class="bond"></div></div>
     <div class="pfSec"><h3><span>📌 Regulile voastre</span><button class="btn sm" id="pfRules">Vezi / adaugă</button></h3><ul class="facts" id="pfRulesL"></ul></div>
@@ -8627,6 +8642,71 @@ async function charProfile(id, push = true){
   body.querySelectorAll('[data-hi]').forEach(b => b.onclick = e => { e.stopPropagation(); const h = hiDays[+b.dataset.hi]; openStories(id, h.items.slice().reverse().map(x => ({id:'h' + x.k, cid:id, ts:x.ts, text:'', img:x.k, scene:x.scene}))); });
   $('#pfChat').onclick = () => { if(fromChat) history.back(); else openChat(id); };
   { const fb = $('#pfFullBtn'); if(fb) fb.onclick = e => { e.stopPropagation(); pfFullSheet(c); }; const mf = $('#pfMakeFull'); if(mf) mf.onclick = e => { e.stopPropagation(); pfFullSheet(c); }; }   // 9.24–9.25
+  const adultEnable = $('#pfAdultEnable');
+  if(adultEnable) adultEnable.onclick = async () => {
+    c.adultPortfolioEnabled = !c.adultPortfolioEnabled;
+    await saveChars();
+    charProfile(id, false);
+    toast(c.adultPortfolioEnabled ? 'Portofoliul pentru adulți a fost activat.' : 'Portofoliul pentru adulți a fost dezactivat.');
+  };
+  const adultGen = $('#pfAdultGenerate');
+  if(adultGen) adultGen.onclick = () => generateAdultPortfolioImage(c, $('#pfAdultMode')?.value || 'topless', adultGen);
+  const adultGal = $('#pfAdultGal');
+  if(adultGal) adultGal.onclick = e => {
+    const b = e.target.closest('[data-adult-view]');
+    if(!b) return;
+    const keys = (c.adultPortfolioItems || []).map(x => x.k).filter(Boolean);
+    viewImg(b.dataset.adultView, keys);
+  };
+}
+/* ═════════ 10.4: PORTOFOLIU VIZUAL ADULT — profil separat, aceeași identitate ═════════
+   Folosește motorul renderPerson și referințele deja existente; nu ocolește moderarea furnizorului. */
+const adultPortfolioBusy = new Set();
+async function generateAdultPortfolioImage(c, exposure, button){
+  if(!c || !c.id || adultPortfolioBusy.has(c.id)) return;
+  if(!c.adultPortfolioEnabled){ toast('Activează mai întâi portofoliul în profil.'); return; }
+  if(!c.photo){ toast('Personajul trebuie să aibă o fotografie de profil.'); return; }
+  if(!c.aiPortrait){ toast('Portofoliul intim este disponibil numai pentru personaje fictive cu portret generat de AI, nu pentru fotografii ale unor persoane reale.'); return; }
+  if(S.imgProv === 'none'){ toast('Pornește motorul de imagini din Setări → Poze.'); return; }
+  if(duoOn(c)){ toast('Portofoliul individual nu este disponibil pentru personaje duo.'); return; }
+  adultPortfolioBusy.add(c.id);
+  const oldText = button ? button.textContent : '';
+  if(button){ button.disabled = true; button.textContent = 'Se verifică vârsta…'; }
+  const ac = new AbortController();
+  try{
+    if(!clearlyAdultCharacter(c)) throw new Error('Completează în fișa personajului o vârstă adultă explicită.');
+    const ageText = [c.name, c.persona, c.look, c.aspect, c.physEn].filter(Boolean).join(' ');
+    const ageMatch = ageText.match(/\b(\d{2})\s*(?:de\s*)?(?:ani|years? old)\b|\b(?:in her|in his)\s+(2[1-9]|[3-9]\d)s\b/i);
+    const declaredAge = ageMatch ? +(ageMatch[1] || ageMatch[2]) : 0;
+    if(declaredAge < AGE_MIN) throw new Error('Fișa trebuie să declare explicit o vârstă de minimum 21 de ani.');
+    const age = await ageLook(c);
+    if(!age || age.a == null || age.a < AGE_MIN || looksYoung(c))
+      throw new Error('Vârsta nu a putut fi confirmată vizual la pragul intern de 21+. Nu generez imagini intime pentru acest profil.');
+    const modes = {
+      topless: 'The clearly adult fictional character is topless, with bare breasts visibly uncovered and no shirt, bra, bikini top or chest covering. Keep the lower body fully clothed. Non-sexual portrait, no sexual activity.',
+      full: 'The clearly adult fictional character is fully nude in a non-sexual fine-art figure portrait. Natural, non-graphic artistic nudity, neutral pose, no sexual activity. Do not add lingerie, underwear, towels or clothing.',
+      explicit: 'The clearly adult fictional character is fully nude in a neutral, non-sexual anatomical figure reference. External adult genital anatomy is visible, anatomically plausible and non-graphic. No sexual activity or sexualized pose. Generate only if the selected image provider explicitly permits visible genital anatomy; never bypass provider moderation.',
+      anatomy: 'Create a complete, neutral, non-sexual anatomical figure reference of the same clearly adult fictional character, full body from head to feet, with the entire natural body unobstructed and visible. Include accurate overall anatomy and proportions: head, neck, shoulders, chest, breasts and nipples where applicable, torso, waist, abdomen, back, pelvis, hips, buttocks, thighs, knees, calves, feet, arms and hands. Include visible external adult genital anatomy, anatomically plausible and non-graphic, without underwear, clothing, towels or objects covering the body. Use a neutral standing anatomical-reference pose, arms slightly away from the torso, front-facing, plain studio background and even clinical lighting. No sexual activity, sexualized posing or idealization. Preserve the exact face, identity, age appearance, body build and proportions from the character references. Generate only if the selected image provider explicitly permits all requested visible anatomy; never bypass provider moderation.'
+    };
+    if(!modes[exposure]) exposure = 'topless';
+    const identity = [c.name, c.aspect, c.look, c.physEn].filter(Boolean).join('. ').slice(0, 1300);
+    const shot = `${modes[exposure]} Preserve the exact identity of the same adult character from the supplied profile and full-body references: same face, apparent adult age, hairstyle, skin tone, body build, body proportions and distinctive features. Use the character profile as the source of truth. Clean neutral studio background, natural lighting, vertical composition. Character description: ${identity}`;
+    if(button) button.textContent = 'Generez prin motorul personajului…';
+    const result = await renderPerson(c, shot, ac.signal, {kind:'profile-portfolio', tag:'portofoliu-adult', noLog:true});
+    if(!result || !result.blob) throw new Error('Motorul nu a întors o imagine.');
+    const key = await saveImg(result.blob);
+    c.adultPortfolioItems = Array.isArray(c.adultPortfolioItems) ? c.adultPortfolioItems : [];
+    c.adultPortfolioItems.unshift({id:uid(), k:key, exposure, ts:Date.now(), provider:lastImgProv || 'configured', model:lastImgModel || 'configured'});
+    c.adultPortfolioItems = c.adultPortfolioItems.slice(0, 30);
+    await saveChars();
+    toast('Imagine salvată în portofoliul profilului ' + c.name + '.');
+    await charProfile(c.id, false);
+  }catch(e){
+    if(e.name !== 'AbortError') toast('Generarea portofoliului a eșuat: ' + (e.message || e), 6000);
+  }finally{
+    adultPortfolioBusy.delete(c.id);
+    if(button && button.isConnected){ button.disabled = false; button.textContent = oldText || '＋ Generează'; }
+  }
 }
 function profScroll(){
   const sc = $('#pfScroll'), y = sc.scrollTop, img = $('#pfBody .pfHero img, #pfBody .pfHero .ph');
@@ -8839,7 +8919,8 @@ async function editPhotoSheet(i){
       <button type="button" data-exposure="clothed">👗 Îmbrăcată</button>
       <button type="button" data-exposure="topless">🔝 Topless</button>
       <button type="button" data-exposure="artistic-nude">🧍 Nuditate artistică</button>
-      <button type="button" data-exposure="explicit-nude">🔞 Nuditate anatomică (adulți)</button>
+      <button type="button" data-exposure="explicit-nude">🔞 Anatomie intimă vizibilă</button>
+      <button type="button" data-exposure="anatomy-reference">🧍 Anatomie corporală completă + intimă</button>
       <button type="button" data-exposure="intimate">❤️ Poziție intimă</button>
     </div>
     <small style="display:block;color:var(--tx3);margin:4px 0 8px">Selectarea adaugă instrucțiuni clare la regenerare. Rezultatul depinde de modelul și furnizorul de imagini.</small>
@@ -8865,6 +8946,7 @@ async function editPhotoSheet(i){
       topless: 'The clearly adult fictional character is topless: bare breasts uncovered, no shirt or bra; keep lower-body clothing exactly as described. Preserve the body reference proportions and bust size.',
       'artistic-nude': 'The clearly adult fictional character is naturally nude in a non-explicit artistic image; no sexual act. Preserve the body reference proportions and bust size. Use only if allowed by the selected image provider.',
       'explicit-nude': 'The fictional character is clearly an adult (18+), fully nude, with visible external genital anatomy; anatomically plausible and non-graphic, no sexual act. Preserve identity, body proportions, pose and scene. Generate only if the selected image provider explicitly permits this content; do not bypass provider moderation.',
+      'anatomy-reference': 'Create a complete, neutral, non-sexual full-body anatomical reference of the same clearly adult fictional character, head to feet, with the natural body unobstructed and visible. Show accurate anatomy and proportions of the chest, breasts and nipples where applicable, torso, abdomen, back, pelvis, hips, buttocks, limbs, hands and feet, plus visible external adult genital anatomy, anatomically plausible and non-graphic. Neutral front-facing standing pose, arms slightly away from torso, plain studio background, even clinical lighting. Preserve identity and exact body-reference proportions. No sexual activity or sexualized posing. Use only if the selected image provider explicitly permits all requested anatomy; never bypass provider moderation.',
       intimate: 'The clearly adult fictional character is in a consensual, sensual intimate pose (for example close embrace, kissing, cuddling or reclining close); keep it non-graphic and use only within the selected image provider’s rules.'
     };
     const t = $('#peTxt'); t.value = (t.value.trim() ? t.value.trim() + '; ' : '') + instructions[bt.dataset.exposure];
@@ -11652,6 +11734,7 @@ function openEditor(id){
   $('#edAspect').value = c?.aspect || ''; $('#edPersona').value = c?.persona || '';
   duoFill(c);   // 9.63
   $('#edSpeech').value = c?.speech || ''; $('#edGreet').value = c?.greet || '';
+  $('#edAdultPortfolio').checked = !!c?.adultPortfolioEnabled;
   $('#edLook').value = c?.look || ''; $('#edStil').value = c?.stil || 'photo';
   ed.accent = c?.accent || ''; ed.bg = c?.bg || 'clar'; drawLook();
   $('#edDelWrap').hidden = !c;
@@ -11922,7 +12005,7 @@ async function saveEditorNow(){
   const oldGreet = c.greet;
   Object.assign(c, {name, tag:$('#edTag').value.trim(), aspect:$('#edAspect').value.trim(), persona:$('#edPersona').value.trim(),
     speech:$('#edSpeech').value.trim(), greet:$('#edGreet').value.trim(), look:$('#edLook').value.trim(), stil:$('#edStil').value,
-    accent:ed.accent || '', bg:ed.bg || 'clar'});
+    accent:ed.accent || '', bg:ed.bg || 'clar', adultPortfolioEnabled:!!$('#edAdultPortfolio').checked});
   if(duo){ c.duo = duo; c.name = duo.a.name + ' & ' + duo.b.name; groups.forEach(g => { if(g.members.includes(c.id)) g.members = g.members.filter(x => x !== c.id); }); saveGroups(); }   // 9.63
   else if(c.duo){ c.duo.on = false; }
   await saveChars();
@@ -11948,6 +12031,7 @@ async function deleteChar(cc){
       await DB.del(chatKey(c.id, t.id));
     }
     await delImg(c.photo);
+    for(const x of c.adultPortfolioItems || []) if(x.k) await delImg(x.k).catch(() => {});   // 10.5: portofoliul vizual adult
     if(c.duo && c.duo.b && c.duo.b.photo) await delImg(c.duo.b.photo).catch(() => {});   // 9.64
     for(const k of Object.values(c.avs || {})) await delImg(k).catch(() => {});
     for(const x of c.stickers || []) await delImg(x.k).catch(() => {});
