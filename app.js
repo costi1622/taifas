@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.4';
+const APP_VER = '10.5';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1215,6 +1215,7 @@ function lookText(c, id, shot){
        6 ore), iar motivul se vede în pachetul de identitate. */
 const headCache = new Map();
 async function headRefOf(c, full, id){
+  { const cr = closeOf(c); if(cr && !refOut(c, cr.img)){ const b = await DB.get(cr.img).catch(() => null); if(b) return b; } }   // 10.5 (R2): portretul de aproape, când există
   const b = id && !id.none ? id : null, key = (c.photo || '') + '|' + (b ? [b.x, b.y, b.w, b.h].map(v => Math.round(v * 1000)).join(',') : 'x') + '|' + (S.sr === 'off' ? 0 : 1);
   if(headCache.has(key)) return headCache.get(key);
   const p = (async () => {
@@ -1446,7 +1447,7 @@ async function sheetReject(c, ang, onStep){
 }
 // cele mai potrivite unghiuri pentru scena cerută
 function sheetPick(c, shot, n = 2){
-  const v = sheetOf(c); if(!v.length || n <= 0) return [];
+  const v = sheetOf(c).filter(x => !refOut(c, x.k)); if(!v.length || n <= 0) return [];   // 10.5 (R3)
   const t = String(shot || '').toLowerCase(), sc = {l34:1, r34:.9, smile:.8, high:.7, warm:.5, sun:.5, side:.3};
   // 9.99 (3): selfie-ul ținut de sus; lumina scenei (seara / lumânări / bar → caldă; afară / plajă / soare → zi)
   if(/\bselfie\b|from above|high angle|looking up at the camera/.test(t)) sc.high = 1.6;
@@ -1531,36 +1532,196 @@ const fixBudget = () => rwFor('ancorat') ? rwCapLeft() >= rwPer() : capLeft() >=
    (3) conturul măsurat în 7 puncte pe trunchi, raportat la lungimea trunchiului, + picioare, așezat / în picioare, cât e întoarsă
    (4) la alegerea variantei, corpul cântărește cât fața   (5) reparare doar a corpului, păstrată doar dacă măsurătoarea se apropie
    (6) garanție: peste prag se reface o dată; dacă tot nu trece, poza vine cu „⚠️ corpul seamănă X%” */
-const BSHEET_VIEWS = {'34':'from a three-quarter angle, full body from head to feet, standing naturally', side:'in side view (profile), full body from head to feet, standing naturally', sit:'sitting on a simple chair and facing the camera, the whole body visible from head to feet'};
-const BSHEET_RO = {'34':'¾', side:'profil', sit:'așezată', full:'poza întreagă'};
+/* ═════════ 🧿 10.5 reperele, întărite ═════════
+   (R1) Amprenta feței din toate unghiurile: o poză se compara doar cu portretul (din față) și cu 1–2 poze în plus, așa că o față
+        din profil sau din ¾ ieșea „mai puțin ea” chiar când era ea. Acum se compară și cu unghiurile verificate din fișă și cu
+        portretul de aproape, dar doar cu cele întoarse cel puțin la fel de aproape de cum e capul în poză, cu o mică marjă (sunt
+        generate) și cu cel mult 0,12 mai bine decât față de portret.
+   (R2) Portretul de aproape: făcut o dată din portret (cap și umeri, din față, lumină uniformă, același păr, aceiași ochelari),
+        cel mai apropiat din cel mult 4 încercări, păstrat doar dacă fața iese la cel puțin ~98% față de portret. Devine reperul de față
+        trimis la toate pozele (în locul decupajului din portret). Nu se face când fața e deja mare în portret.
+   (R3) Reperele comparate între ele: fiecare reper (poze în plus, portretul de aproape, unghiurile din fișă) față de portret și față
+        de celelalte. Ce e departe de portret sau diferit de restul nu mai e folosit nici la poze, nici la măsurare; unghiurile din
+        fișă scoase așa se refac singure la „Completează și verifică”.
+   (R4) Fișa de corp mai completă: pe lângă ¾, profil și așezată, din spate și întinsă; poziția lipsă se adaugă fără să le refacă
+        pe celelalte; fiecare poziție are 3 încercări și e verificată pe siluetă unde se poate. */
+const CLOSE_MAX = .36, CLOSE_GOOD = .30, CLOSE_TRIES = 4, CONS_MAX = .42, CONS_MED = .46, ANG_GAIN = .12;
+const closeOf = c => c && c.closeRef && c.closeRef.k === c.photo && c.closeRef.img && !c.closeRef.off ? c.closeRef : null;
+const closeNeeded = c => !(c && c.faceBox && c.faceBox.k === c.photo && !c.faceBox.none && c.faceBox.h >= .3);   // fața e deja mare în portret
+async function closeGen(c, force){
+  if(!sheetOn(c) || sheetBusy) return false;
+  if(!closeNeeded(c) && !force){ if(!(c.closeRef && c.closeRef.k === c.photo)){ c.closeRef = {k:c.photo, skip:true, at:Date.now()}; await saveChars(); } return false; }
+  if(!force && (closeOf(c) || (c.closeRef && c.closeRef.k === c.photo && (c.closeRef.off || c.closeRef.skip)))) return false;
+  if(!force && c.closeTry && c.closeTry.k === c.photo && Date.now() - c.closeTry.at < 7 * 864e5) return false;
+  const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
+  if(rwFor(mdl) ? rwCapLeft() < rwPer() * (CLOSE_TRIES + 1) : capLeft() < (neurPerPhoto(mdl) || 5000) * (CLOSE_TRIES + 1)) return false;
+  const k0 = c.photo; sheetBusy = c.id; c.closeTry = {k:k0, at:Date.now()}; await saveChars();
+  try{
+    const base = await DB.get(k0), ref = base ? await profDesc(c).catch(() => null) : null; if(!base || !ref) return false;
+    let id = null; try{ id = await identityOf(c); }catch(e){}
+    const gl = id && !id.none && id.glasses ? ` The same glasses (${idCut(id.glasses, 80)}), the same frames.` : '';
+    const p = `Edit this exact photo: the same person in a close-up portrait, head and shoulders filling the frame, straight front view, eyes towards the camera, relaxed natural expression with the mouth closed, even soft daylight on the face, plain softly blurred background. Keep exactly the same face and identity, the same skin with its texture, freckles and marks, the same age, the same hair (the same color, length, curls, volume and parting, all of it visible) and the same clothes.${gl} Sharp focus on the face, natural skin texture, no retouching. ${STIL_TAG.photo}`;
+    let keep = null;
+    for(let t = 0; t < CLOSE_TRIES; t++){
+      let b; try{ b = await genImage(p, base, null, null, {model:mdl, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}); }catch(e){ if(t) break; continue; }
+      addUsage(c.id, imgPrice(), 'img', null, 'profil');
+      try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
+      const fs = await faceDescs(b).catch(() => []); if(!fs.length) continue;
+      const f = fs.map(x => ({x, d:fdist(x.d, ref)})).sort((a, z) => a.d - z.d)[0];
+      let lk = null; try{ lk = await lookOf(c, b, 'close-up portrait, head and shoulders'); }catch(e){}
+      const sc = f.d + (lk ? Math.min(.15, lk.pen || 0) : 0);
+      if(!keep || sc < keep.sc) keep = {b, d:Math.round(f.d * 1000) / 1000, sc, h:f.x.box.h / f.x.H};
+      if(keep.d <= CLOSE_GOOD && keep.sc - keep.d < .02) break;
+      if(c.photo !== k0 || !charById(c.id)) return false;
+    }
+    if(c.photo !== k0 || !charById(c.id)) return false;
+    const old = c.closeRef && c.closeRef.img;
+    if(!keep || keep.d > CLOSE_MAX){ c.closeRef = {k:k0, fail:true, best:keep ? keep.d : null, at:Date.now(), img:old && c.closeRef.k === k0 && !c.closeRef.fail ? old : undefined}; if(c.closeRef.img) delete c.closeRef.fail; await saveChars(); return false; }
+    c.closeRef = {k:k0, img:await saveImg(keep.b), d:keep.d, at:Date.now()}; await saveChars();
+    if(old && old !== c.closeRef.img) delImg(old).catch(() => {});
+    headCache.clear();
+    return true;
+  } finally { sheetBusy = null; }
+}
+/* ── (R1, R3) toate reperele, cu amprenta, unghiul capului și locul în grup ── */
+const refOut = (c, key) => !!(c && c.refSet && c.refSet.e && c.refSet.e.some(x => x.key === key && x.out));
+const yawOfLm = lm => { try{ return lm ? geoOf(lm).yaw : null; }catch(e){ return null; } };
+let refSetBusy = new Map();
+async function refSet(c){
+  if(!c || !c.photo) return null;
+  const cr = closeOf(c), items = [{key:c.photo, kind:'portret'}, ...(c.refs || []).slice(0, 2).map(k => ({key:k, kind:'ref'})), ...(cr ? [{key:cr.img, kind:'aproape'}] : []), ...sheetOf(c).filter(x => x.k).map(x => ({key:x.k, kind:'unghi', ang:x.ang}))];
+  const k = items.map(x => x.key).join('|');
+  if(c.refSet && c.refSet.k === k && c.refSet.v === 2) return c.refSet;
+  if(refSetBusy.has(c.id + k)) return refSetBusy.get(c.id + k);
+  const p = (async () => {
+    const e = [];
+    for(const it of items){
+      const b = await DB.get(it.key).catch(() => null); if(!b) continue;
+      const fs = await faceDescs(b).catch(() => []); if(!fs.length){ e.push({...it, d:null}); continue; }
+      const f = fs.sort((x, y) => y.a - x.a)[0];
+      e.push({...it, d:f.d.map(v => Math.round(v * 1e4) / 1e4), yaw:yawOfLm(f.lm)});
+    }
+    const P = e.find(x => x.kind === 'portret' && x.d);
+    if(P) for(const x of e) if(x !== P && x.d) x.dp = Math.round(fdist(x.d, P.d) * 1000) / 1000;
+    if(P) for(const x of e){
+      if(x === P || !x.d) continue;
+      // mediana față de reperele rămase aproape de portret (cele deja departe nu trag nici ele în jos pe altele)
+      const ds = e.filter(y => y !== x && y.d && (y === P || y.dp <= CONS_MAX)).map(y => fdist(x.d, y.d)).sort((a, z) => a - z), med = ds.length ? ds[Math.floor(ds.length / 2)] : null;
+      x.med = med == null ? null : Math.round(med * 1000) / 1000;
+      if(x.dp > CONS_MAX) x.out = 'departe de portret';
+      else if(ds.length >= 3 && med > CONS_MED) x.out = 'diferit de celelalte repere';
+    }
+    c.refSet = {k, v:2, e, at:Date.now()}; saveChars();
+    return c.refSet;
+  })();
+  refSetBusy.set(c.id + k, p);
+  try{ return await p; } finally { refSetBusy.delete(c.id + k); }
+}
+// (R1) distanța unei fețe: față de portret (ca înainte) și față de unghiul cel mai potrivit cu capul din poză
+function angDist(rs, g, dP){
+  if(!rs || !rs.e || S.refAng === 'off') return {d:dP};
+  const P = rs.e.find(x => x.kind === 'portret' && x.d), yg = yawOfLm(g.lm);
+  let best = {d:dP};
+  for(const x of rs.e){
+    if(x.out || !x.d || (x.kind !== 'unghi' && x.kind !== 'aproape')) continue;
+    if(yg != null && x.yaw != null && P && P.yaw != null && Math.abs(yg - x.yaw) > Math.abs(yg - P.yaw) + .03) continue;   // doar un reper întors cel puțin la fel de aproape ca portretul
+    const dd = Math.max(fdist(g.d, x.d) + (x.kind === 'aproape' ? .01 : .02), dP - ANG_GAIN);
+    if(dd < best.d) best = {d:dd, via:x.kind === 'aproape' ? 'portretul de aproape' : 'unghiul ' + (SHEET_RO[x.ang] || x.ang)};
+  }
+  return best;
+}
+/* ── UI ── */
+function drawCloseRef(c, box){
+  if(!sheetOn(c)) return;
+  const cr = c.closeRef && c.closeRef.k === c.photo ? c.closeRef : null, busy = sheetBusy === c.id;
+  let txt, btn = '';
+  if(cr && cr.img && !cr.off){ txt = `✅ E reperul de față trimis la toate pozele${cr.d != null ? ' · fața ' + idPct(cr.d) + '% față de portret' : ''}.`; btn = '<button class="btn sm" data-cl="re">↻ Refă</button><button class="btn sm" data-cl="off">✕ Nu-l folosi</button>'; }
+  else if(cr && cr.img && cr.off){ txt = 'Oprit de tine: la poze pleacă decupajul din portret.'; btn = '<button class="btn sm" data-cl="on">✓ Folosește-l</button><button class="btn sm" data-cl="re">↻ Refă</button>'; }
+  else if(cr && cr.skip){ txt = 'Nu e nevoie: fața e destul de mare în portret.'; btn = '<button class="btn sm" data-cl="re">🔍 Fă-l oricum</button>'; }
+  else if(cr && cr.fail){ txt = `N-a ieșit destul de fidel${cr.best != null ? ' (cel mai bun: ' + idPct(cr.best) + '%)' : ''}; la poze pleacă decupajul din portret.`; btn = '<button class="btn sm" data-cl="re">↻ Încearcă din nou</button>'; }
+  else { txt = 'Lipsește. Se face o dată din portret (2–4 poze), apoi e reperul de față la toate pozele.'; btn = '<button class="btn sm pri" data-cl="re">🔍 Fă-l acum</button>'; }
+  box.insertAdjacentHTML('beforeend', `<div class="faceref" id="pfClose"><div class="fimg">${cr && cr.img ? `<img data-k="${esc(cr.img)}" data-fk="${esc(cr.img)}" alt="">` : '🔍'}</div><div><b>Portretul de aproape</b><small>${busy ? '<span class="spin"></span> Se lucrează la repere…' : esc(txt)}</small><div class="btns">${busy ? '' : btn}</div></div></div>`);
+  const el = $('#pfClose'); hydrate(el);
+  const im = el.querySelector('img'); if(im) im.onclick = () => viewImg(im.dataset.fk, [im.dataset.fk]);
+  el.querySelectorAll('[data-cl]').forEach(b => b.onclick = async () => {
+    const a = b.dataset.cl;
+    if(a === 'off' || a === 'on'){ c.closeRef.off = a === 'off'; await saveChars(); headCache.clear(); fidRedraw(c, 'pfClose', drawCloseRef); return; }
+    b.disabled = true; b.innerHTML = '<span class="spin"></span> Fac portretul…';
+    for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
+    const ok = await closeGen(c, true).catch(() => false);
+    if(profId === c.id) drawPics(c);
+    toast(ok ? '🔍 Portretul de aproape e gata și se folosește la toate pozele.' : '🔍 N-a ieșit destul de fidel; rămâne decupajul din portret.', 3500);
+  });
+}
+const REF_KIND_RO = {ref:'poză în plus', aproape:'portretul de aproape', unghi:'unghi din fișă'};
+function drawCons(c, box){
+  if(!c.photo) return;
+  const rs = c.refSet && c.refSet.e ? c.refSet : null, e = rs ? rs.e.filter(x => x.kind !== 'portret') : [];
+  const out = e.filter(x => x.out), ok = e.filter(x => !x.out && x.dp != null), nf = e.filter(x => x.d === null);
+  const name = x => x.kind === 'unghi' ? (SHEET_RO[x.ang] || x.ang) : REF_KIND_RO[x.kind];
+  box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfCons"><b>🤝 Reperele, comparate între ele</b><small>Fiecare reper față de portret și față de celelalte. Ce iese din grup nu mai e folosit nici la poze, nici la măsurare.</small>
+    ${!rs ? '<p class="hint"><span class="spin"></span> Se compară în telefon…</p>' : `
+    ${out.length ? `<ul class="kitl">${out.map(x => `<li class="warn"><span>⚠️ ${esc(name(x))}</span><small>${esc(x.out)} (${idPct(x.dp)}% față de portret): nefolosit${x.kind === 'unghi' ? '; se reface la „Completează și verifică”' : ''}</small></li>`).join('')}</ul>` : ''}
+    <div class="fswl">${ok.map(x => `<span class="fsw">✅ ${esc(name(x))} ${idPct(x.dp)}%</span>`).join('')}${nf.map(x => `<span class="fsw">· ${esc(name(x))}: fața nu se măsoară</span>`).join('')}</div>
+    ${!e.length ? '<p class="hint">Deocamdată doar portretul. Reperele apar după fișă și după portretul de aproape.</p>' : ''}`}</div>`);
+  if(!rs){ const el = $('#pfCons'), go = () => refSet(c).then(() => fidRedraw(c, 'pfCons', drawCons)).catch(() => {});
+    if('IntersectionObserver' in window){ const io = new IntersectionObserver(es => { if(es.some(x => x.isIntersecting)){ io.disconnect(); go(); } }); io.observe(el); } else go(); }
+}
+// (R3) unghiurile din fișă ieșite din grup: scoase și refăcute (o dată pe set de repere)
+async function consFix(c){
+  const rs = await refSet(c).catch(() => null); if(!rs) return 0;
+  const bad = rs.e.filter(x => x.kind === 'unghi' && x.out).map(x => x.ang); if(!bad.length) return 0;
+  if(c.consFixed === rs.k) return 0;
+  c.consFixed = rs.k;
+  const v = sheetOf(c), rm = v.filter(x => bad.includes(x.ang)); c.sheet.v = v.filter(x => !rm.includes(x)); await saveChars();
+  for(const x of rm) delImg(x.k).catch(() => {});
+  await sheetGen(c, false, null, {only:bad}).catch(() => false);
+  return bad.length;
+}
+const BSHEET_VIEWS = {'34':'from a three-quarter angle, full body from head to feet, standing naturally', side:'in side view (profile), full body from head to feet, standing naturally', sit:'sitting on a simple chair and facing the camera, the whole body visible from head to feet',
+  back:'from behind, full body from head to feet, standing naturally with the back to the camera, the head turned slightly to one side',   // 10.5 (R4)
+  lie:'lying on one side on a simple sofa, propped up on one elbow, facing the camera, the whole body visible from head to feet'};
+const BSHEET_RO = {'34':'¾', side:'profil', sit:'așezată', back:'din spate', lie:'întinsă', full:'poza întreagă'};
 const bsheetOf = c => c && c.photoFull && c.bsheet && c.bsheet.k === c.photoFull ? c.bsheet.v || [] : [];
+const bsheetMiss = c => Object.keys(BSHEET_VIEWS).filter(p => !bsheetOf(c).some(x => x.pose === p));
+// 10.5 (R4): forțat = toată fișa; altfel doar pozițiile lipsă (cele bune rămân); 3 încercări pe poziție, rămâne cea mai apropiată ca siluetă
 async function bsheetGen(c, force, onStep){
   if(!sheetOn(c) || !c.photoFull || sheetBusy || looksYoung(c)) return false;   // 9.94 (D)
-  if(!force && (bsheetOf(c).length || (c.bsheetTry && c.bsheetTry.k === c.photoFull && Date.now() - c.bsheetTry.at < 7 * 864e5))) return false;
-  const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
-  if(rwFor(mdl) ? rwCapLeft() < rwPer() * 5 : capLeft() < (neurPerPhoto(mdl) || 5000) * 5) return false;
-  const k0 = c.photoFull; sheetBusy = c.id; c.bsheetTry = {k:k0, at:Date.now()}; await saveChars();
+  const all = Object.keys(BSHEET_VIEWS), have = bsheetOf(c), want = force ? all : bsheetMiss(c);
+  if(!want.length) return false;
+  if(!force && c.bsheetTry && c.bsheetTry.k === c.photoFull && (c.bsheetTry.n || all.join(',')) === want.join(',') && Date.now() - c.bsheetTry.at < 7 * 864e5) return false;
+  const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat'), need = want.length * 2 + 1;
+  if(rwFor(mdl) ? rwCapLeft() < rwPer() * need : capLeft() < (neurPerPhoto(mdl) || 5000) * need) return false;
+  const k0 = c.photoFull; sheetBusy = c.id; c.bsheetTry = {k:k0, at:Date.now(), n:want.join(',')}; await saveChars();
   try{
     const base = await DB.get(k0); if(!base) return false;
     const ref = await bodySig(base).catch(() => null);   // 9.94 (A): fără siluetă măsurabilă, se verifică doar fața
     const out = [];
-    for(const [pose, vw] of Object.entries(BSHEET_VIEWS)){
+    for(const pose of want){
+      const vw = BSHEET_VIEWS[pose];
       if(onStep) onStep(pose, out.length);
       const p = `Edit this exact photo: the same person photographed ${vw}. Keep exactly the same person: the same face, the same body (build, weight and proportions), the same clothes and hairstyle. Plain neutral background, even soft light. ${STIL_TAG.photo}`;
-      for(let t = 0; t < 2; t++){
+      const noFace = pose === 'side' || pose === 'back', noBody = pose === 'side' || pose === 'lie';
+      let keep = null;
+      for(let t = 0; t < 3; t++){
         let b; try{ b = await genImage(p, base, null, null, {model:mdl, size:'832x1248', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}); }catch(e){ if(t) break; continue; }
         addUsage(c.id, imgPrice(), 'img', null, 'profil');
         try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
         const fd = (await localFace(b, c).catch(() => ({d:null}))).d, sig = await bodySig(b).catch(() => null);
         const bd = sig && ref ? bodyDist2(sig, ref) : null;
-        const faceOk = fd == null ? pose === 'side' : fd < .55, bodyOk = pose === 'side' || !ref ? true : bd != null && bd <= BODY_SHEET_OK;
-        if(faceOk && bodyOk){ out.push({pose, b, bd:bd == null ? null : Math.round(bd * 1000) / 1000, sig}); break; }
+        const faceOk = fd == null ? noFace : fd < .55, bodyOk = noBody || !ref ? true : bd != null && bd <= BODY_SHEET_OK;
+        if(!faceOk || !bodyOk) continue;
+        const sc = (bd ?? .06) + (fd ?? .4) * .2;
+        if(!keep || sc < keep.sc) keep = {pose, b, bd:bd == null ? null : Math.round(bd * 1000) / 1000, sig, sc};
+        if(noBody || (bd != null && bd <= BODY_SHEET_OK * .6)) break;   // destul de aproape: nu mai plătește alte încercări
       }
+      if(keep) out.push(keep);
       if(c.photoFull !== k0 || !charById(c.id)) return false;
     }
     if(!out.length) return false;
-    const old = (c.bsheet && c.bsheet.v) || [], v = [];
+    const old = force ? have : have.filter(x => out.some(y => y.pose === x.pose)), v = have.filter(x => !old.includes(x));
     for(const o of out) v.push({pose:o.pose, k:await saveImg(o.b), bd:o.bd, sig:o.sig});
+    v.sort((a, b) => all.indexOf(a.pose) - all.indexOf(b.pose));
     c.bsheet = {k:k0, v, at:Date.now()}; await saveChars();
     for(const o of old) delImg(o.k).catch(() => {});
     return true;
@@ -1569,6 +1730,8 @@ async function bsheetGen(c, force, onStep){
 // poza de corp potrivită scenei: așezată, din profil, ¾ sau poza întreagă (toată silueta, încadrată fără tăieturi)
 function bodyPoseOf(shot){
   const t = String(shot || '').toLowerCase();
+  if(/\b(lying|lies|laying|reclining|stretched out|on (her|his) (back|side|stomach|belly))\b/.test(t)) return 'lie';   // 10.5 (R4)
+  if(/\b(from behind|back view|seen from the back|from the back|back to the camera|walking away)\b/.test(t)) return 'back';
   if(/\b(sitting|seated|sits|sat|on the (couch|sofa|chair|bed|bench|floor|stool|armchair)|at the (table|desk|bar))\b/.test(t)) return 'sit';
   if(/\b(side view|in profile|from the side)\b/.test(t)) return 'side';
   if(/\b(three-quarter|mirror)\b/.test(t)) return '34';
@@ -1926,15 +2089,20 @@ function kitState(c){
   const add = (k, l, ok, v, need = true, warn = false) => { items.push({k, l, ok, v, warn}); if(!ok && need && !warn) miss.push(l); };   // 9.93: warn = încercat, nu se poate (motivul în v)
   add('portret', '👤 Portretul', true, 'poza de profil');
   add('pasaport', '🪪 Trăsăturile citite (față, păr, corp, semne)', !!(fb && c.faceBox.phys !== undefined), fb ? 'citite' : 'se citesc la prima poză');
-  add('amprenta', '🧬 Amprenta feței', !!(c.faceEmb && c.faceEmb.d && c.faceEmb.d.length), c.faceEmb && c.faceEmb.d && c.faceEmb.d.length ? c.faceEmb.d.length + ' fețe de referință' : 'se măsoară în telefon');
+  add('amprenta', '🧬 Amprenta feței', !!(c.faceEmb && c.faceEmb.d && c.faceEmb.d.length), c.faceEmb && c.faceEmb.d && c.faceEmb.d.length ? c.faceEmb.d.length + ' fețe de referință' + (c.refSet && c.refSet.e ? ' + ' + c.refSet.e.filter(x => (x.kind === 'unghi' || x.kind === 'aproape') && x.d && !x.out).length + ' pe unghiuri' : '') : 'se măsoară în telefon');
   if(photo){
     add('intreaga', '🧍 Poza întreagă (modelul de corp)', !!c.photoFull, c.photoFull ? (c.fullOwn ? 'poza ta (exactă)' : 'generată din portret') : 'lipsește: corpul ar fi aproximativ');
     const sv = sheetOf(c).length, bv = bsheetOf(c).length, kf = c.photoFull || '';
     const sTried = !sv && c.sheetTry && c.sheetTry.k === c.photo, bTried = !bv && c.bsheetTry && c.bsheetTry.k === kf;
     add('fisa', '🧩 Fișa feței', sv > 0, sv ? sv + ' din ' + Object.keys(SHEET_VIEWS).length + ' unghiuri' : sTried ? 'n-a ieșit data trecută (fața nu s-a putut verifica sau serviciul a fost ocupat): apasă „Completează acum”' : 'se face în fundal');
+    if(sheetOn(c)){ const cr = c.closeRef && c.closeRef.k === c.photo ? c.closeRef : null;   // 10.5 (R2)
+      add('aproape', '🔍 Portretul de aproape', (!!cr && (!!cr.img || !!cr.skip || !!cr.fail)) || !!(c.closeTry && c.closeTry.k === c.photo && Date.now() - c.closeTry.at < 7 * 864e5), cr ? (cr.img ? (cr.off ? 'oprit de tine' : 'fața ' + idPct(cr.d) + '% · reperul de față la poze') : cr.skip ? 'nu e nevoie (fața e mare în portret)' : cr.fail ? 'n-a ieșit destul de fidel: rămâne decupajul din portret' : '') : 'se face după fișă', sv > 0, !!cr && !!cr.fail && !cr.img); }
+    { const rs = c.refSet && c.refSet.e ? c.refSet : null, o = rs ? rs.e.filter(x => x.out).length : 0;   // 10.5 (R3)
+      add('consens', '🤝 Reperele se potrivesc între ele', !o, rs ? (o ? o + (o === 1 ? ' a ieșit din grup și nu e folosit' : ' au ieșit din grup și nu sunt folosite') : 'toate în grup') : 'se compară în telefon', false, o > 0); }
     { const fbm = fb && c.faceBox.multi; add('pasaport2', '🪪 Trăsăturile verificate pe toate pozele', !!fbm && c.faceBox.multi === passKey(c), fbm ? (c.faceBox.multi === passKey(c) ? 'din ' + (c.faceBox.multiN || 2) + ' poze' : 'se recitesc (pozele s-au schimbat)') : 'după fișă', sv > 0); }   // 9.99 (4)
     if(looksYoung(c)) add('fisaCorp', '🧍 Fișa corpului', false, 'oprită: nu pare clar adult(ă)', false, true); else
-    add('fisaCorp', '🧍 Fișa corpului', !c.photoFull || bv > 0, c.photoFull ? (bv ? bv + ' poziții' : bTried ? 'n-a ieșit data trecută: apasă „Completează acum”' : 'se face în fundal') : 'după poza întreagă', !!c.photoFull);
+    { const nB = Object.keys(BSHEET_VIEWS).length, missB = bsheetMiss(c).join(','), bT2 = !!(c.bsheetTry && c.bsheetTry.k === kf && (c.bsheetTry.n || '') === missB && Date.now() - c.bsheetTry.at < 7 * 864e5);   // 10.5 (R4)
+      add('fisaCorp', '🧍 Fișa corpului', !c.photoFull || bv >= nB || (bv > 0 && (bT2 || !sheetOn(c))), c.photoFull ? (bv ? bv + ' din ' + nB + ' poziții' + (bv < nB ? (bT2 ? ' (celelalte n-au ieșit; se reîncearcă peste 7 zile)' : ' (se adaugă cele noi)') : '') : bTried ? 'n-a ieșit data trecută: apasă „Completează acum”' : 'se face în fundal') : 'după poza întreagă', !!c.photoFull); }
     const measured = c.bodySig && c.bodySig.v3 && c.bodySig.k === kf, sig = measured ? c.bodySig.v : null;
     add('silueta', '📐 Silueta măsurată', !c.photoFull || !!sig, sig ? (bodyRatioRo(sig) || 'măsurată') : measured ? 'nu se poate măsura: ' + (c.bodySig.why || 'în poza întreagă nu se văd clar umerii, șoldurile și genunchii') + ' (se reîncearcă la următoarea poză)' : c.photoFull ? 'se măsoară în telefon' : '—', !!c.photoFull, measured && !sig);
     const tol = bodyTol(c), calib = c.bodyNoise && c.bodyNoise.k === kf;
@@ -1962,6 +2130,10 @@ async function kitBuild(c, o = {}){
         step('fisa'); const s1 = await sheetGen(c, !!o.force && !sheetOf(c).length).catch(() => false); if(s1 && o.toast) toast(`🧩 ${c.name}: fișa feței e gata.`, 2500);   // forțat doar ce lipsește
         for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
         step('fisaCorp'); const s2 = await bsheetGen(c, !!o.force && !bsheetOf(c).length).catch(() => false); if(s2 && o.toast) toast(`🧍 ${c.name}: fișa corpului e gata.`, 2500);
+        for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
+        step('aproape'); try{ const s3 = await closeGen(c, false); if(s3 && o.toast) toast(`🔍 ${c.name}: portretul de aproape e gata.`, 2500); }catch(e){}   // 10.5 (R2)
+        for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
+        step('consens'); try{ const n3 = await consFix(c); if(n3 && o.toast) toast(`🤝 ${c.name}: ${n3} ${n3 === 1 ? 'unghi refăcut' : 'unghiuri refăcute'} (ieșiseră din grup).`, 3000); }catch(e){}   // 10.5 (R3)
         if(aiReady()){ step('pasaport2'); try{ await passportMulti(c); }catch(e){} }   // 9.99 (4)
       }
       step('silueta'); try{ await refBodySigs(c); }catch(e){}
@@ -2718,7 +2890,7 @@ async function faceDescs0(blob){
 // fața de referință: poza de profil + pozele de referință în plus (o dată, ținută pe personaj)
 async function refDescs(c){
   if(!c.photo) return [];
-  const k = [c.photo, ...(c.refs || []).slice(0, 2)].join('|');
+  const k = [c.photo, ...(c.refs || []).slice(0, 2).filter(x => !refOut(c, x))].join('|');   // 10.5 (R3): o poză în plus ieșită din grup nu mai intră
   if(c.faceEmb && c.faceEmb.k === k && c.faceEmb.d.length) return c.faceEmb.d;
   const d = [];
   for(const key of k.split('|')){
@@ -2733,8 +2905,10 @@ const fdist = (a, b) => Math.sqrt(a.reduce((t, v, i) => t + (v - b[i]) ** 2, 0))
 async function idDistance(c, blob){
   const ref = await refDescs(c); if(!ref.length) return null;
   const got = await faceDescs(blob); if(!got.length) return {d:null, n:0};
-  let best = 9; for(const g of got) for(const r of ref) best = Math.min(best, fdist(g.d, r));
-  return {d:Math.round(best * 1000) / 1000, n:got.length};
+  let rs = null; if(S.refAng !== 'off'){ try{ rs = await refSet(c); }catch(e){} }   // 10.5 (R1): și unghiurile verificate
+  let best = 9, via = null;
+  for(const g of got){ let dP = 9; for(const r of ref) dP = Math.min(dP, fdist(g.d, r)); const a = angDist(rs, g, dP); if(a.d < best){ best = a.d; via = a.via || null; } }
+  return {d:Math.round(best * 1000) / 1000, n:got.length, via};
 }
 const ID_MAX = .5;
 const idPct = d => Math.round(100 * Math.max(0, Math.min(1, (.9 - d) / .55)));
@@ -6127,7 +6301,7 @@ function drawFidCard(c, box){
   box.insertAdjacentHTML('beforeend', `<div class="fidc" id="pfFid"><div class="fidh" id="pfFidH"></div>
     ${sec('ref', '📷 Reperele', 'pfFidRef')}${sec('desc', '✍️ Descrierea', 'pfFidDesc')}${c.photo && photo ? sec('rez', '📊 Rezultatele', 'pfFidRez') : ''}</div>`);
   const R = $('#pfFidRef'), D = $('#pfFidDesc'), Z = $('#pfFidRez');
-  if(c.photo && S.imgProv === 'worker') drawFaceRef(c, R);
+  if(c.photo && S.imgProv === 'worker'){ drawFaceRef(c, R); drawCloseRef(c, R); drawCons(c, R); }   // 10.5
   drawRefs(c, R);          // + pachetul de identitate și fișa (drawSheet)
   drawBodyNote(c, D);
   if(c.photo && photo){ drawAudit(c, D); drawStats(c, Z); drawEtalon(c, Z); }
@@ -6182,7 +6356,7 @@ async function fidGo(c, btn){
 // fața decupată din portret (al doilea reper) + un singur buton care recitește tot portretul: trăsăturile, părul, semnele și locul feței
 function drawFaceRef(c, box){
   const fb = c.faceBox && c.faceBox.k === c.photo ? c.faceBox : null;
-  box.insertAdjacentHTML('beforeend', `<div class="faceref"><div class="fimg" id="pfFace">${fb ? '<span class="spin"></span>' : '?'}</div><div><b>Fața, decupată din portret</b><small>${fb ? (fb.none ? '⚠️ Nu am găsit fața; folosesc partea de sus a pozei. Apasă „Recitește portretul”.' : '✅ Fața găsită. Se trimite la fiecare poză, lângă textul din „✍️ Descrierea”.') : 'Se citește la prima poză.'}</small><button class="btn sm" id="pfFaceRe">${fb ? '↻ Recitește portretul' : '🔍 Citește acum'}</button></div></div>`);
+  box.insertAdjacentHTML('beforeend', `<div class="faceref"><div class="fimg" id="pfFace">${fb ? '<span class="spin"></span>' : '?'}</div><div><b>Fața, decupată din portret</b><small>${fb ? (fb.none ? '⚠️ Nu am găsit fața; folosesc partea de sus a pozei. Apasă „Recitește portretul”.' : (closeOf(c) ? '✅ Fața găsită; după ea se măsoară pozele. La generator pleacă portretul de aproape (mai jos).' : '✅ Fața găsită. Se trimite la fiecare poză, lângă textul din „✍️ Descrierea”.')) : 'Se citește la prima poză.'}</small><button class="btn sm" id="pfFaceRe">${fb ? '↻ Recitește portretul' : '🔍 Citește acum'}</button></div></div>`);
   const show = async force => { const el = $('#pfFace'); if(!el) return; el.innerHTML = '<span class="spin"></span>';
     try{
       if(force){ const bt = $('#pfFaceRe'); if(bt){ bt.disabled = true; bt.innerHTML = '<span class="spin"></span> Citesc portretul…'; }
