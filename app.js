@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.7';
+const APP_VER = '10.8';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2041,14 +2041,15 @@ async function srUpscale(blob, alive = () => true, onProg){
   const {tf, m} = await srModel();   // 10.6: modelul, doar când chiar trebuie mărită
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H; cv.getContext('2d').drawImage(im, 0, 0);
   const out = document.createElement('canvas'); out.width = W * 2; out.height = H * 2; const go = out.getContext('2d');
-  const src = tf.browser.fromPixels(cv), P = tf.getBackend && tf.getBackend() === 'webgl' ? 256 : 128, pad = 8,   // 10.6: bucăți mai mari pe placa video (de 4× mai puține treceri)
+  const src = tf.browser.fromPixels(cv), P = 128, pad = 8,   // 10.8: înapoi la 128 (256 încărca prea mult placa video)
+      // 10.6: bucăți mai mari pe placa video (de 4× mai puține treceri)
     tiles = Math.ceil(W / P) * Math.ceil(H / P); let done = 0;
   try{
     for(let y = 0; y < H; y += P) for(let x = 0; x < W; x += P){
       if(!alive()) return null;
       const x0 = Math.max(0, x - pad), y0 = Math.max(0, y - pad), x1 = Math.min(W, x + P + pad), y1 = Math.min(H, y + P + pad);
-      const t = tf.tidy(() => m.predict(src.slice([y0, x0, 0], [y1 - y0, x1 - x0, 3]).toFloat().expandDims(0)).squeeze().clipByValue(0, 255).toInt());
-      const px = await tf.browser.toPixels(t); t.dispose();
+      const px = await tfRun('mărirea', async () => { const t = tf.tidy(() => m.predict(src.slice([y0, x0, 0], [y1 - y0, x1 - x0, 3]).toFloat().expandDims(0)).squeeze().clipByValue(0, 255).toInt());
+        try{ return await tf.browser.toPixels(t); } finally { t.dispose(); } }, TF_TO.tile);   // 10.8: pe rând cu celelalte, cu limită de timp
       const id = new ImageData(px, (x1 - x0) * 2, (y1 - y0) * 2);
       go.putImageData(id, x0 * 2, y0 * 2, (x - x0) * 2, (y - y0) * 2, Math.min(P, W - x) * 2, Math.min(P, H - y) * 2);
       done++; if(onProg) onProg(done / tiles);
@@ -2064,6 +2065,8 @@ async function srGet(k, alive = () => true, onProg){
   const hit = await DB.get(srKey(k)).catch(() => null); if(hit) return hit;
   if(S.sr === 'off') return null;
   for(let i = 0; i < 150 && srBusy && alive(); i++) await sleep(200);   // altă poză încă se mărește: o așteaptă (înainte renunța)
+  while(alive() && (sheetBusy || etalonJob || busy)){ if(onProg) onProg(0, 'wait'); await sleep(1000); }   // 10.8: întâi pozele în lucru
+  if(tfStalled) return null;
   if(srBusy || !alive()) return null;
   const b = await DB.get(k).catch(() => null); if(!b) return null;
   srBusy = k;
@@ -2337,8 +2340,8 @@ async function ageLook(c){
   let a = null, txt = null;
   try{ const f = await faceApi(); if(!f.nets.ageGenderNet.isLoaded) await f.nets.ageGenderNet.loadFromUri(FA + 'model');
     const b = await DB.get(c.photo); const u = URL.createObjectURL(b);
-    try{ const im = await loadImgEl(u); let r = await f.detectSingleFace(im, new f.TinyFaceDetectorOptions({inputSize:608, scoreThreshold:.4})).withAgeAndGender();
-      if(!r){ if(!f.nets.ssdMobilenetv1.isLoaded) await f.nets.ssdMobilenetv1.loadFromUri(FA + 'model'); r = await f.detectSingleFace(im, new f.SsdMobilenetv1Options({minConfidence:.35})).withAgeAndGender(); }
+    try{ const im = await loadImgEl(u); let r = await tfRun('vârsta', async () => { let r = await f.detectSingleFace(im, new f.TinyFaceDetectorOptions({inputSize:608, scoreThreshold:.4})).withAgeAndGender();
+      if(!r){ if(!f.nets.ssdMobilenetv1.isLoaded) await f.nets.ssdMobilenetv1.loadFromUri(FA + 'model'); r = await f.detectSingleFace(im, new f.SsdMobilenetv1Options({minConfidence:.35})).withAgeAndGender(); } return r; }, TF_TO.age);   // 10.8
       if(r) a = Math.round(r.age); } finally { URL.revokeObjectURL(u); } }catch(e){}
   const ph = String((c.faceBox && c.faceBox.k === c.photo && c.faceBox.phys) || '').toLowerCase();
   if(/\b(teen|teenage|adolescent|schoolgirl|schoolboy|young girl|young boy|child|kid|minor)\b/.test(ph)) txt = 'tânăr';
@@ -2970,6 +2973,26 @@ function drawEtalon(c, box){
    3. VERIFICARE ÎN TELEFON: recunoaștere facială locală (face-api, MIT) compară fața din poză cu poza de profil. Gratuit.
    4. VERIFICARE SCENĂ: Haiku vede doar poza nouă + pașaportul scris: scenă, încadrare, păr, semne.
    5. Dacă ceva nu ține, se reface O dată și rămâne varianta mai bună. */
+// 10.8: motorul din telefon (TensorFlow) lucrează pe rând, cu limită de timp. Dacă un pas nu se termină (placa video blocată),
+// pașii următori nu mai așteaptă: primesc imediat eroare, iar la pornirea următoare motorul merge pe procesor (WebAssembly).
+let tfQ = Promise.resolve(), tfStalled = false;
+const TF_TO = {face:45000, tile:20000, pose:30000, seg:30000, age:45000};
+function tfRun(what, fn, ms){
+  if(tfStalled) return Promise.reject(new Error('motorul din telefon nu răspunde'));
+  const run = tfQ.then(() => new Promise((res, rej) => {
+    if(tfStalled) return rej(new Error('motorul din telefon nu răspunde'));
+    let done = false; const t = setTimeout(() => { if(done) return; done = true; tfStall(what); rej(new Error('fără răspuns: ' + what)); }, ms || 30000);
+    Promise.resolve().then(fn).then(v => { if(done) return; done = true; clearTimeout(t); res(v); }, e => { if(done) return; done = true; clearTimeout(t); rej(e); });
+  }));
+  tfQ = run.catch(() => {});
+  return run;
+}
+function tfStall(what){
+  if(tfStalled) return; tfStalled = true;
+  try{ localStorage.setItem('taifas-tfbe', JSON.stringify({be:'wasm', at:Date.now(), what})); }catch(e){}
+  try{ toast('⚠️ Recunoașterea din telefon s-a blocat (placa video nu mai răspunde). Închide și redeschide aplicația: de acum merge pe procesor.', 8000); }catch(e){}
+}
+const tfOrder = () => { try{ const x = JSON.parse(localStorage.getItem('taifas-tfbe') || 'null'); if(x && x.be === 'wasm' && Date.now() - x.at < 30 * 864e5) return ['wasm', 'webgl', 'cpu']; }catch(e){} return ['webgl', 'wasm', 'cpu']; };
 const FA = 'vendor/face-api/';
 let faP = null;
 function faceApi(){
@@ -2981,7 +3004,7 @@ function faceApi(){
         // placa video (webgl) → WebAssembly (fișierele .wasm stau lângă bibliotecă) → procesor
         try{ if(f.tf.setWasmPaths) f.tf.setWasmPaths(new URL(FA, location.href).href); }catch(e){}
         let be = '';
-        for(const x of ['webgl', 'wasm', 'cpu']){ try{ if(await f.tf.setBackend(x)){ await f.tf.ready(); be = x; break; } }catch(e){} }
+        for(const x of tfOrder()){ try{ if(await f.tf.setBackend(x)){ await f.tf.ready(); be = x; break; } }catch(e){} }
         if(!be) throw new Error('niciun motor de calcul disponibil');
         await Promise.all([f.nets.tinyFaceDetector.loadFromUri(FA + 'model'), f.nets.faceLandmark68Net.loadFromUri(FA + 'model'), f.nets.faceRecognitionNet.loadFromUri(FA + 'model')]);
         res(f);
@@ -3002,7 +3025,8 @@ async function faceDescs(blob){
   let p = fdCache.get(blob); if(!p){ p = fdPersist(blob); fdCache.set(blob, p); p.catch(() => fdCache.delete(blob)); }   // 10.6 (C): și după conținut, peste reporniri
   return (await p).map(x => ({...x}));
 }
-async function faceDescs0(blob){
+function faceDescs0(blob){ return faceApi().then(() => tfRun('fața', () => faceDescs0x(blob), TF_TO.face)); }   // modelele se încarcă în afara limitei de timp   // 10.8
+async function faceDescs0x(blob){
   const f = await faceApi(), u = URL.createObjectURL(blob);
   try{
     const im = await loadImgEl(u), area = im.naturalWidth * im.naturalHeight;
@@ -3660,6 +3684,7 @@ async function f3Image(prompt, refs, size, signal, why){
   return blob;
 }
 // 9.90: Runware supraîncărcat / pauză de rețea → încă 2 încercări (după 2 s și 5 s), cu altă cerere; restul erorilor, imediat
+const RW_TO = {ms:150000};
 const RW_TRANSIENT = /temporarily unavailable|high demand|overload|try again|timed? ?out|timeout|HTTP 5\d\d|HTTP 429|rate.?limit|nu răspunde|gateway|serviceOverloaded|inferenceRateLimitExceeded/i;
 /* 9.91: Runware recomandă 2–4 cereri simultane și așteptarea cerută de ei (retryAfter), cu puțin decalaj aleator.
    Aplicația trimitea multe deodată (schițele + fișele + poza întreagă din fundal), iar coada modelului le respingea.
@@ -3699,10 +3724,16 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = RW_MODEL, n = 1){
   if(refs.length) task.inputs = {referenceImages: await Promise.all(refs.slice(0, f3 ? 10 : 4).map(async b => 'data:image/jpeg;base64,' + await blobToB64(b)))};
   const direct = rwDirect(), url = direct ? RW_URL : wkUrl() + '/proxy/runware/v1';
   const t0 = performance.now();
-  let r;
-  try{ r = await fetch(url, {method:'POST', signal, headers:{'content-type':'application/json', authorization:'Bearer ' + (direct ? S.rwKey : S.wkTok).trim()}, body:safeJSON([task])}); }
-  catch(e){ if(e.name === 'AbortError') throw e; throw new Error('Runware nu răspunde' + (direct ? ' din browser. Pune cheia în Worker (secretul RUNWARE_KEY) și golește câmpul din telefon.' : ' (rețea).')); }
-  let d = null; try{ d = await r.json(); }catch(e){}
+  const tac = new AbortController(), tT = setTimeout(() => tac.abort(), RW_TO.ms), onAb = () => tac.abort();   // 10.8: limită de timp
+  if(signal){ if(signal.aborted) tac.abort(); else signal.addEventListener('abort', onAb, {once:true}); }
+  const late = () => tac.signal.aborted && !(signal && signal.aborted);
+  let r, d = null;
+  try{
+    try{ r = await fetch(url, {method:'POST', signal:tac.signal, headers:{'content-type':'application/json', authorization:'Bearer ' + (direct ? S.rwKey : S.wkTok).trim()}, body:safeJSON([task])}); }
+    catch(e){ if(late()) throw new Error('Runware nu răspunde (timp depășit).'); if(e.name === 'AbortError') throw e; throw new Error('Runware nu răspunde' + (direct ? ' din browser. Pune cheia în Worker (secretul RUNWARE_KEY) și golește câmpul din telefon.' : ' (rețea).')); }
+    try{ d = await r.json(); }catch(e){}
+    if(late()) throw new Error('Runware nu răspunde (timp depășit).');
+  } finally { clearTimeout(tT); if(signal) signal.removeEventListener('abort', onAb); }
   const errs = d && (d.errors || (d.error ? [d.error] : null));
   if(!r.ok || errs || !d || !Array.isArray(d.data)){
     if(!direct && r.status === 404) throw new Error('Worker-ul nu știe încă de Runware: pune codul nou (v9) din cloudflare-worker-simplu.js.');
@@ -10764,7 +10795,8 @@ function bcClean(c, t){
 /* ── 🪟 adâncime 3D: persoana (segmentată în telefon) e aproape, fundalul departe; mișcarea telefonului le mișcă diferit ── */
 let segP = null; const depthCache = new Map();
 function segModel(){ if(!segP){ segP = faceApi().then(f => f.tf.loadGraphModel('vendor/seg/selfie.json').then(m => ({tf:f.tf, m}))); segP.catch(() => { segP = null; }); } return segP; }
-async function segMask(img){   // 256×256, 0…1: cât de sigur e persoană în fiecare punct
+function segMask(img){ return segModel().then(() => tfRun('silueta', () => segMask0(img), TF_TO.seg)); }   // 10.8
+async function segMask0(img){   // 256×256, 0…1: cât de sigur e persoană în fiecare punct
   const {tf, m} = await segModel();
   const y = tf.tidy(() => { let o = m.execute(tf.image.resizeBilinear(tf.browser.fromPixels(img), [256, 256]).toFloat().div(255).expandDims(0)); if(Array.isArray(o)) o = o[0]; return o.reshape([256 * 256]); });
   const a = await y.data(); y.dispose();
@@ -11164,7 +11196,7 @@ async function viewImg(k, list, meta, vopt = {}){
     // 9.87 (3): mărirea 2× pe telefon (o dată pe poză; apoi se ia din memorie)
     if(!raw && S.sr !== 'off'){ const my = idx, key = list[idx], badge = v.querySelector('.vsr'); badge.hidden = false; badge.classList.remove('done'); badge.textContent = '✨ Îmbunătățesc…';
       badge.onpointerdown = badge.onpointerup = badge.onpointerleave = badge.onpointercancel = null;
-      srGet(key, () => document.body.contains(v) && idx === my, (p, st) => { if(idx === my) badge.textContent = st === 'fin' ? '✨ Finisez…' : `✨ Îmbunătățesc… ${Math.round(p * 100)}%`; }).then(x => {
+      srGet(key, () => document.body.contains(v) && idx === my, (p, st) => { if(idx === my) badge.textContent = st === 'fin' ? '✨ Finisez…' : st === 'wait' ? '✨ Aștept să se termine pozele în lucru…' : `✨ Îmbunătățesc… ${Math.round(p * 100)}%`; }).then(x => {
         if(idx !== my || !document.body.contains(v)) return; if(!x){ badge.hidden = true; return; }
         const su = URL.createObjectURL(x), pre = new Image(), lbl = '✨ Îmbunătățită · ține apăsat: originalul';
         pre.onload = () => { if(idx !== my){ URL.revokeObjectURL(su); return; } img.src = su; badge.classList.add('done'); badge.textContent = lbl;   // 10.6 (A): rămâne afișată; ții apăsat → originalul
@@ -11537,7 +11569,8 @@ async function crCheck(v){
   return out;
 }
 // MoveNet pe poza încadrată într-un pătrat (fără deformare): coordonatele se întorc în pixelii pozei
-async function crPose(im){
+function crPose(im){ return poseModel().then(() => tfRun('poziția', () => crPose0(im), TF_TO.pose)); }   // 10.8
+async function crPose0(im){
   const {tf, m} = await poseModel(), W = im.naturalWidth, H = im.naturalHeight, Sq = Math.max(W, H), ox = (Sq - W) / 2, oy = (Sq - H) / 2;
   const cv = document.createElement('canvas'); cv.width = cv.height = 384; const g = cv.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 384, 384);
   g.drawImage(im, ox * 384 / Sq, oy * 384 / Sq, W * 384 / Sq, H * 384 / Sq);
