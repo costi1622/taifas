@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '10.3';
+const APP_VER = '10.4';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1855,7 +1855,7 @@ const bodyRatioRo = sig => { const t = bodyRatioText(sig); if(!t) return ''; ret
 // (c) cât de stabilă e măsurătoarea pe poza de referință a personajului (oglindită și puțin micșorată): prag mai strict când e stabilă
 async function bodyNoise(c){
   if(!c.photoFull) return null;
-  if(c.bodyNoise && c.bodyNoise.k === c.photoFull) return c.bodyNoise.d;
+  if(c.bodyNoise && c.bodyNoise.k === c.photoFull && (c.bodyNoise.d != null || !(c.bodySig && c.bodySig.v))) return c.bodyNoise.d;   // 10.4: calculat cât silueta nu se putea măsura: se reface
   const b = await DB.get(c.photoFull).catch(() => null); if(!b) return null;
   let d = null;
   try{ const u = URL.createObjectURL(b), im = await loadImgEl(u); URL.revokeObjectURL(u);
@@ -2004,7 +2004,8 @@ async function finishPerson(c, r, shot, signal, opt = {}){
   if(photo && S.photoFinish !== 'off' && !opt.noFinish){ const tF = performance.now(); const f2 = await photoFinish(r.blob); if(f2 && f2 !== r.blob){ r.blob = f2; r.fin = true; } if(tm && tm.s) tm.s.finisare = (tm.s.finisare || 0) + performance.now() - tF; }
   if(photo && !opt.noChar && S.imgProv === 'worker' && opt.kind !== 'edit'){   // 10.1 (S8): poziția, și când n-au fost schițe
     try{ if(r.ps === undefined) r.ps = await poseOfDraft(c, r, shot, opt); }catch(e){}
-    if(r.ps && r.ps.bad) r.lookWarn = (r.lookWarn || []).concat('poziția'); }
+    if(r.ps && r.ps.bad) r.lookWarn = (r.lookWarn || []).concat('poziția');
+    if(crowdOn(shot, opt) && !opt.noChar){ r.np = await extraPeople(r.blob); if(r.np > 0){ r.lookWarn = (r.lookWarn || []).concat('încă o persoană în poză'); if(r.gen) r.gen.np = r.np; } } }   // 10.4
   if(r.gen){ if(r.ps && (r.ps.k || r.ps.hw)) r.gen.pose = {k:r.ps.k, want:r.ps.want, bad:r.ps.bad, hw:r.ps.hw, hbad:r.ps.hbad}; if(opt.pov) r.gen.pov = true; if(r.sref) r.gen.sref = true;
     r.gen.fin = !!r.fin; r.gen.fwarn = r.faceWarn ?? null; r.gen.bwarn = r.bodyWarn ?? null; r.gen.garRet = !!r.garRet; r.gen.kind = opt.kind || 'chat'; if(r.fd != null) r.gen.fd = Math.round(r.fd * 1000) / 1000; r.gen.lk = lookLite(r.lk); if(r.check && r.check.must) r.gen.must = {n:r.check.must.filter(x => x != null).length, miss:(r.check.mustMiss || []).map(x => x.en)}; }
   if(photo && S.imgProv === 'worker' && !opt.noLog) r.fidE = fidLog(c, r, opt);   // 10.0 (F11)
@@ -2255,7 +2256,7 @@ const LOOK_HAIRUP = /\b(ponytail|pony tail|bun|updo|up-do|braids?|braided|pigtai
 const LOOK_WET = /\b(wet hair|damp hair|in the shower|showering|swimming|in the pool|in the sea|soaked|rain-soaked)\b/i;
 const LOOK_DYE = /\b(dyed|hair colou?r|highlights|bleached|new hair)\b/i;
 const LOOK_EYEOFF = /\b(sunglasses|eyes closed|closed eyes|asleep|sleeping|winking|blindfold)\b/i;
-const LOOK_LIGHT = /\b(neon|candle ?light|candles|red light|blue light|purple light|pink light|colou?red light|disco|club lights?|stage lights?|fire ?light|campfire|sunset|golden hour|dusk|night ?club|string lights|tv light|screen light)\b/i;   // lumină colorată: tenul și părul nu se mai pot compara cinstit
+const LOOK_LIGHT = /\b(warm (?:lamp ?)?light|lamp ?light|lamplight|warm glow|dim(?:ly lit| light)|evening light|fireplace|neon|candle ?light|candles|red light|blue light|purple light|pink light|colou?red light|disco|club lights?|stage lights?|fire ?light|campfire|sunset|golden hour|dusk|night ?club|string lights|tv light|screen light)\b/i;   // lumină colorată: tenul și părul nu se mai pot compara cinstit
 // distanțele brute (fără praguri)
 function lookRaw(sig, ref, shot){
   const t = String(shot || ''), o = {};
@@ -2297,6 +2298,16 @@ async function lookOf(c, blob, shot, opt = {}){
 }
 const lookPen = x => x && x.lk && x.lk.pen ? x.lk.pen : 0;
 const lookBadOf = lk => lk && lk.bad && lk.bad.length ? lk.bad : null;
+/* 10.4: încă o persoană în poză (generatorul o adaugă uneori, mai ales la „telefon sprijinit”): se numără fețele în telefon
+   (aceeași detectare ca la măsurarea feței, deja făcută); o față de cel puțin 45% din mărimea celei principale = încă o persoană.
+   Nu la pozele împreună / cu alte persoane și nu la oglindă (reflexia e tot ea). */
+const crowdOn = (shot, opt = {}) => !opt.together && !opt.partner && !opt.people && !/\bmirror\b/i.test(String(shot || ''));
+async function extraPeople(blob){
+  try{ const fs = await faceDescs(blob); if(fs.length < 2) return 0;
+    const h = f => f && f.box ? f.box.h : 0, mx = Math.max(...fs.map(h)); return fs.filter(f => h(f) >= mx * .45).length - 1; }
+  catch(e){ return 0; }
+}
+const crowdPen = x => x && x.np > 0 ? .35 : 0;
 const lookLite = lk => lk ? {h:lk.hair ?? null, e:lk.eye ?? null, s:lk.skin ?? null, g:lk.geo ?? null, l:lk.hl ?? null, a:lk.age ?? null, p:lk.pen, bad:lk.bad && lk.bad.length ? lk.bad : undefined} : null;
 // nota culorilor și proporțiilor, 0-100 (pentru etalon și statistică)
 const lookPct = lk => lk == null ? null : Math.round(100 * (1 - Math.min(1, (lk.p ?? lk.pen ?? 0) / .2)));
@@ -2498,6 +2509,7 @@ let etalonJob = null;
 const etalonOf = c => c && Array.isArray(c.etalon) ? c.etalon : [];
 function etalonScore(row){
   if(!row || row.err) return null;
+  if(row.np > 0) return 20;   // 10.4: altcineva în poză: scena a ieșit greșit, oricât ar semăna ea
   const f = row.fd != null ? idPct(row.fd) : null, b = row.bd != null ? bodyPct(row.bd) : null, l = lookPct(row.lk);
   let t = 0, n = 0; for(const [v, w] of [[f, .5], [b, .3], [l, .2]]) if(v != null){ t += v * w; n += w; }
   return n ? Math.round(t / n) : null;
@@ -2519,7 +2531,7 @@ async function etalonGo(c, onStep = () => {}){
         const r = await renderPerson(c, shot, ac.signal, {kind:'etalon', tag:'etalon', tm:{t0, s:{}}});
         addUsage(c.id, imgPrice(), 'img', null, 'etalon');
         row.img = await saveImg(r.blob); row.fd = r.fd != null ? r3n(r.fd) : null; row.bd = r.bd != null ? r3n(r.bd) : null; row.lk = lookLite(r.lk);
-        if(r.faceWarn != null) row.fw = r.faceWarn; if(r.bodyWarn != null) row.bw = r.bodyWarn; if(r.gen && r.gen.mdl) run.mdl = r.gen.mdl;
+        if(r.np > 0) row.np = r.np; if(r.faceWarn != null) row.fw = r.faceWarn; if(r.bodyWarn != null) row.bw = r.bodyWarn; if(r.gen && r.gen.mdl) run.mdl = r.gen.mdl;
       }catch(e){ if(e.name === 'AbortError'){ run.part = true; break; } row.err = String(e.message || e).slice(0, 160); }
       row.ms = Math.round(performance.now() - t0); row.s = etalonScore(row); run.rows.push(row);
     }
@@ -2627,7 +2639,7 @@ function statsAllSheet(){
 function drawEtalon(c, box){
   if(S.imgProv !== 'worker') return;
   const runs = etalonOf(c).slice(-3), last = runs[runs.length - 1], me = etalonJob && etalonJob.cid === c.id, P = S.rwPhoto, est = P && P.n >= 3 && P.avg > 0 ? ` La media ta de acum (${usd(P.avg)} pe poză), cam ${usd(P.avg * ETALON.length)}.` : '';
-  const cell = x => !x ? '—' : x.err ? '✕' : `<b>${x.s ?? '—'}</b><small>${x.fd != null ? '👤' + idPct(x.fd) : ''}${x.bd != null ? ' 🧍' + bodyPct(x.bd) : ''}${x.lk ? ' 🎨' + lookPct(x.lk) : ''}</small>`;
+  const cell = x => !x ? '—' : x.err ? '✕' : `<b>${x.s ?? '—'}${x.np > 0 ? ' 👥' : ''}</b><small>${x.fd != null ? '👤' + idPct(x.fd) : ''}${x.bd != null ? ' 🧍' + bodyPct(x.bd) : ''}${x.lk ? ' 🎨' + lookPct(x.lk) : ''}</small>`;
   const day = t => new Date(t).toLocaleDateString('ro-RO', {day:'numeric', month:'short'});
   box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfEtalon"><b>🎯 Set-etalon</b>
     <small>6 scene fixe, aceleași de fiecare dată (selfie, corp întreg, așezată, din profil, afară, seara), cu hainele din poza ei${c.outfitRef && c.outfitRef.t ? ': <i>' + esc(c.outfitRef.t) + '</i>' : ' (le citește la prima rulare)'}.${runs.some(r => r.set !== 2) ? ' Rulările de dinainte de 10.2 aveau alte scene și dispar la prima rulare nouă.' : ''} Fiecare poză e notată automat (fața 50%, corpul 30%, culorile și proporțiile 20%). Rulezi setul înainte și după o schimbare (alt portret, altă fișă, alt model din Setări → Poze) și compari cifrele, nu impresiile. Costă cât 6 poze din chat.${est}</small>
@@ -3040,14 +3052,14 @@ async function bestScene(c, shot, signal, corr, opt = {}){
   if(!ok.length) throw rs[0].reason;
   pstage(signal, '🎯 Alege poza cea mai reușită', 93);
   const tP = performance.now();
-  for(const x of ok){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); }   // 9.87 (4): și claritatea   // 10.0: și culorile, proporțiile feței, vârsta aparentă
+  for(const x of ok){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.np = crowdOn(shot, opt) ? await extraPeople(x.blob) : 0; }   // 9.87 (4): și claritatea   // 10.4: și câte persoane   // 10.0: și culorile, proporțiile feței, vârsta aparentă
   // 9.36: și silueta (piept, talie, șolduri) față de poza întreagă, măsurată în telefon; fața rămâne criteriul principal
   const rb = framingOf(shot).k !== 'close' ? await refBodySig(c).catch(() => null) : null;
   const rbs = rb ? await refBodySigs(c).catch(() => []) : []; if(rb) for(const x of ok){ x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); }   // 9.85: față de poza de corp cu aceeași poziție
   // 9.42: cu motorul „ca în creator”, contează și cât respectă cererea (altfel câștiga varianta care copia poza de profil)
   // 9.86 (d): cât respectă cererea se întreabă doar dacă ai cerut detalii sau dacă primele două sunt aproape (altfel e clar cine câștigă)
   const shMax = () => Math.max(0, ...ok.map(x => x.sh || 0));
-  const pre = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) + posePen(x);
+  const pre = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) + posePen(x) + crowdPen(x);
   const ord = ok.map(pre).sort((a, b) => a - b), close2 = ord.length > 1 && ord[1] - ord[0] < .06;
   if(S.photoEngine !== 'id' && ok.length > 1 && aiReady() && S.imgCheck !== 'off' && ((opt.asked && opt.asked.length) || close2)){ const sc = await adhScores(c, ok, shot, opt.asked, signal); if(sc) ok.forEach((x, k) => x.adh = sc[k]); }
   // 9.86 (corp): dacă în nicio schiță corpul nu trece, încă o tură, cu corectura de corp, înainte de poza mare (o dată)
@@ -3057,10 +3069,10 @@ async function bestScene(c, shot, signal, corr, opt = {}){
       const rs2 = await batch([corr, `the body must match the full-body reference exactly: ${bodyOnly(c, id) || 'the same build and proportions'}`].filter(Boolean).join('; '), n);
       const ab2 = rs2.find(r => r.status === 'rejected' && r.reason && r.reason.name === 'AbortError'); if(ab2) throw ab2.reason;
       const ok2 = rs2.filter(r => r.status === 'fulfilled').map(r => r.value);
-      for(const x of ok2){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.round2 = true; }
+      for(const x of ok2){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.np = crowdOn(shot, opt) ? await extraPeople(x.blob) : 0; x.round2 = true; }
       ok.push(...ok2); opt.bodyRound = true;
     }catch(e){ if(e.name === 'AbortError') throw e; } }
-  const tot = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) + posePen(x) - (x.adh != null ? x.adh * .03 * pfbW(c, 'scene') : 0);   // 9.85 (4): corpul cântărește cât fața   // 9.83 (8): ce respingi des cântărește mai mult
+  const tot = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) + posePen(x) + crowdPen(x) - (x.adh != null ? x.adh * .03 * pfbW(c, 'scene') : 0);   // 9.85 (4): corpul cântărește cât fața   // 9.83 (8): ce respingi des cântărește mai mult
   ok.sort((a, b) => tot(a) - tot(b));
   if(ok.length > 1) addUsage(c.id, imgPrice() * (ok.length - 1), 'img', null, opt.tag || 'poze');   // prima e numărată de cine a cerut poza
   let best = ok[0]; best.cands = ok.map(x => x.fd); best.shCands = ok.map(x => x.sh); if(rb) best.bodyCands = ok.map(x => x.bd); if(ok.some(x => x.adh != null)) best.adhCands = ok.map(x => x.adh); if(ok.some(x => x.lk)) best.lkCands = ok.map(x => x.lk ? x.lk.pen : null); if(ok.some(x => x.ps)) best.psCands = ok.map(x => x.ps ? x.ps.pen : null);   // 10.1
