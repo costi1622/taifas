@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '11.7';
+const APP_VER = '11.8';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2688,20 +2688,42 @@ const warnLine = m => { const a = [m.faceWarn != null ? 'fața ' + m.faceWarn + 
    (C) Fidelitate: retuș de la 0,36 (nu 0,40); tenul blocat pe tenul din portret (pe telefon); mâinile verificate; corpul mai stabil.
    (D) Vârsta după aspect: personajele care nu par clar adulte nu primesc funcțiile de corp și nici conținut intim. */
 const AGE_MIN = 21;   // estimarea din telefon greșește cu câțiva ani: pragul e mai sus de 18, intenționat
+/* 11.8: înainte, vârsta venea dintr-o singură estimare pe o singură poză (rețeaua de vârstă din telefon greșește ușor cu 10+ ani:
+   ochelari, lumină, unghi, zâmbet), iar rezultatul rămânea blocat pentru totdeauna. Acum: estimarea se face pe mai multe poze ale
+   aceleiași fețe (portretul și oglinda lui, portretul de aproape, poza întreagă, unghiurile din față ale fișei) și se ia mediana;
+   a doua părere e vârsta aparentă scrisă de Claude când se uită la poză (pașaportul). Pragul rămâne 21: blochează dacă pașaportul
+   spune adolescent / sub 21 sau dacă mediana iese sub 21, cu o singură excepție: pașaportul vede clar 25+ și mediana e de adult (18+).
+   Se reface când se schimbă poza sau când apar repere noi (mai multe poze = estimare mai sigură). */
+const AGE_V = 2;
+async function ageOne(f, b, flip){
+  const u = URL.createObjectURL(b);
+  try{ let im = await loadImgEl(u);
+    if(flip){ const cv = document.createElement('canvas'); cv.width = im.naturalWidth; cv.height = im.naturalHeight; const g = cv.getContext('2d'); g.translate(cv.width, 0); g.scale(-1, 1); g.drawImage(im, 0, 0); im = cv; }
+    const r = await tfRun('vârsta', async () => { let r = await f.detectSingleFace(im, new f.TinyFaceDetectorOptions({inputSize:608, scoreThreshold:.4})).withAgeAndGender();
+      if(!r){ if(!f.nets.ssdMobilenetv1.isLoaded) await f.nets.ssdMobilenetv1.loadFromUri(FA + 'model'); r = await f.detectSingleFace(im, new f.SsdMobilenetv1Options({minConfidence:.35})).withAgeAndGender(); } return r; }, TF_TO.age);
+    return r ? r.age : null; } finally { URL.revokeObjectURL(u); }
+}
 async function ageLook(c){
   if(!c || !c.photo) return null;
-  if(c.ageLook && c.ageLook.k === c.photo) return c.ageLook;
-  let a = null, txt = null;
+  const front = sheetOf(c).filter(x => !x.weak && ['l34', 'r34', 'smile', 'serious', 'warm', 'sun'].includes(x.ang)).slice(0, 4), cr = closeOf(c);
+  const srcKey = [c.photo, cr ? cr.img : '', c.photoFull || '', front.map(x => x.k).join(',')].join('|');
+  if(c.ageLook && c.ageLook.k === c.photo && c.ageLook.v === AGE_V && c.ageLook.src === srcKey) return c.ageLook;
+  const ages = [];
   try{ const f = await faceApi(); if(!f.nets.ageGenderNet.isLoaded) await f.nets.ageGenderNet.loadFromUri(FA + 'model');
-    const b = await DB.get(c.photo); const u = URL.createObjectURL(b);
-    try{ const im = await loadImgEl(u); let r = await tfRun('vârsta', async () => { let r = await f.detectSingleFace(im, new f.TinyFaceDetectorOptions({inputSize:608, scoreThreshold:.4})).withAgeAndGender();
-      if(!r){ if(!f.nets.ssdMobilenetv1.isLoaded) await f.nets.ssdMobilenetv1.loadFromUri(FA + 'model'); r = await f.detectSingleFace(im, new f.SsdMobilenetv1Options({minConfidence:.35})).withAgeAndGender(); } return r; }, TF_TO.age);   // 10.8
-      if(r) a = Math.round(r.age); } finally { URL.revokeObjectURL(u); } }catch(e){}
+    const list = [[c.photo, false], [c.photo, true]]; if(cr) list.push([cr.img, false]); if(c.photoFull) list.push([c.photoFull, false]); for(const x of front) list.push([x.k, false]);
+    for(const [k, flip] of list){ const b = await DB.get(k).catch(() => null); if(!b) continue; try{ const a = await ageOne(f, b, flip); if(a != null && Number.isFinite(a)) ages.push(a); }catch(e){} }
+  }catch(e){}
+  ages.sort((x, y) => x - y);
+  const med = ages.length ? (ages.length % 2 ? ages[(ages.length - 1) / 2] : (ages[ages.length / 2 - 1] + ages[ages.length / 2]) / 2) : null, a = med == null ? null : Math.round(med);
+  let txt = null;
   const ph = String((c.faceBox && c.faceBox.k === c.photo && c.faceBox.phys) || '').toLowerCase();
-  if(/\b(teen|teenage|adolescent|schoolgirl|schoolboy|young girl|young boy|child|kid|minor)\b/.test(ph)) txt = 'tânăr';
-  const m = ph.match(/\b(?:aged?|around|about|apparent age[: ]*)\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\s*years?\b|\b(\d{2})s\b/);
-  const ta = m ? +(m[1] || m[2] || m[4]) : null; if(ta != null && ta < 18) txt = 'tânăr';
-  c.ageLook = {k:c.photo, a, ta, young:(a != null && a < AGE_MIN) || txt === 'tânăr'}; saveChars();
+  if(/\b(teen|teenage|teenager|adolescent|schoolgirl|schoolboy|young girl|young boy|child|kid|minor|underage)\b/.test(ph)) txt = 'tânăr';
+  const m = ph.match(/\b(?:aged?|around|about|apparent age[: ]*(?:early|mid|late)?[- ]?)\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\s*years?\b|\b(\d{2})s\b/);
+  const ta = m ? +(m[1] || m[2] || m[4]) : null;
+  if(ta != null && ta < AGE_MIN) txt = 'tânăr';
+  const adultSure = ta != null && ta >= 25 && a != null && a >= 18;   // pașaportul vede clar un adult, iar măsurătoarea nu contrazice
+  const young = txt === 'tânăr' || (a != null && a < AGE_MIN && !adultSure);
+  c.ageLook = {k:c.photo, v:AGE_V, src:srcKey, a, n:ages.length, all:ages.map(x => Math.round(x)), ta, young, at:Date.now()}; saveChars();
   return c.ageLook;
 }
 const looksYoung = c => !!(c && c.ageLook && c.ageLook.k === c.photo && c.ageLook.young);
@@ -6725,8 +6747,9 @@ function drawSheet(c, box){
   const K = kitState(c), kb = kitBusy.has(c.id);
   box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfKit"><b>🧬 Pachetul de identitate ${K.ok ? '<span class="kok">✅ complet</span>' : `<span class="kno">${kb ? '⏳ se completează' : '⚠️ ' + K.miss.length + ' de completat'}</span>`}</b><small>Tot ce folosește aplicația ca să-l reproducă la fel în orice poză (chat, grup, stories, avatare). Se reface singur când schimbi o poză.</small>
     <ul class="kitl">${K.items.map(x => `<li class="${x.ok ? 'ok' : x.warn ? 'warn' : 'no'}"><span>${x.ok ? '✅' : x.warn ? '⚠️' : '⏳'} ${esc(x.l)}</span><small>${esc(x.v || '')}</small></li>`).join('')}</ul>
-    ${looksYoung(c) ? '<small style="margin-top:8px;color:#ffb020">🔒 Nu pare clar adult(ă) după poză: fișa corpului, schimbările de corp și conținutul intim sunt oprite pentru acest personaj.</small>' : ''}
+    ${looksYoung(c) ? `<small style="margin-top:8px;color:#ffb020">🔒 Nu pare clar adult(ă) după poză${c.ageLook && c.ageLook.a != null ? ` (vârsta estimată: ${c.ageLook.a} de ani, din ${c.ageLook.n} ${c.ageLook.n === 1 ? 'poză' : 'poze'}${c.ageLook.ta != null ? '; după descrierea pozei: ~' + c.ageLook.ta : ''})` : ''}: fișa corpului, schimbările de corp și conținutul intim sunt oprite pentru acest personaj. Măsurarea se reface singură când are mai multe poze ale feței (după „Completează”). <button class="btn sm" id="pfAgeRe" type="button">↻ Măsoară din nou</button></small>` : ''}
     ${!K.ok && S.imgProv !== 'none' ? `<div class="btns"><button class="btn sm pri" id="pfKitGo"${kb ? ' disabled' : ''}>${kb ? '<span class="spin"></span> Se completează…' : '🧬 Completează acum'}</button></div>` : ''}</div>`);
+  { const ar = box.querySelector('#pfAgeRe'); if(ar) ar.onclick = async () => { ar.disabled = true; ar.innerHTML = '<span class="spin"></span> Măsor…'; delete c.ageLook; try{ await identityOf(c); }catch(e){} await ageLook(c).catch(() => {}); const el = $('#pfKit'); if(el){ const sh = $('#pfSheet'); el.remove(); if(sh) sh.remove(); drawSheet(c, box); } toast(looksYoung(c) ? '🔒 Tot nu pare clar adult(ă) după poze.' : '✅ Pare clar adult(ă): funcțiile de corp sunt pornite.', 3500); }; }   // 11.8
   { const kg = box.querySelector('#pfKitGo'); if(kg) kg.onclick = async () => { kg.disabled = true; kg.innerHTML = '<span class="spin"></span> Se completează…';
       if(kitBusy.has(c.id)) for(let i = 0; i < 240 && kitBusy.has(c.id); i++) await sleep(500);   // 9.93: se completa deja în fundal: îl așteaptă
       await kitBuild(c, {gen:true, force:true, toast:true, onStep:st => { if(kg.isConnected && st) kg.innerHTML = '<span class="spin"></span> ' + esc((K.items.find(x => x.k === st) || {l:st}).l) + (refProg.n && (st === 'fisa' || st === 'fisaCorp') ? ` · ${refProg.i} din ${refProg.n}` : ''); }}).catch(() => {});
