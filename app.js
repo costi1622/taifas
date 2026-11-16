@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '11.9';
+const APP_VER = '12.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -3669,30 +3669,14 @@ const GOOD_REF = .38;
 /* 11.9: amprenta feței din portret = media a trei măsurători ale aceleiași fețe: poza, oglinda ei și fața decupată și mărită la
    640 px. O singură măsurătoare pe o față mică sau luminată ciudat „sare” ușor, iar atunci tot ce se compară cu ea (fișa, portretul
    de aproape, pozele din chat) iese mai departe decât e. Se calculează o dată pe portret și se ține minte (c.profD). */
-const PROFD_V = 2, profDMem = new Map(), profDPend = new Map();
+const PROFD_V = 3, profDMem = new Map(), profDPend = new Map();   // 12.0: v3 = măsurătoarea simplă, iar remăsurarea pune ⚠️ înapoi
 const sheetRefineOn = () => { try{ return localStorage.getItem('taifas-norefine') !== '1'; }catch(e){ return true; } };   // testele vechi (care numără generările) o opresc
 async function profDesc0(c){ const b = c.photo ? await DB.get(c.photo).catch(() => null) : null; if(!b) return null; const fs = await faceDescs(b).catch(() => []); return fs.length ? fs.sort((x, y) => y.a - x.a)[0].d : null; }
-async function profDesc(c){
+async function profDesc(c){   // 12.0: din nou o singură măsurătoare a pozei de profil (media din 11.9 muta „centrul” feței și lăsa să treacă repere mai slabe)
   const k = c && c.photo; if(!k) return null;
   if(profDMem.has(k)) return profDMem.get(k);
-  if(c.profD && c.profD.k === k && c.profD.v === PROFD_V && c.profD.d){ const d = Float32Array.from(c.profD.d); profDMem.set(k, d); return d; }
   if(profDPend.has(k)) return profDPend.get(k);
-  const pr = (async () => {
-    const b = await DB.get(k).catch(() => null); if(!b) return null;
-    const fs = await faceDescs(b).catch(() => []); if(!fs.length) return null;
-    const f = fs.sort((x, y) => y.a - x.a)[0], ds = [Array.from(f.d)];
-    const u = URL.createObjectURL(b);
-    try{ const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight;
-      const cv1 = document.createElement('canvas'); cv1.width = W; cv1.height = H; const g1 = cv1.getContext('2d'); g1.translate(W, 0); g1.scale(-1, 1); g1.drawImage(im, 0, 0);
-      const bx = f.box, sx = bx.x / f.W * W, sy = bx.y / f.H * H, sw = bx.w / f.W * W, sh = bx.h / f.H * H, cw = Math.min(W, sw * 2.2), ch = Math.min(H, sh * 2.4);
-      const x0 = Math.max(0, Math.min(W - cw, sx + sw / 2 - cw / 2)), y0 = Math.max(0, Math.min(H - ch, sy + sh / 2 - ch * .48)), sc = 640 / Math.max(cw, ch);
-      const cv2 = document.createElement('canvas'); cv2.width = Math.round(cw * sc); cv2.height = Math.round(ch * sc); const g2 = cv2.getContext('2d'); g2.imageSmoothingQuality = 'high'; g2.drawImage(im, x0, y0, cw, ch, 0, 0, cv2.width, cv2.height);
-      for(const cv of [cv1, cv2]){ const bb = await new Promise(r => cv.toBlob(r, 'image/jpeg', .95)); const g = (await faceDescs(bb).catch(() => [])).sort((x, y) => y.a - x.a)[0]; if(g && fdist(g.d, f.d) < .35) ds.push(Array.from(g.d)); }
-    }catch(e){} finally { URL.revokeObjectURL(u); }
-    const m = new Float32Array(ds[0].length); for(const d of ds) for(let i = 0; i < m.length; i++) m[i] += d[i] / ds.length;
-    if(c.photo === k){ c.profD = {k, v:PROFD_V, d:Array.from(m), n:ds.length}; saveChars(); }
-    profDMem.set(k, m); return m;
-  })().finally(() => profDPend.delete(k));
+  const pr = profDesc0(c).then(d => { if(d) profDMem.set(k, d); if(c.profD) delete c.profD; return d; }).finally(() => profDPend.delete(k));
   profDPend.set(k, pr); return pr;
 }
 // 11.9: unghiurile deja făcute se măsoară din nou cu amprenta nouă (din memorie, fără generări): unele ⚠️ pot trece de prag
@@ -3702,7 +3686,7 @@ async function sheetRemeasure(c){
   for(const e of c.sheet.v){
     for(const [kk, dk] of [['k', 'd'], ['k2', 'd2']]){ if(!e[kk] || e[dk] == null) continue; const b = await DB.get(e[kk]).catch(() => null); if(!b) continue;
       const fs = await faceDescs(b).catch(() => []); if(!fs.length) continue; const nd = Math.min(...fs.map(f => fdist(f.d, ref))); if(Number.isFinite(nd)) e[dk] = Math.round(nd * 1000) / 1000; }
-    if(e.weak && e.d != null && e.d < sheetMaxOf(null, e.ang)) delete e.weak;
+    if(e.d != null){ if(e.d < sheetMaxOf(null, e.ang)) delete e.weak; else e.weak = true; }   // 12.0: și invers: ce nu trece de prag redevine ⚠️ (nu intră în poze)
   }
   c.sheet.rv = PROFD_V; await saveChars(); return true;
 }
@@ -4108,7 +4092,8 @@ async function genImage(prompt, ref, signal, ref2, opt = {}){
 const RW_KL = 'runware:400@2', RW_KV = 'runware:400@6', RW_URL = 'https://api.runware.ai/v1';
 // 11.6 (K1): FLUX.2 klein 9B KV = același model 9B, cu reperele calculate o dată și ținute în memorie între pași (până la ~2,5× mai repede
 // cu repere, același preț). Revine singur la klein 9B (o săptămână) dacă Runware refuză modelul; „Klein 9B clasic” din Setări îl alege mereu.
-const rwKlein = () => S.photoModel === 'klein2' || (S.kvBad && Date.now() - S.kvBad < 7 * 864e5) ? RW_KL : RW_KV;
+// 12.0: implicit din nou klein 9B clasic (toată fidelitatea din 9.x–11.5 e reglată pe el); KV doar dacă îl alegi tu („kleinkv”)
+const rwKlein = () => S.photoModel === 'kleinkv' && !(S.kvBad && Date.now() - S.kvBad < 7 * 864e5) ? RW_KV : RW_KL;
 const usd4 = v => '$' + (+v || 0).toFixed(4);   // costurile Runware sunt fracțiuni de cent
 const RW_CAP = {'0.25':.25, '0.5':.5, '1':1, none:Infinity};
 let rwFails = 0, rwFailT = 0, rwToastT = 0;
@@ -4151,6 +4136,7 @@ async function rwImage(prompt, ref, ref2, opt, signal, model){
 const RW_F3 = 'bfl:flux@3-image';
 const F3_SIZES = [[1168, 496], [1088, 544], [1024, 576], [944, 624], [912, 656], [880, 672], [864, 688], [768, 768], [688, 864], [672, 880], [656, 912], [624, 944], [576, 1024], [544, 1088], [496, 1168]];
 function f3Size(size){ const [w, h] = String(size || '768x1024').split('x').map(Number), r = (w || 3) / (h || 4); return F3_SIZES.slice().sort((a, b) => Math.abs(Math.log(a[0] / a[1] / r)) - Math.abs(Math.log(b[0] / b[1] / r)))[0]; }
+if(S.photoModel === 'klein2') S.photoModel = 'klein';   // 12.0: „clasic” e acum implicitul
 const useF3 = () => S.photoModel === 'flux3' && S.rw === 'on' && S.imgProv === 'worker' && rwReady() && rwCapLeft() >= .05;
 async function f3Image(prompt, refs, size, signal, why){
   if(!rwReady()) throw new Error('Runware nu e gata: verifică cheia RUNWARE_KEY (Setări → Poze).');
