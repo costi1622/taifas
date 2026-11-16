@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '11.8';
+const APP_VER = '11.9';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1776,6 +1776,7 @@ const sheetOf = c => c && c.sheet && c.sheet.k === c.photo ? c.sheet.v || [] : [
 let sheetBusy = null;
 async function sheetGen(c, force, onStep, o = {}){
   if(!sheetOn(c) || sheetBusy) return false;
+  await sheetRemeasure(c).catch(() => {});   // 11.9
   const all = Object.keys(SHEET_VIEWS), have = sheetOf(c);
   // 9.99: forțat = toată fișa; altfel doar unghiurile care lipsesc (fișele vechi primesc unghiurile noi); o.only = doar acelea
   const want = o.only ? o.only.filter(a => SHEET_VIEWS[a]) : force ? all.slice() : all.filter(a => { const h = have.find(x => x.ang === a); return !h || !h.k2 || h.weak || (h.bv || 0) !== bodyVer(c); });   // 11.2: și cele făcute pentru alt corp; 11.4: și rezervele ⚠️   // 11.0: și varianta a doua
@@ -1800,22 +1801,37 @@ async function sheetGen(c, force, onStep, o = {}){
       const p = `Edit this exact photo: the same person, photographed from ${vw}. Head and shoulders, ${SHEET_LIT[ang] ? 'softly blurred background' : 'plain softly blurred background, even soft light'}. Keep the exact same face and identity, hairstyle, skin and age, and the same clothes.${bodyHint(c)} ${STIL_TAG.photo}`;
       const p2 = cr ? p + ' Image 2 is a close-up of the same person: use it for the exact face (face shape, eyes, eyebrows, nose, lips, skin, glasses); everything else from image 1.' : p;
       const cands = [], h0 = have.find(y => y.ang === ang), needTwo = !(h0 && h0.k && !force);
-      let stop = false, weakC = null, gotAny = false;
+      let stop = false, weakC = null, gotAny = false, bestAny = null, rf = 0; const RF = o.redo ? 3 : 2;   // 11.9: rafinări ale feței
+      const idImg = cr || base;
       const TR = o.redo ? 12 : SHEET_TRIES;   // 11.5: la ✕ încearcă mai mult (câte 4 deodată pe Runware), ca să nu mai rămână fără variantă nouă
       for(let t = 0; t < TR && !stop; ){
         let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'768x1024', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, Math.min(o.redo ? 4 : 2, TR - t)); }catch(e){ if(t) break; t++; continue; }
         t += Math.max(1, bs.length);
         for(let b of bs){
+          if(await take(b)){ stop = true; break; }
+        }
+        const okN = cands.filter(x => x.d != null && x.strict).length, good = cands.filter(x => x.d != null && x.strict && x.d <= SHEET_GOOD).length;
+        if(good >= 2 || (good >= 1 && okN >= (needTwo ? 2 : 1))) stop = true;   // destul de aproape: nu mai plătește alte încercări
+        // 11.9: niciunul destul de asemănător → a doua trecere: același cadru (unghi, păr, haine, lumină), doar fața refăcută după portret
+        while(!stop && rf < RF && bestAny && sheetRefineOn() && !cands.some(x => x.d != null && x.strict)){
+          rf++;
+          const pr = `Edit image 1: keep the pose, head angle, expression, framing, hair, clothes, light and background of image 1 exactly as they are. Change only the face so it is exactly the face of the person in image 2: the same face shape, eyes, eyebrows, nose, lips, jawline, skin and age${/glasses/i.test(c.physEn || '') ? ', the same glasses' : ''}. Photorealistic, natural, seamless. ${STIL_TAG.photo}`;
+          let rbs = []; try{ rbs = await genMany(pr, bestAny.b, idImg, {model:mdl, size:'768x1024', force:{two:true}, px1:1024, px2:768, p1:pr, quiet:true, why:'profil'}, 2); }catch(e){ break; }
+          for(const b of rbs){ if(await take(b, true)){ stop = true; break; } }
+          const okR = cands.filter(x => x.d != null && x.strict).length, goodR = cands.filter(x => x.d != null && x.strict && x.d <= SHEET_GOOD).length;
+          if(goodR >= 2 || (goodR >= 1 && okR >= (needTwo ? 2 : 1)) || (okR >= 1 && !needTwo)) stop = true;
+        }
+      }
+      async function take(b, refined){
           addUsage(c.id, imgPrice(), 'img', null, 'profil');
           try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
           gotAny = true; const fs = await faceDescs(b).catch(() => []);
           const best = fs.length ? fs.map(f => ({f, d:fdist(f.d, ref)})).sort((x, y) => x.d - y.d)[0] : null;
           if(best && best.d >= mxN && best.d < SHEET_WEAK && (!weakC || best.d < weakC.d)) weakC = {b, d:Math.round(best.d * 1000) / 1000, weak:true, box:{x:best.f.box.x / best.f.W, y:best.f.box.y / best.f.H, w:best.f.box.w / best.f.W, h:best.f.box.h / best.f.H}};   // 11.4: rezerva
-          if(!best){ if((ang === 'side' || ang === 'side2') && !cands.length){ cands.push({b, d:null, box:null}); stop = true; break; } continue; }   // din profil, fața de obicei nu se poate măsura: îl păstrăm, dar nu-l folosim la măsurători
-          if(best.d < mxN) cands.push({strict:best.d < mx, b, d:Math.round(best.d * 1000) / 1000, box:{x:best.f.box.x / best.f.W, y:best.f.box.y / best.f.H, w:best.f.box.w / best.f.W, h:best.f.box.h / best.f.H}});
-        }
-        const okN = cands.filter(x => x.d != null && x.strict).length, good = cands.filter(x => x.d != null && x.strict && x.d <= SHEET_GOOD).length;
-        if(good >= 2 || (good >= 1 && okN >= (needTwo ? 2 : 1))) stop = true;   // destul de aproape: nu mai plătește alte încercări
+          if(!best){ if((ang === 'side' || ang === 'side2') && !cands.length){ cands.push({b, d:null, box:null}); return true; } return false; }   // din profil, fața de obicei nu se poate măsura: îl păstrăm, dar nu-l folosim la măsurători
+          if(!bestAny || best.d < bestAny.d) bestAny = {b, d:best.d};   // 11.9: cel mai apropiat de până acum (se rafinează)
+          if(best.d < mxN) cands.push({strict:best.d < mx, b, d:Math.round(best.d * 1000) / 1000, box:{x:best.f.box.x / best.f.W, y:best.f.box.y / best.f.H, w:best.f.box.w / best.f.W, h:best.f.box.h / best.f.H}, ...(refined ? {rf:true} : {})});
+          return false;
       }
       { const st = cands.filter(x => x.strict || x.d == null), use = st.length ? st : cands; if(use.length) out.push({ang, cands:use}); else if(weakC && (!h0 || (o.redo && (h0.weak || h0.d == null || weakC.d < h0.d) && weakC.d < (h0.d ?? 9)))) out.push({ang, cands:[weakC]}); else if(!gotAny && !h0) noRes++; if(o.redo) redoInfo = {ang, best:use.length ? use[0].d : weakC ? weakC.d : null, old:h0 ? h0.d : null, n:gotAny}; }   // 11.5: la ✕, și o rezervă mai apropiată decât cea de acum o înlocuiește   // 11.2: întâi cele sub pragul tău, altfel sub cel obișnuit; 11.4: lipsea cu totul → rezerva ⚠️
       doneN++; refProg.i = doneN;
@@ -1841,7 +1857,7 @@ async function sheetGen(c, force, onStep, o = {}){
     }
     if(!changed) return false;
     v.sort((a, b) => all.indexOf(a.ang) - all.indexOf(b.ang));
-    c.sheet = {k:k0, v, at:Date.now()}; await saveChars();
+    c.sheet = {k:k0, v, at:Date.now(), rv:PROFD_V}; await saveChars();   // 11.9: măsurate deja cu amprenta de acum
     for(const k of dels) delImg(k).catch(() => {});
     return true;
   } finally { sheetBusy = null; keepAwake(false); refProg.n = 0; }
@@ -3650,7 +3666,46 @@ const bodyDist = (a, b) => { if(!a || !b) return null; let t = a.s.reduce((m, x,
 // (5) pozele din chat cu fața „sigur aceeași” (măsurată față de poza de profil ORIGINALĂ, nu față de alte repere) intră printre
 //     repere în locul unghiurilor automate mai puțin asemănătoare; reperele puse de tine nu se ating. Cel mult 2 (atâtea încap).
 const GOOD_REF = .38;
-async function profDesc(c){ const b = c.photo ? await DB.get(c.photo).catch(() => null) : null; if(!b) return null; const fs = await faceDescs(b).catch(() => []); return fs.length ? fs.sort((x, y) => y.a - x.a)[0].d : null; }
+/* 11.9: amprenta feței din portret = media a trei măsurători ale aceleiași fețe: poza, oglinda ei și fața decupată și mărită la
+   640 px. O singură măsurătoare pe o față mică sau luminată ciudat „sare” ușor, iar atunci tot ce se compară cu ea (fișa, portretul
+   de aproape, pozele din chat) iese mai departe decât e. Se calculează o dată pe portret și se ține minte (c.profD). */
+const PROFD_V = 2, profDMem = new Map(), profDPend = new Map();
+const sheetRefineOn = () => { try{ return localStorage.getItem('taifas-norefine') !== '1'; }catch(e){ return true; } };   // testele vechi (care numără generările) o opresc
+async function profDesc0(c){ const b = c.photo ? await DB.get(c.photo).catch(() => null) : null; if(!b) return null; const fs = await faceDescs(b).catch(() => []); return fs.length ? fs.sort((x, y) => y.a - x.a)[0].d : null; }
+async function profDesc(c){
+  const k = c && c.photo; if(!k) return null;
+  if(profDMem.has(k)) return profDMem.get(k);
+  if(c.profD && c.profD.k === k && c.profD.v === PROFD_V && c.profD.d){ const d = Float32Array.from(c.profD.d); profDMem.set(k, d); return d; }
+  if(profDPend.has(k)) return profDPend.get(k);
+  const pr = (async () => {
+    const b = await DB.get(k).catch(() => null); if(!b) return null;
+    const fs = await faceDescs(b).catch(() => []); if(!fs.length) return null;
+    const f = fs.sort((x, y) => y.a - x.a)[0], ds = [Array.from(f.d)];
+    const u = URL.createObjectURL(b);
+    try{ const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight;
+      const cv1 = document.createElement('canvas'); cv1.width = W; cv1.height = H; const g1 = cv1.getContext('2d'); g1.translate(W, 0); g1.scale(-1, 1); g1.drawImage(im, 0, 0);
+      const bx = f.box, sx = bx.x / f.W * W, sy = bx.y / f.H * H, sw = bx.w / f.W * W, sh = bx.h / f.H * H, cw = Math.min(W, sw * 2.2), ch = Math.min(H, sh * 2.4);
+      const x0 = Math.max(0, Math.min(W - cw, sx + sw / 2 - cw / 2)), y0 = Math.max(0, Math.min(H - ch, sy + sh / 2 - ch * .48)), sc = 640 / Math.max(cw, ch);
+      const cv2 = document.createElement('canvas'); cv2.width = Math.round(cw * sc); cv2.height = Math.round(ch * sc); const g2 = cv2.getContext('2d'); g2.imageSmoothingQuality = 'high'; g2.drawImage(im, x0, y0, cw, ch, 0, 0, cv2.width, cv2.height);
+      for(const cv of [cv1, cv2]){ const bb = await new Promise(r => cv.toBlob(r, 'image/jpeg', .95)); const g = (await faceDescs(bb).catch(() => [])).sort((x, y) => y.a - x.a)[0]; if(g && fdist(g.d, f.d) < .35) ds.push(Array.from(g.d)); }
+    }catch(e){} finally { URL.revokeObjectURL(u); }
+    const m = new Float32Array(ds[0].length); for(const d of ds) for(let i = 0; i < m.length; i++) m[i] += d[i] / ds.length;
+    if(c.photo === k){ c.profD = {k, v:PROFD_V, d:Array.from(m), n:ds.length}; saveChars(); }
+    profDMem.set(k, m); return m;
+  })().finally(() => profDPend.delete(k));
+  profDPend.set(k, pr); return pr;
+}
+// 11.9: unghiurile deja făcute se măsoară din nou cu amprenta nouă (din memorie, fără generări): unele ⚠️ pot trece de prag
+async function sheetRemeasure(c){
+  if(!c || !c.sheet || c.sheet.k !== c.photo || c.sheet.rv === PROFD_V) return false;
+  const ref = await profDesc(c).catch(() => null); if(!ref) return false;
+  for(const e of c.sheet.v){
+    for(const [kk, dk] of [['k', 'd'], ['k2', 'd2']]){ if(!e[kk] || e[dk] == null) continue; const b = await DB.get(e[kk]).catch(() => null); if(!b) continue;
+      const fs = await faceDescs(b).catch(() => []); if(!fs.length) continue; const nd = Math.min(...fs.map(f => fdist(f.d, ref))); if(Number.isFinite(nd)) e[dk] = Math.round(nd * 1000) / 1000; }
+    if(e.weak && e.d != null && e.d < sheetMaxOf(null, e.ang)) delete e.weak;
+  }
+  c.sheet.rv = PROFD_V; await saveChars(); return true;
+}
 async function maybeGoodRef(c, blob, o = {}){   // 10.0 (F9): o.consent = aleasă de tine; o.max = pragul feței (0,30 din chat)
   const GOOD_REF = o.max ?? .38;
   if((S.autoRefs === 'off' && !o.consent) || !c || !c.photo || !blob) return false;
