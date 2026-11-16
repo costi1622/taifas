@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '12.0';
+const APP_VER = '12.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1784,6 +1784,10 @@ async function sheetGen(c, force, onStep, o = {}){
   prioSort(want, SHEET_PRIO);   // 11.1 (V6)
   const tried = (t) => t && t.k === c.photo && (t.set || '') === SHEET_SET() && (t.bv || 0) === bodyVer(c) && Date.now() - t.at < 7 * 864e5;   // 11.0: unghiurile noi se încearcă o dată, chiar dacă fișa veche s-a completat de curând
   if(!force && !o.only && (have.length ? tried(c.sheetFill) : tried(c.sheetTry))) return false;
+  // 12.1: un unghi ⚠️ se reîncearcă singur de cel mult 2 ori (pentru aceeași poză și același corp); apoi doar la ✕ / „🛠️ Repară”
+  if(!force && !o.only){ const wt = c.sheetWeakTry && c.sheetWeakTry.k === c.photo && (c.sheetWeakTry.bv || 0) === bodyVer(c) ? c.sheetWeakTry : (c.sheetWeakTry = {k:c.photo, bv:bodyVer(c), a:{}});
+    for(let i = want.length - 1; i >= 0; i--){ const h = have.find(x => x.ang === want[i]); if(h && h.weak && h.k2 && (h.bv || 0) === bodyVer(c)){ if((wt.a[want[i]] || 0) >= 2) want.splice(i, 1); else wt.a[want[i]] = (wt.a[want[i]] || 0) + 1; } }
+    if(!want.length){ await saveChars(); return false; } }
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
   let sl = false; { const afford = Math.floor((rwFor(mdl) ? rwCapLeft() / rwPer() : capLeft() / (neurPerPhoto(mdl) || 5000)));   // 11.0: cât permite plafonul de azi
     while(want.length && Math.max(4, want.length * 2) > afford){ want.pop(); sl = true; } }
@@ -8678,6 +8682,9 @@ async function reply(target, opts = {}){
     if((proCache || (!opts.pro && !opts.sched)) && S.ctxCompact !== 'off' && (!ch.cAt || Date.now() - ch.cAt > (ch.cTtl === '5m' ? 4.5 * 60e3 : 58 * 60e3))) await compactAfterPause(c, ch, idx).catch(() => false);
     if(!opts.pro && !opts.sched && um) proReplied(ch, idx, um);   // 9.96
     const ctx = await attachUserImages(contextUpTo(idx, ch));
+    // 12.1: mesajul trimis de ea singură când lipsești nu folosește cache-ul (s-ar plăti scrierea degeaba): pleacă doar cu rezumatul
+    //       și ultimele 16 mesaje, nu cu toată fereastra (~11k de tokeni → ~5–6k). Pentru „bună dimineața, mi-e dor de tine” ajunge.
+    if((opts.pro || opts.sched) && !proCache && ctx.length > 18){ const hasSum = /^\(Rezumatul conversației/.test(String((ctx[0] && ctx[0].text) || '')); ctx.splice(0, ctx.length, ...(hasSum ? ctx.slice(0, 2) : []), ...ctx.slice(-16)); }
     if(m.note) ctx.push({role:'user', text:m.note});
     // ora și ziua merg doar în ultimul mesaj al tău (nu în promptul de sistem, ca să rămână în cache)
     const lastU = [...ctx].reverse().find(x => x.role === 'user');
@@ -12581,7 +12588,7 @@ function idScore(c){
 }
 async function idRepair(c, btn){
   if(!c) return;
-  delete c.sheetFill; delete c.sheetTry; delete c.bsheetTry; delete c.closeTry; delete c.autoFullTried; kitRan.delete(c.id); await saveChars();   // 11.6: reîncearcă acum ce lipsește sau a ieșit slab (fără să aștepte 7 zile)
+  delete c.sheetFill; delete c.sheetTry; delete c.bsheetTry; delete c.closeTry; delete c.autoFullTried; delete c.sheetWeakTry; kitRan.delete(c.id); await saveChars();   // 11.6: reîncearcă acum ce lipsește sau a ieșit slab (fără să aștepte 7 zile)
   await fidGo(c, btn);
 }
 
