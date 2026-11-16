@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '12.1';
+const APP_VER = '12.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -59,6 +59,8 @@ document.addEventListener('visibilitychange', () => { if(document.hidden) scFlus
 const _dtf = new Map();
 function dtf(o){ const k = JSON.stringify(o); let f = _dtf.get(k); if(!f){ f = new Intl.DateTimeFormat('ro-RO', o); _dtf.set(k, f); } return f; }
 function fmtD(o, x){ try{ return dtf(o).format(x); }catch(e){ return 'Invalid Date'; } }
+// 12.2: setul-etalon e scos: pozele rulărilor vechi se șterg o dată (cele trecute în repere au fost copiate, rămân)
+setTimeout(() => whenIdle(async () => { if(S.etalonGone) return; for(const c of chars) if(etalonOf(c).length) await etalonClear(c).catch(() => {}); S.etalonGone = 1; saveSettings(); }, 4000, 120e3), 60e3);
 // 11.7: așteaptă până nu mai atingi ecranul ~2,5 s (cel mult un minut)
 const idleGate = (q = 2500) => new Promise(r => whenIdle(r, q, 60e3));
 // 10.6 (C): lucrul de fundal greu (măsurători) pornește doar după câteva secunde în care nu atingi ecranul
@@ -1405,7 +1407,13 @@ const ANG_TXT2 = {
   low:['seen from below', "the same person's face seen from slightly below: use it for how her face looks from that angle; not for clothes, light or background."],
   side2:['seen in side profile', "the same person's face seen in side profile: use it for how the face looks from that angle."],
   serious:['with a calm, serious expression', "the same person's face with a calm, serious expression: use it for how the face looks with that expression."],
-  laugh:['laughing openly', "the same person's face laughing openly: use it for how the face looks with that expression."]};
+  laugh:['laughing openly', "the same person's face laughing openly: use it for how the face looks with that expression."],
+  l34s:['from a three-quarter angle, smiling', "the same person's face from a three-quarter angle with a soft smile: use it for how the face looks when turned; not for clothes, light or background."],
+  r34s:['from a three-quarter angle, smiling', "the same person's face from a three-quarter angle with a soft smile: use it for how the face looks when turned; not for clothes, light or background."],
+  window:['in soft window light', "the same person's face in soft window daylight: use it only for her identity (face, eyes, hair); not for clothes, pose or background."],
+  indoor:['indoors in daylight', "the same person's face indoors in even daylight: use it only for her identity (face, eyes, hair); not for clothes, pose or background."],
+  close:['in a close-up', "a close-up of the same person's face: use it for the exact facial features; not for clothes, light or background."],
+  tilt:['with the head slightly tilted', "the same person's face with the head slightly tilted: use it for how the face looks from that angle; not for clothes, light or background."]};
 async function angleRefsFor(c, shot, room, n = 1){
   if(S.refAng3 === 'off' || n <= 0) return [];
   const t = String(shot || ''), all = sheetPick(c, shot, 99), rs = c.refSet && c.refSet.e ? c.refSet.e : [];
@@ -1508,7 +1516,7 @@ function refsAllHTML(){
    (V4) Ecranul rămâne aprins cât se fac reperele (altfel telefonul încetinește aplicația și pare blocată); progres „x din y”.
    (V5) Recunoașterea feței încearcă din nou placa video la fiecare pornire (după o blocare, o zi pe procesor, nu 30).
    (V6) Ordinea: întâi ce folosesc pozele din chat cel mai des (selfie de sus, ¾, zâmbet; talie în sus, ¾, așezată). */
-const SHEET_PRIO = ['high', 'l34', 'r34', 'smile', 'warm', 'sun', 'side', 'down', 'low', 'laugh', 'serious', 'side2'];
+const SHEET_PRIO = ['high', 'l34', 'r34', 'smile', 'close', 'l34s', 'r34s', 'warm', 'sun', 'indoor', 'window', 'side', 'down', 'low', 'tilt', 'serious'];
 const BSHEET_PRIO = ['waist', 'waist34', '34', 'sit', 'front', 'fit', 'side', 'back', 'walk', 'lean', 'bend', 'lie'];
 const prioSort = (a, P) => a.sort((x, y) => (P.indexOf(x) + 1 || 99) - (P.indexOf(y) + 1 || 99));
 function sheetPar(){ return rwFor('ancorat') ? 2 : 1; }          // V2: în paralel doar pe Runware
@@ -1760,22 +1768,44 @@ const SHEET_VIEWS = {
   // 11.0 (A1): unghiurile care lipseau
   down:'a front view with the head tilted down, looking down at a phone held at chest height, the eyes lowered',
   low:'a low camera angle: the camera slightly below the chin, looking up at the face, eyes towards the camera',
-  side2:'a side profile view: the head turned 90 degrees to the person\'s left, looking straight ahead',
   serious:'a straight front view with a calm, serious, neutral expression, mouth closed, eyes towards the camera',
-  laugh:'a straight front view, laughing openly with the mouth open and the eyes slightly squinting, eyes towards the camera'};
-const SHEET_RO = {l34:'¾ stânga', r34:'¾ dreapta', side:'profil', smile:'zâmbet', high:'selfie de sus', warm:'seara, lumină caldă', sun:'afară, ziua', down:'privire în jos', low:'de jos', side2:'profil stânga', serious:'serioasă', laugh:'râs'};
-const SHEET_LIT = {warm:1, sun:1};   // unghiurile cu lumina scenei (restul: lumină uniformă, fundal simplu)
+  // 12.2: în locul lui „profil stânga” și „râs” (ieșeau de obicei sub prag): unghiuri din față și ¾, care țin fața bine
+  l34s:'a three-quarter view: the head turned about 30 degrees to the person\'s left, a soft natural smile, eyes towards the camera',
+  r34s:'a three-quarter view: the head turned about 30 degrees to the person\'s right, a soft natural smile, eyes towards the camera',
+  window:'a straight front view next to a window, soft daylight falling on the face from one side, a calm relaxed expression, eyes towards the camera',
+  indoor:'a straight front view indoors in even neutral daylight, a slight natural smile, eyes towards the camera',
+  close:'a tight close-up of the face from the front filling most of the frame, a relaxed neutral expression, eyes towards the camera',
+  tilt:'a front view with the head slightly tilted to one side, a gentle smile, eyes towards the camera'};
+const SHEET_RO = {l34:'¾ stânga', r34:'¾ dreapta', side:'profil', smile:'zâmbet', high:'selfie de sus', warm:'seara, lumină caldă', sun:'afară, ziua', down:'privire în jos', low:'de jos', side2:'profil stânga', serious:'serioasă', laugh:'râs', l34s:'¾ stânga, zâmbet', r34s:'¾ dreapta, zâmbet', window:'la fereastră', indoor:'în casă, ziua', close:'prim-plan', tilt:'cap înclinat'};
+const SHEET_LIT = {warm:1, sun:1, window:1};
+// 12.2: testele vechi (scrise pe setul de 12 unghiuri) îl pot reface cu sheetLegacy(); aplicația folosește setul nou
+const SHEET_OLD2 = {side2:'a side profile view: the head turned 90 degrees to the person\'s left, looking straight ahead', laugh:'a straight front view, laughing openly with the mouth open and the eyes slightly squinting, eyes towards the camera'};
+const SHEET_NEW = ['l34s', 'r34s', 'window', 'indoor', 'close', 'tilt'], SHEET_ALL = {...SHEET_VIEWS, ...SHEET_OLD2};
+function sheetLegacy(){ try{ localStorage.setItem('taifas-sheet12', '1'); }catch(e){} const order = ['l34', 'r34', 'side', 'smile', 'high', 'warm', 'sun', 'down', 'low', 'side2', 'serious', 'laugh']; for(const k of Object.keys(SHEET_VIEWS)) delete SHEET_VIEWS[k]; for(const k of order) SHEET_VIEWS[k] = SHEET_ALL[k]; }
+try{ if(localStorage.getItem('taifas-sheet12') === '1') sheetLegacy(); }catch(e){}   // unghiurile cu lumina scenei (restul: lumină uniformă, fundal simplu)
 // 9.99 (2): un unghi intră în fișă doar dacă e chiar aceeași față: până la 3 încercări, rămâne cea mai apropiată, sub 0,42
 //           (înainte: prima sub 0,50, adică exact pragul „altă față”; un unghi la 0,49 devenea reper pentru toate pozele)
 let redoInfo = null;   // 11.5: ce a ieșit la ultimul ✕ (pentru mesaj)
+// 12.2: unghiurile scoase din fișa unui personaj (pentru aceeași poză și același corp) + curățenia unghiurilor vechi
+const sheetDropOf = c => new Set(c && c.sheetDrop && c.sheetDrop.k === c.photo && (c.sheetDrop.bv || 0) === bodyVer(c) ? c.sheetDrop.a || [] : []);
+async function sheetDropAdd(c, angs){
+  const d = sheetDropOf(c); for(const a of angs) d.add(a); c.sheetDrop = {k:c.photo, bv:bodyVer(c), a:[...d]};
+  if(c.sheet && c.sheet.v){ const out = c.sheet.v.filter(e => angs.includes(e.ang)); c.sheet.v = c.sheet.v.filter(e => !angs.includes(e.ang)); for(const e of out) for(const k of [e.k, e.k2]) if(k) delImg(k).catch(() => {}); }
+  await saveChars();
+}
+async function sheetTidy(c){   // unghiurile care nu mai sunt în fișă (profil stânga, râs): se șterg cu pozele lor
+  if(!c || !c.sheet || !Array.isArray(c.sheet.v)) return; const out = c.sheet.v.filter(e => !SHEET_VIEWS[e.ang]); if(!out.length) return;
+  c.sheet.v = c.sheet.v.filter(e => SHEET_VIEWS[e.ang]); for(const e of out) for(const k of [e.k, e.k2]) if(k) delImg(k).catch(() => {}); await saveChars();
+}
 const SHEET_MAX = .42, SHEET_GOOD = .32, SHEET_TRIES = 4, SHEET_WEAK = .75;   // 11.4: rezerva ⚠️ (nefolosită), ca unghiul să nu lipsească   // 10.9: o încercare în plus (se oprește oricum la prima destul de bună)
 const sheetMaxOf = (c, ang) => (ang === 'side' || ang === 'side2' ? .52 : ang === 'down' || ang === 'low' || ang === 'laugh' ? .46 : 0) ||   // 11.4: și râsul (gura deschisă, ochii mijiți)
   Math.max(.3, SHEET_MAX - .04 * Math.min(3, ((c && c.sheetRej) || {})[ang] || 0));   // 10.9: din profil, fața e departe de cea din față prin natura ei (lipsea mereu)   // (5) unghiul respins de tine: mai strict
 const sheetOn = c => S.idSheet !== 'off' && S.imgProv === 'worker' && !!S.wkBase && !!c && !!c.photo && (c.stil || 'photo') === 'photo';
-const sheetOf = c => c && c.sheet && c.sheet.k === c.photo ? c.sheet.v || [] : [];
+const sheetOf = c => c && c.sheet && c.sheet.k === c.photo ? (c.sheet.v || []).filter(x => SHEET_VIEWS[x.ang]) : [];   // 12.2: doar unghiurile de acum
 let sheetBusy = null;
 async function sheetGen(c, force, onStep, o = {}){
   if(!sheetOn(c) || sheetBusy) return false;
+  await sheetTidy(c).catch(() => {});   // 12.2
   await sheetRemeasure(c).catch(() => {});   // 11.9
   const all = Object.keys(SHEET_VIEWS), have = sheetOf(c);
   // 9.99: forțat = toată fișa; altfel doar unghiurile care lipsesc (fișele vechi primesc unghiurile noi); o.only = doar acelea
@@ -1786,7 +1816,10 @@ async function sheetGen(c, force, onStep, o = {}){
   if(!force && !o.only && (have.length ? tried(c.sheetFill) : tried(c.sheetTry))) return false;
   // 12.1: un unghi ⚠️ se reîncearcă singur de cel mult 2 ori (pentru aceeași poză și același corp); apoi doar la ✕ / „🛠️ Repară”
   if(!force && !o.only){ const wt = c.sheetWeakTry && c.sheetWeakTry.k === c.photo && (c.sheetWeakTry.bv || 0) === bodyVer(c) ? c.sheetWeakTry : (c.sheetWeakTry = {k:c.photo, bv:bodyVer(c), a:{}});
-    for(let i = want.length - 1; i >= 0; i--){ const h = have.find(x => x.ang === want[i]); if(h && h.weak && h.k2 && (h.bv || 0) === bodyVer(c)){ if((wt.a[want[i]] || 0) >= 2) want.splice(i, 1); else wt.a[want[i]] = (wt.a[want[i]] || 0) + 1; } }
+    const drop = sheetDropOf(c), gone = [];
+    for(let i = want.length - 1; i >= 0; i--){ const a = want[i]; if(drop.has(a)){ want.splice(i, 1); continue; } const h = have.find(x => x.ang === a);
+      if(h && h.weak && h.k2 && (h.bv || 0) === bodyVer(c)){ if((wt.a[a] || 0) >= 2){ want.splice(i, 1); gone.push(a); } else wt.a[a] = (wt.a[a] || 0) + 1; } }
+    if(gone.length) await sheetDropAdd(c, gone);   // 12.2: scos din fișă (pozele lui se șterg); ✕ / „Mai încearcă” îl readuce
     if(!want.length){ await saveChars(); return false; } }
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
   let sl = false; { const afford = Math.floor((rwFor(mdl) ? rwCapLeft() / rwPer() : capLeft() / (neurPerPhoto(mdl) || 5000)));   // 11.0: cât permite plafonul de azi
@@ -1868,20 +1901,23 @@ async function sheetGen(c, force, onStep, o = {}){
 }
 // 9.99 (5): un unghi care nu-ți place: îl scoți, se reface doar el (mai strict), și ține minte că l-ai respins
 async function sheetReject(c, ang, onStep){
-  const v = sheetOf(c), x = v.find(y => y.ang === ang); if(!x) return false;
+  const v = sheetOf(c), x = v.find(y => y.ang === ang); if(!x && !sheetDropOf(c).has(ang)) return false;   // 12.2: și un unghi scos
   c.sheetRej = c.sheetRej || {}; c.sheetRej[ang] = Math.min(3, (c.sheetRej[ang] || 0) + 1); await saveChars();   // 11.2: cel vechi rămâne până iese unul nou
+  if(c.sheetDrop && Array.isArray(c.sheetDrop.a)) c.sheetDrop.a = c.sheetDrop.a.filter(a => a !== ang);   // 12.2
   return await sheetGen(c, false, onStep, {only:[ang], redo:true}).catch(() => false);
 }
 // cele mai potrivite unghiuri pentru scena cerută
 function sheetPick(c, shot, n = 2){
   const v = sheetOf(c).filter(x => !x.weak && !refOut(c, x.k)); if(!v.length || n <= 0) return [];   // 11.4: fără rezervele ⚠️   // 10.5 (R3)
-  const t = String(shot || '').toLowerCase(), sc = {l34:1, r34:.9, smile:.8, high:.7, warm:.5, sun:.5, side:.3, down:.4, low:.3, side2:.3, serious:.5, laugh:.4};
+  const t = String(shot || '').toLowerCase(), sc = {l34:1, r34:.9, smile:.8, high:.7, warm:.5, sun:.5, side:.3, down:.4, low:.3, side2:.3, serious:.5, laugh:.4, l34s:.95, r34s:.85, close:.9, indoor:.6, window:.55, tilt:.5};   // 12.2
   // 9.99 (3): selfie-ul ținut de sus; lumina scenei (seara / lumânări / bar → caldă; afară / plajă / soare → zi)
   if(/\bselfie\b|from above|high angle|looking up at the camera/.test(t)) sc.high = 1.6;
   if(/\b(evening|night|lamp|candle\w*|bar|pub|restaurant|dinner|cozy|bedroom|warm (light|glow)|dim)\b/.test(t)) sc.warm = 2.2;
   if(/\b(outdoors?|outside|sun\w*|beach|park|garden|street|daylight|hike|hiking|terrace|balcony|mountain\w*|sea|lake)\b/.test(t)) sc.sun = 2;
   if(/\b(profile|side view|from the side|in profile|looking (away|out|to the side|sideways|out of the window)|turned away|over (her|his|the) shoulder)\b/.test(t)){ sc.side = /\bleft\b/.test(t) ? 2.9 : 3; sc.side2 = /\bleft\b/.test(t) ? 3 : 2.9; }
-  if(/\b(laugh\w*|smil\w*|grin\w*|teeth)\b/.test(t)) sc.smile = 2.5;
+  if(/\b(laugh\w*|smil\w*|grin\w*|teeth)\b/.test(t)){ sc.smile = 2.5; sc.l34s = 2; sc.r34s = 1.9; }
+  if(/\b(close-?up|portrait|face fills)\b/.test(t)) sc.close = 2.2;
+  if(/\b(window|living room|kitchen|home|indoors?|apartment|office)\b/.test(t) && !/\b(evening|night|lamp|candle)/.test(t)){ sc.indoor = 1.8; sc.window = 1.7; }   // 12.2
   if(/\b(looking down|reading|texting|scrolling|at (her|his) phone)\b/.test(t)) sc.down = 2.2;   // 11.0 (A1)
   if(/\b(from below|low angle|low-angle)\b/.test(t)) sc.low = 2.2;
   if(/\b(serious|neutral expression|thoughtful|pensive|sad|tired|focused)\b/.test(t)) sc.serious = 2;
@@ -2293,8 +2329,8 @@ function photoWarm(c){
   (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => go(), {timeout:5000});
 }
 /* (3) editorul de corp, același în creator și în „Modifică poza”: pe grupuri, cu ‹ › pe fiecare rând, și ce schimbi, înainte să aplici */
-const BODY_GROUPS = [['📏', 'Siluetă', ['build', 'tone', 'shoulders', 'arms', 'neck', 'posture']], ['👕', 'Trunchi', ['bust', 'bustShape', 'torsoLen', 'waist', 'belly']],
-  ['👖', 'Partea de jos', ['hips', 'glutes', 'legsLen', 'legs']], ['🎨', 'Pielea', ['skin']]];
+const BODY_GROUPS = [['📏', 'Siluetă', ['build', 'figure', 'tone', 'shoulders', 'arms', 'hands', 'neck', 'posture']], ['👕', 'Trunchi', ['bust', 'bustShape', 'torsoLen', 'waist', 'belly', 'back']],
+  ['👖', 'Partea de jos', ['hips', 'glutes', 'legsLen', 'legs', 'thighs', 'calves']], ['🎨', 'Pielea', ['skin']]];   // 12.2: formă, mâini, spate, coapse, gambe
 const hTxt = h => (h / 100).toFixed(2).replace('.', ',') + ' m';
 // schimbările de corp, în engleză, pentru generator: doar ce s-a schimbat (valoarea nouă)
 function bodyChangesEn(A, B){
@@ -2590,8 +2626,8 @@ function kitState(c){
     add('intreaga', '🧍 Poza întreagă (modelul de corp)', !!c.photoFull, c.photoFull ? (c.fullOwn ? 'poza ta (exactă)' : 'generată din portret') : 'lipsește: corpul ar fi aproximativ');
     const sv = sheetOf(c).length, bv = bsheetOf(c).length, kf = c.photoFull || '';
     const sTried = !sv && c.sheetTry && c.sheetTry.k === c.photo, bTried = !bv && c.bsheetTry && c.bsheetTry.k === kf;
-    const nV = Object.keys(SHEET_VIEWS).length, sFill = !!(c.sheetFill && c.sheetFill.k === c.photo && (c.sheetFill.set || '') === SHEET_SET() && (c.sheetFill.bv || 0) === bodyVer(c) && Date.now() - c.sheetFill.at < 7 * 864e5);   // 11.4
-    add('fisa', '🧩 Fișa feței', sv >= nV || (sv > 0 && (sFill || !sheetOn(c))), sv ? sv + ' din ' + nV + ' unghiuri' + (sv < nV ? (sFill ? ' (celelalte se reîncearcă peste câteva zile)' : ' (se adaugă cele noi)') : '') : sTried ? 'n-a ieșit data trecută (fața nu s-a putut verifica sau serviciul a fost ocupat): apasă „Completează acum”' : 'se face în fundal');
+    const nDrop = sheetDropOf(c).size, nV = Object.keys(SHEET_VIEWS).length - nDrop, sFill = !!(c.sheetFill && c.sheetFill.k === c.photo && (c.sheetFill.set || '') === SHEET_SET() && (c.sheetFill.bv || 0) === bodyVer(c) && Date.now() - c.sheetFill.at < 7 * 864e5);   // 11.4
+    add('fisa', '🧩 Fișa feței', sv >= nV || (sv > 0 && (sFill || !sheetOn(c))), sv ? sv + ' din ' + nV + ' unghiuri' + (sv < nV ? (sFill ? ' (celelalte se reîncearcă peste câteva zile)' : ' (se adaugă cele noi)') : '') + (nDrop ? ` · ${nDrop} ${nDrop === 1 ? 'scos' : 'scoase'} (nu ieșeau destul de asemănătoare)` : '') : sTried ? 'n-a ieșit data trecută (fața nu s-a putut verifica sau serviciul a fost ocupat): apasă „Completează acum”' : 'se face în fundal');
     if(sheetOn(c)){ const cr = c.closeRef && c.closeRef.k === c.photo ? c.closeRef : null;   // 10.5 (R2)
       add('aproape', '🔍 Portretul de aproape', (!!cr && (!!cr.img || !!cr.skip || !!cr.fail)) || !!(c.closeTry && c.closeTry.k === c.photo && Date.now() - c.closeTry.at < 7 * 864e5), cr ? (cr.img ? (cr.off ? 'oprit de tine' : 'fața ' + idPct(cr.d) + '% · reperul de față la poze') : cr.skip ? 'nu e nevoie (fața e mare în portret)' : cr.fail ? 'n-a ieșit destul de fidel: rămâne decupajul din portret' : '') : 'se face după fișă', sv > 0, !!cr && !!cr.fail && !cr.img); }
     { const rs = c.refSet && c.refSet.e ? c.refSet : null, o = rs ? rs.e.filter(x => x.out).length : 0;   // 10.5 (R3)
@@ -2643,7 +2679,7 @@ async function kitBuild(c, o = {}){
       if(o.gen){ step('culori'); try{ await lookRefOf(c); }catch(e){} }   // 10.0: culorile și proporțiile feței, calibrate pe tot pachetul (ultimul pas: nu ține în loc ce costă); altfel se măsoară la prima poză
     }
     if(kitKey(c) === k0){ c.kit = {v:KIT_V, k:k0, at:Date.now(), gen:!!o.gen || !!(c.kit && c.kit.gen && c.kit.k === k0)}; await saveChars(); }
-    if(o.gen && etalonOf(c).length && !etalonFresh(c)){ const sg = refsSig(c); if(c.etalonAsk !== sg){ c.etalonAsk = sg; await saveChars(); if(o.toast) toast(`🎯 Reperele lui ${c.name} s-au schimbat. Când vrei, verifică-le: profil → Poze → Reperele → „Verifică fișa”.`, 5000); } }   // 11.3 (E2): o singură dată pe set de repere
+    if(false){ /* 12.2: setul-etalon e scos */ const sg = refsSig(c); if(c.etalonAsk !== sg){ c.etalonAsk = sg; await saveChars(); if(o.toast) toast(`🎯 Reperele lui ${c.name} s-au schimbat. Când vrei, verifică-le: profil → Poze → Reperele → „Verifică fișa”.`, 5000); } }   // 11.3 (E2): o singură dată pe set de repere
     return true;
   } finally { kitBusy.delete(c.id); step(''); if(o.gen) keepAwake(false); }
 }
@@ -6793,8 +6829,10 @@ function drawSheet(c, box){
   box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfKit"><b>🧬 Pachetul de identitate ${K.ok ? '<span class="kok">✅ complet</span>' : `<span class="kno">${kb ? '⏳ se completează' : '⚠️ ' + K.miss.length + ' de completat'}</span>`}</b><small>Tot ce folosește aplicația ca să-l reproducă la fel în orice poză (chat, grup, stories, avatare). Se reface singur când schimbi o poză.</small>
     <ul class="kitl">${K.items.map(x => `<li class="${x.ok ? 'ok' : x.warn ? 'warn' : 'no'}"><span>${x.ok ? '✅' : x.warn ? '⚠️' : '⏳'} ${esc(x.l)}</span><small>${esc(x.v || '')}</small></li>`).join('')}</ul>
     ${looksYoung(c) ? `<small style="margin-top:8px;color:#ffb020">🔒 Nu pare clar adult(ă) după poză${c.ageLook && c.ageLook.a != null ? ` (vârsta estimată: ${c.ageLook.a} de ani, din ${c.ageLook.n} ${c.ageLook.n === 1 ? 'poză' : 'poze'}${c.ageLook.ta != null ? '; după descrierea pozei: ~' + c.ageLook.ta : ''})` : ''}: fișa corpului, schimbările de corp și conținutul intim sunt oprite pentru acest personaj. Măsurarea se reface singură când are mai multe poze ale feței (după „Completează”). <button class="btn sm" id="pfAgeRe" type="button">↻ Măsoară din nou</button></small>` : ''}
+    ${sheetDropOf(c).size && S.imgProv !== 'none' ? `<small style="margin-top:6px">✂️ Scoase din fișă, pentru că rămâneau sub prag: ${[...sheetDropOf(c)].map(a => SHEET_RO[a] || a).join(', ')}. <button class="btn sm" id="pfDropRe" type="button">↺ Mai încearcă</button></small>` : ''}
     ${!K.ok && S.imgProv !== 'none' ? `<div class="btns"><button class="btn sm pri" id="pfKitGo"${kb ? ' disabled' : ''}>${kb ? '<span class="spin"></span> Se completează…' : '🧬 Completează acum'}</button></div>` : ''}</div>`);
   { const ar = box.querySelector('#pfAgeRe'); if(ar) ar.onclick = async () => { ar.disabled = true; ar.innerHTML = '<span class="spin"></span> Măsor…'; delete c.ageLook; try{ await identityOf(c); }catch(e){} await ageLook(c).catch(() => {}); const el = $('#pfKit'); if(el){ const sh = $('#pfSheet'); el.remove(); if(sh) sh.remove(); drawSheet(c, box); } toast(looksYoung(c) ? '🔒 Tot nu pare clar adult(ă) după poze.' : '✅ Pare clar adult(ă): funcțiile de corp sunt pornite.', 3500); }; }   // 11.8
+  { const dr = box.querySelector('#pfDropRe'); if(dr) dr.onclick = async () => { const a = [...sheetDropOf(c)]; delete c.sheetDrop; if(c.sheetWeakTry) for(const x of a) delete c.sheetWeakTry.a[x]; await saveChars(); dr.disabled = true; dr.innerHTML = '<span class="spin"></span>'; await sheetGen(c, false, null, {only:a, redo:true}).catch(() => false); const el = $('#pfKit'); if(el){ const sh = $('#pfSheet'); el.remove(); if(sh) sh.remove(); drawSheet(c, box); } }; }   // 12.2
   { const kg = box.querySelector('#pfKitGo'); if(kg) kg.onclick = async () => { kg.disabled = true; kg.innerHTML = '<span class="spin"></span> Se completează…';
       if(kitBusy.has(c.id)) for(let i = 0; i < 240 && kitBusy.has(c.id); i++) await sleep(500);   // 9.93: se completa deja în fundal: îl așteaptă
       await kitBuild(c, {gen:true, force:true, toast:true, onStep:st => { if(kg.isConnected && st) kg.innerHTML = '<span class="spin"></span> ' + esc((K.items.find(x => x.k === st) || {l:st}).l) + (refProg.n && (st === 'fisa' || st === 'fisaCorp') ? ` · ${refProg.i} din ${refProg.n}` : ''); }}).catch(() => {});
@@ -6917,7 +6955,7 @@ function drawFidCard(c, box){
   if(c.photo && S.imgProv === 'worker'){ drawFaceRef(c, R); drawCloseRef(c, R); drawDetail(c, R); drawCons(c, R); }   // 10.5
   drawRefs(c, R);          // + pachetul de identitate și fișa (drawSheet)
   drawBodyNote(c, D);
-  if(c.photo && photo){ drawEtalon(c, R); drawAudit(c, D); drawStats(c, Z); }   // 11.3 (E1): setul verifică fișa, deci stă lângă ea
+  if(c.photo && photo){ drawAudit(c, D); drawStats(c, Z); }   // 12.2: setul-etalon e scos   // 11.3 (E1): setul verifică fișa, deci stă lângă ea
   $$('#pfFidDesc .fidclamp').forEach(e => e.onclick = () => e.classList.toggle('all'));
   $$('#pfFid .fidt').forEach(b => b.onclick = () => { const s = b.parentNode; s.classList.toggle('open'); fidOpen[s.dataset.fs] = s.classList.contains('open'); });
   fidHead(c);
@@ -6933,11 +6971,11 @@ function fidHead(c){
   if(c.photo && photo && !a) todo.push('descrierea nu e verificată cu pozele');
   else if(c.photo && photo && !fresh) todo.push('descrierea sau pozele s-au schimbat: verifică din nou');
   if(open.length) todo.push(plural(open.length, 'contradicție', 'contradicții') + ' între text și poze');
-  if(last && last.set === 2 && !etalonFresh(c) && !kb && K && K.ok) todo.push('reperele s-au schimbat: verifică fișa (set-etalon)');   // 11.3 (E2)
+
   const chip = (t, v, w) => v == null ? '' : `<span class="fidchip${w ? ' w' : ''}">${t} <b>${v}${typeof v === 'number' ? '%' : ''}</b></span>`;
   const act = !c.photo ? '' : K && !K.ok && !kb ? '🧬 Completează și verifică' : c.photo && photo && (!a || !fresh) ? '🔎 Verifică descrierea cu pozele' : open.length ? '✍️ Rezolvă contradicțiile' : '';
   h.innerHTML = `<b>🎯 Fidelitatea · ${esc(c.name)}</b>${sc ? `<div class="idbig"><b>${sc.n}</b><span>/100 · nota de identitate<small>${sc.low.length ? 'trage în jos: ' + sc.low.map(p => esc(p.l) + ' ' + Math.round(p.v * 100) + '%').join(', ') : 'totul e în regulă'}</small></span></div>` : ''}
-    <div class="fidchips">${chip('👤 fața', s.face, s.face != null && s.face < 70)}${chip('🧍 corpul', s.body, s.body != null && s.body < 70)}${chip('🎨 culori', s.look, s.look != null && s.look < 70)}${last && last.score != null ? `<span class="fidchip">🎯 etalon <b>${last.score}</b></span>` : ''}${s.n ? `<span class="fidchip dim">din ${plural(s.n, 'poză', 'poze')}</span>` : '<span class="fidchip dim">cifrele apar de la prima poză</span>'}</div>
+    <div class="fidchips">${chip('👤 fața', s.face, s.face != null && s.face < 70)}${chip('🧍 corpul', s.body, s.body != null && s.body < 70)}${chip('🎨 culori', s.look, s.look != null && s.look < 70)}${s.n ? `<span class="fidchip dim">din ${plural(s.n, 'poză', 'poze')}</span>` : '<span class="fidchip dim">cifrele apar de la prima poză</span>'}</div>
     <small class="fidtodo">${todo.length ? '⚠️ ' + todo.map(esc).join(' · ') : c.photo ? `✅ Reperele sunt complete${a ? ', descrierea e verificată' : ''}${must.length ? ', ' + plural(must.length, 'trăsătură obligatorie', 'trăsături obligatorii') : ''}.` : ''}</small>
     ${act ? `<div class="btns"><button class="btn sm pri" id="pfFidGo">${act}</button></div>` : ''}
     ${c.photo && photo ? `<div class="btns">${sc && sc.n < 90 && !kb ? '<button class="btn sm" id="pfIdFix">🛠️ Repară</button>' : ''}<button class="btn sm" id="pfLook">🎛️ Reglează aspectul</button></div>` : ''}`;
@@ -11818,13 +11856,13 @@ const CR_MINOR = /\b([1-9]|1[0-7])\s*(de\s*)?ani\b|\b([1-9]|1[0-7])\s*(years?|yo
 const CR_ZONES = [['gen', 'Vârstă și gen', 'ex. femeie, 28 de ani'], ['fata', 'Față', 'formă, ochi, sprâncene, nas, buze, ten, pistrui, alunițe, machiaj'], ['par', 'Păr', 'culoare, lungime, textură, coafură, breton'],
   ['corp', 'Corp: alte detalii', 'orice altceva despre corp'], ['maini', 'Mâini și detalii', 'unghii, inele, brățări, tatuaje și piercinguri (cu locul), ochelari'], ['tinuta', 'Ținută', 'haine, culori, accesorii'],
   ['incaltaminte', 'Încălțăminte', 'ex. sandale albe'], ['poza', 'Poziție', 'ex. în picioare, relaxată, o mână în buzunar'], ['loc', 'Loc', 'ex. o terasă la apus'], ['lumina', 'Lumină', 'ex. lumină caldă de apus']];
-const CR_BODY = [['build', 'Constituție', ['slabă', 'suplă', 'atletică', 'medie', 'curbilinie', 'plinuță', 'plină', 'musculoasă']], ['tone', 'Tonus', ['moale', 'normal', 'tonifiat', 'definit']], ['shoulders', 'Umeri', ['înguști', 'medii', 'lați']],
+const CR_BODY = [['build', 'Constituție', ['slabă', 'suplă', 'atletică', 'medie', 'curbilinie', 'plinuță', 'plină', 'musculoasă']], ['figure', 'Forma corpului', ['clepsidră', 'pară', 'măr', 'dreptunghi', 'triunghi inversat']], ['tone', 'Tonus', ['moale', 'normal', 'tonifiat', 'definit']], ['shoulders', 'Umeri', ['înguști', 'medii', 'lați']],
   ['neck', 'Gât', ['scurt', 'mediu', 'lung']], ['posture', 'Postură', ['dreaptă', 'relaxată']], ['torsoLen', 'Trunchi: lungime', ['scurt', 'mediu', 'lung']],
-  ['bust', 'Bust / piept: mărime', ['plat', 'mic', 'mediu', 'mare', 'foarte mare']], ['bustShape', 'Bust: formă', ['rotund', 'natural, în formă de lacrimă', 'ridicat, ferm', 'ușor lăsat', 'depărtat', 'apropiat']],
-  ['waist', 'Talie', ['foarte îngustă', 'îngustă', 'medie', 'lată']], ['belly', 'Abdomen', ['plat', 'tonifiat', 'ușor rotunjit', 'rotunjit']], ['hips', 'Șolduri', ['înguste', 'medii', 'late', 'foarte late']],
-  ['glutes', 'Fese', ['mici', 'medii', 'rotunde', 'pline']], ['legsLen', 'Picioare: lungime', ['lungi', 'medii', 'scurte']], ['legs', 'Picioare: formă', ['subțiri', 'tonifiate', 'pline', 'musculoase']],
-  ['arms', 'Brațe', ['subțiri', 'tonifiate', 'pline', 'musculoase']], ['skin', 'Tenul corpului', ['foarte deschis', 'deschis', 'măsliniu', 'bronzat', 'închis']]];
-const CR_BODY_LBL = {tone:'tonus', neck:'gât', posture:'postură', torsoLen:'trunchi', build:'constituție', shoulders:'umeri', bust:'bust', bustShape:'formă bust', waist:'talie', belly:'abdomen', hips:'șolduri', glutes:'fese', legsLen:'picioare', legs:'picioare', arms:'brațe', skin:'ten'};
+  ['bust', 'Bust / piept: mărime', ['plat', 'mic', 'mediu', 'plin', 'mare', 'foarte mare']], ['bustShape', 'Bust: formă', ['rotund', 'natural, în formă de lacrimă', 'ridicat, ferm', 'ușor lăsat', 'depărtat', 'apropiat']],
+  ['waist', 'Talie', ['foarte îngustă', 'îngustă', 'medie', 'lată']], ['belly', 'Abdomen', ['plat', 'tonifiat', 'ușor rotunjit', 'rotunjit']], ['back', 'Spate', ['drept', 'ușor arcuit', 'arcuit']], ['hips', 'Șolduri', ['înguste', 'medii', 'late', 'foarte late']],
+  ['glutes', 'Fese', ['mici', 'medii', 'rotunde', 'pline']], ['legsLen', 'Picioare: lungime', ['lungi', 'medii', 'scurte']], ['legs', 'Picioare: formă', ['subțiri', 'tonifiate', 'pline', 'musculoase']], ['thighs', 'Coapse', ['subțiri', 'medii', 'pline', 'musculoase']], ['calves', 'Gambe', ['subțiri', 'medii', 'pline', 'musculoase']],
+  ['arms', 'Brațe', ['subțiri', 'tonifiate', 'pline', 'musculoase']], ['hands', 'Mâini', ['mici, delicate', 'medii', 'mari']], ['skin', 'Tenul corpului', ['foarte deschis', 'deschis', 'măsliniu', 'bronzat', 'închis']]];
+const CR_BODY_LBL = {figure:'formă', back:'spate', thighs:'coapse', calves:'gambe', hands:'mâini', tone:'tonus', neck:'gât', posture:'postură', torsoLen:'trunchi', build:'constituție', shoulders:'umeri', bust:'bust', bustShape:'formă bust', waist:'talie', belly:'abdomen', hips:'șolduri', glutes:'fese', legsLen:'picioare', legs:'picioare', arms:'brațe', skin:'ten'};
 const CR_ADJ = [['👗 Altă ținută', 'altă ținută'], ['💇 Alt păr', 'altă coafură'], ['🪶 Mai suplă', 'corp mai suplu, cu proporții firești'], ['🍑 Mai plinuță', 'corp mai plin, cu proporții firești'], ['🏋️ Mai atletică', 'corp mai atletic, tonifiat'],
   ['⬆️ Bust mai mare', 'bust mai mare, natural'], ['⬇️ Bust mai mic', 'bust mai mic, natural'], ['📏 Mai înaltă', 'mai înaltă, cu proporții firești'], ['🕺 Altă poziție', 'altă poziție a corpului, la fel de naturală'], ['🏙️ Alt loc', 'alt loc în fundal'], ['😊 Zâmbet', 'un zâmbet cald, natural']];
 const crModel = (n, size) => {
@@ -11899,10 +11937,15 @@ JSON: {"zones":{${CR_ZONES.map(([k]) => `"${k}":""`).join(',')}},"body":{"h":0${
 const CR_BODY_EN = {
   build:{'slabă':'very slim thin build', 'suplă':'slender build', 'atletică':'athletic toned build', 'medie':'average build', 'curbilinie':'curvy hourglass figure', 'plinuță':'soft chubby full-figured build', 'plină':'plus-size full-figured build', 'musculoasă':'muscular build'},
   shoulders:{'înguști':'narrow shoulders', 'medii':'average shoulders', 'lați':'broad shoulders'},
+  figure:{'clepsidră':'hourglass body shape (bust and hips balanced, clearly defined waist)', 'pară':'pear-shaped body (hips wider than the shoulders)', 'măr':'apple-shaped body (fuller around the middle)', 'dreptunghi':'straight rectangular body shape (little waist definition)', 'triunghi inversat':'inverted-triangle body shape (shoulders wider than the hips)'},
+  back:{'drept':'straight back', 'ușor arcuit':'a slight natural curve in the lower back', 'arcuit':'a pronounced curve in the lower back'},
+  thighs:{'subțiri':'slim thighs', 'medii':'average thighs', 'pline':'full thick thighs', 'musculoase':'muscular thighs'},
+  calves:{'subțiri':'slim calves', 'medii':'average calves', 'pline':'full calves', 'musculoase':'muscular calves'},
+  hands:{'mici, delicate':'small delicate hands with slender fingers', 'medii':'average hands', 'mari':'large hands'},
   tone:{'moale':'soft body with little muscle definition', 'normal':'normal muscle tone', 'tonifiat':'toned body', 'definit':'clearly defined muscles'},
   neck:{'scurt':'short neck', 'mediu':'average neck', 'lung':'long slender neck'}, posture:{'dreaptă':'upright straight posture', 'relaxată':'relaxed natural posture'},
   torsoLen:{'scurt':'short torso', 'mediu':'average torso length', 'lung':'long torso'},
-  bust:{'plat':'flat chest', 'mic':'small bust', 'mediu':'medium bust', 'mare':'large bust', 'foarte mare':'very large bust'},
+  bust:{'plat':'flat chest', 'mic':'small bust', 'mediu':'medium bust', 'plin':'full bust', 'mare':'large bust', 'foarte mare':'very large bust'},
   bustShape:{'rotund':'round bust shape', 'natural, în formă de lacrimă':'natural teardrop-shaped bust', 'ridicat, ferm':'high firm bust', 'ușor lăsat':'naturally slightly sagging bust', 'depărtat':'wide-set bust', 'apropiat':'close-set bust'},
   waist:{'foarte îngustă':'very narrow waist', 'îngustă':'narrow waist', 'medie':'average waist', 'lată':'wide waist'},
   belly:{'plat':'flat stomach', 'tonifiat':'toned stomach', 'ușor rotunjit':'slightly soft rounded belly', 'rotunjit':'rounded belly'},
@@ -12574,12 +12617,11 @@ function idScore(c){
   if(!c || !c.photo || (c.stil || 'photo') !== 'photo') return null;
   const parts = [], add = (k, l, v, w) => { if(v != null && Number.isFinite(v)) parts.push({k, l, v:Math.max(0, Math.min(1, v)), w}); };
   const K = kitState(c); add('kit', 'reperele de bază', K.items.length ? K.items.filter(x => x.ok || x.warn).length / K.items.length : 0, 25);
-  const nV = Object.keys(SHEET_VIEWS).length, sv = sheetOf(c).filter(x => !x.weak), sd = sv.filter(x => x.d != null);
+  const nV = Math.max(1, Object.keys(SHEET_VIEWS).length - sheetDropOf(c).size), sv = sheetOf(c).filter(x => !x.weak), sd = sv.filter(x => x.d != null);   // 12.2
   add('fata', 'fișa feței', .5 * sv.length / nV + .5 * (sd.length ? sd.reduce((a, x) => a + idPct(x.d), 0) / sd.length / 100 : 0), 20);
   if(c.photoFull){ const nB = Object.keys(BSHEET_VIEWS).length, bv = bsheetOf(c).filter(x => !x.weak), bd = bv.filter(x => x.bd != null);
     add('corp', 'fișa corpului', .5 * bv.length / nB + .5 * (bd.length ? bd.reduce((a, x) => a + bodyPct(x.bd), 0) / bd.length / 100 : .7), 10); }
   const s = statsOf(c); if(s.face != null && s.nf >= 3) add('chat', 'fața în pozele din chat', s.face / 100, 20); if(s.body != null && s.nb >= 3) add('chatCorp', 'corpul în pozele din chat', s.body / 100, 10);
-  const et = etalonOf(c), last = et[et.length - 1]; if(last && last.score != null) add('etalon', 'setul-etalon', last.score / 100, 10);
   const a = auditOf(c); add('desc', 'descrierea verificată cu pozele', !a ? 0 : !auditFresh(c) ? .5 : auditOpen(c).length ? .6 : 1, 5);
   const W = parts.reduce((x, p) => x + p.w, 0); if(!W) return null;
   const n = Math.round(100 * parts.reduce((x, p) => x + p.v * p.w, 0) / W);
@@ -12588,7 +12630,7 @@ function idScore(c){
 }
 async function idRepair(c, btn){
   if(!c) return;
-  delete c.sheetFill; delete c.sheetTry; delete c.bsheetTry; delete c.closeTry; delete c.autoFullTried; delete c.sheetWeakTry; kitRan.delete(c.id); await saveChars();   // 11.6: reîncearcă acum ce lipsește sau a ieșit slab (fără să aștepte 7 zile)
+  delete c.sheetFill; delete c.sheetTry; delete c.bsheetTry; delete c.closeTry; delete c.autoFullTried; delete c.sheetWeakTry; delete c.sheetDrop; kitRan.delete(c.id); await saveChars();   // 11.6: reîncearcă acum ce lipsește sau a ieșit slab (fără să aștepte 7 zile)
   await fidGo(c, btn);
 }
 
