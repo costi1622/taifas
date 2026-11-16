@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '12.2';
+const APP_VER = '12.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -190,6 +190,7 @@ async function hydrate(root = document){
     if(!u){ u = await imgUrl(k); if(!(imeta[k] && imeta[k].m)) thumbsFor(k); }
     el.style.backgroundImage = u ? `url("${u}")` : ''; el.removeAttribute('data-bgk');
   });
+  if(root.querySelector && root.querySelector('video.avclip')) avVideos(root);   // 12.3
 }
 function loadImgEl(src){ return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
 async function toJpeg(file, max = 1280, q = .9){
@@ -209,16 +210,20 @@ function b64ToBlob(b64, type = 'image/png'){ const s = atob(b64); const a = new 
 const AV_V = [
   ['dim', '🌅 Dimineața', 'cozy morning at home right after waking up, holding a cup of coffee, soft morning window light, relaxed sleepy smile'],
   ['zi', '☀️ Ziua', 'casual daytime outfit, natural daylight, relaxed friendly smile'],
+  ['masa', '🍳 La masă', 'at home in the kitchen, sitting at the table with a cup of coffee and a plate of food, warm homey daylight, relaxed natural smile'],   // 12.3
   ['seara', '🌆 Seara', 'evening, warm golden lamp light, cozy atmosphere, gentle smile'],
   ['noapte', '🌙 Noaptea', 'late night at home, comfortable sweater, dim warm bedside lamp, soft tired expression'],
   ['vesel', '😄 Vesel', 'laughing happily, bright cheerful light, joyful expression'],
-  ['trist', '😔 Pensiv', 'thoughtful pensive expression, looking slightly away from the camera, soft muted light']];
+  ['trist', '😔 Pensiv', 'thoughtful pensive expression, looking slightly away from the camera, soft muted light'],
+  ['drag', '🥰 Afectuos', 'a warm affectionate tender look into the camera, soft gentle smile, cozy soft warm light']];   // 12.3
 function avKeyNow(c){
   // 9.27: dispoziția de acum, oriunde (din chatul deschis sau, altfel, ultima știută a personajului, din ultimele 6 ore)
   const mo = (cur === c && chat && chat.mood && chat.mood.t ? chat.mood.t : c && c.moodNow && c.moodNow.t && Date.now() - (c.moodNow.ts || 0) < 6 * 36e5 ? c.moodNow.t : '').toLowerCase();
+  if(c && c.avs && c.avs.drag && /afectuos|tandr|drăgăst|dragoste|îndrăgost|romantic|duios|duioas/.test(mo)) return 'drag';   // 12.3
   if(/trist|supărat|obosit|melancol|dor|îngrijor|nervos|abătut/.test(mo)) return 'trist';
   if(/vesel|fericit|râde|entuziasm|amuzat|bine dispus|încântat|jucăuș/.test(mo)) return 'vesel';
   const h = new Date().getHours();
+  if(c && c.avs && c.avs.masa && (h >= 12 && h < 14 || h === 19)) return 'masa';   // 12.3: la prânz și la cină
   return h >= 5 && h < 11 ? 'dim' : h < 17 ? 'zi' : h < 22 ? 'seara' : 'noapte';
 }
 function photoNow(c){
@@ -4413,7 +4418,7 @@ function renderHome(){
   // 9.15: doar cardurile schimbate se refac (înainte, la fiecare întoarcere pe Acasă se refăcea tot, cu pozele decodate din nou)
   patchKeyed($('#homeChars'), [['bk', bk], ['top', top], ['empty', !chars.length ? `<button class="card empty" data-new><b>Niciun personaj încă</b>Apasă ＋ jos ca să creezi primul personaj, din poză sau din imaginație.</button>` : ''],
     ...shown.map(c => ['card:' + c.id, `<button class="card${c.fav ? ' isfav' : ''}" data-open="${c.id}">${c.fav ? '<span class="fav">⭐</span>' : ''}${c.unread ? `<span class="ubadge">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}${c.lastAt && c.last || clockHTML(c) ? `<span class="tl">${c.lastAt && c.last ? `<span class="when">${when(c.lastAt)}</span>` : ''}${clockHTML(c, 'when clk')}</span>` : ''}
-      ${duoOn(c) ? duoHalves(c) : c.photo ? `<img data-k="${esc(photoNow(c))}" data-t="m" alt="">` : `<div class="ph" style="background:${colorFor(c)}">${esc(c.name[0] || '?')}</div>`}
+      ${duoOn(c) ? duoHalves(c) : c.photo ? `<img${c.avLive && c.avs && fxOn() ? ` class="avl" style="animation-delay:${avDelay(c.id)}"` : ''} data-k="${esc(photoNow(c))}" data-t="m" alt="">${c.avLive && c.avs ? avClipHTML(c, avKeyNow(c)) : ''}` : `<div class="ph" style="background:${colorFor(c)}">${esc(c.name[0] || '?')}</div>`}
       <div class="ov"><b>${esc(c.name)}</b>${c.tag ? `<small>${esc(c.tag)}</small>` : ''}${cardStatus(c)}${c.rel ? `<span class="crel">💞 ${esc(relOf(c).name)}</span>` : ''}${c.last ? `<em class="lm">${esc(c.last)}</em>` : ''}</div></button>`]), ['new', chars.length && !q ? `<button class="card new" data-new><span>＋</span><em>Personaj nou</em></button>` : '']].filter(b => b[1]), homeStore.chars);
   const withChat = chars.filter(c => c.last).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
   const pinned = withChat.filter(c => c.pinned), rest = withChat.filter(c => !c.pinned);
@@ -7039,26 +7044,37 @@ async function outfitOf(c){
 const etalonShot = (tpl, o) => tpl.replace('{o}', o);
 function drawAv(c){
   const box = $('#pfAv'); if(!box) return;
-  const can = S.imgProv !== 'none' && c.photo;   // 11.6 (S1): pentru toate personajele cu poză de profil
+  const can = S.imgProv !== 'none' && c.photo, n = AV_V.length;   // 11.6 (S1): pentru toate personajele cu poză de profil
   if(!can && !c.avs){ box.innerHTML = `<p style="color:var(--tx3);font-size:.88rem;margin:0">Disponibil pentru personajele cu poză de profil${S.imgProv === 'none' ? ', cu pozele pornite' : ''}: poza lui mică se schimbă după momentul zilei și dispoziție.</p>`; return; }
-  const now = c.avLive ? avKeyNow(c) : '';
-  box.innerHTML = `<div class="avgrid">${AV_V.map(v => `<figure class="${now === v[0] ? 'now' : ''}">${c.avs && c.avs[v[0]] ? `<img data-k="${esc(c.avs[v[0]])}" data-view="${esc(c.avs[v[0]])}" alt="">` : '<div class="ph">·</div>'}<figcaption>${v[1]}</figcaption></figure>`).join('')}</div>
-    <div class="btns jbtn">${can ? `<button class="btn sm" id="avGen">${c.avs ? '✨ Refă variantele' : '✨ Generează cele 6 variante'}</button>` : ''}${c.avs ? `<button class="btn sm" id="avOn">${c.avLive ? '⏸ Oprește' : '▶ Pornește'}</button>` : ''}</div>
-    <p class="hint" style="margin-top:6px">${c.avs ? (c.avLive ? 'Pornit: poza mică se schimbă singură (dimineața, ziua, seara, noaptea; vesel sau pensiv după dispoziție).' : 'Oprit: rămâne poza de profil.') : `6 poze generate o singură dată (~${neurPerPhoto() ? Math.round(neurPerPhoto() * 6) + ' neuroni' : 'câțiva cenți'}).`}</p>`;
+  const now = c.avLive ? avKeyNow(c) : '', has = k => !!(c.avs && c.avs[k]), miss = c.avs ? AV_V.filter(v => !has(v[0])).length : n;
+  const nCan = AV_V.filter(v => has(v[0])).length, nClip = AV_V.filter(v => avClipOf(c, v[0])).length, rwOk = S.rw === 'on' && S.imgProv === 'worker' && rwReady(), fx = fxOn();
+  const q = S.avClipQ === 'rapid' ? 'rapid' : 'clar';
+  box.innerHTML = `<div class="avgrid">${AV_V.map(v => `<figure class="${now === v[0] ? 'now' : ''}"${has(v[0]) ? ` data-view="${esc(c.avs[v[0]])}"` : ''}>${has(v[0]) ? `<img${fx ? ` class="avl" style="animation-delay:${avDelay(c.id + v[0])}"` : ''} data-k="${esc(c.avs[v[0]])}" data-t="g" alt="">${avClipHTML(c, v[0])}` : '<div class="ph">·</div>'}${avClipOf(c, v[0]) ? '<i class="avcl">🎬</i>' : ''}<figcaption>${v[1]}</figcaption></figure>`).join('')}</div>
+    <div class="btns jbtn">${can ? `<button class="btn sm" id="avGen">${!c.avs ? `✨ Generează cele ${n} variante` : miss ? `✨ Adaugă ${miss === 1 ? 'varianta nouă' : `cele ${miss} variante noi`}` : '✨ Refă variantele'}</button>` : ''}${c.avs ? `<button class="btn sm" id="avOn">${c.avLive ? '⏸ Oprește' : '▶ Pornește'}</button>` : ''}${can && c.avs && miss ? '<button class="btn sm" id="avGenAll">Refă toate</button>' : ''}</div>
+    <p class="hint" style="margin-top:6px">${c.avs ? (c.avLive ? 'Pornit: poza mică se mișcă ușor și se schimbă singură (dimineața, ziua, la masă, seara, noaptea; vesel, pensiv sau afectuos după dispoziție).' : 'Oprit: rămâne poza de profil.') : `${n} poze generate o singură dată (~${neurPerPhoto() ? Math.round(neurPerPhoto() * n) + ' neuroni' : 'câțiva cenți'}).`}</p>
+    ${can && nCan ? `<div class="avclipbox"><div class="avclh"><b>🎬 Clipuri video</b><small>${nClip} din ${nCan}</small></div>
+      <p class="hint">Din fiecare variantă, un clip de ${AV_CLIP_S} s în care respiră, clipește și mișcă ușor capul. Făcut o singură dată pe Runware, apoi redat în buclă, fără sunet, doar cât se vede pe ecran. ~${usd(avClipPer())} pe clip.</p>
+      <div class="btns jbtn"><button class="btn sm" id="avClipGo"${avClipBusy ? ' disabled' : ''}>${avClipBusy === c.id ? '<span class="spin"></span> în lucru' : nClip >= nCan ? '🎬 Refă clipurile' : nClip ? `🎬 Fă restul (${nCan - nClip})` : `🎬 Fă clipurile (${nCan})`}</button>
+        <select id="avClipQ" class="sm" aria-label="Calitatea clipurilor"><option value="clar"${q === 'clar' ? ' selected' : ''}>Clare · ${usd(AV_CLIP_Q.clar.usd * AV_CLIP_S)}</option><option value="rapid"${q === 'rapid' ? ' selected' : ''}>Ciornă · ${usd(AV_CLIP_Q.rapid.usd * AV_CLIP_S)}</option></select></div>
+      ${c.avClipWk && !rwDirect() ? '<p class="hint">⚠️ Worker-ul (seiful cheilor) lasă să treacă spre Runware doar poze, nu și clipuri. Merg dacă pui cheia Runware direct în telefon (Setări → Poze) sau după o actualizare a Worker-ului.</p>' : !rwOk ? '<p class="hint">Clipurile se fac pe Runware: pornește-l în Setări → Poze.</p>' : ''}</div>` : ''}`;
   hydrate(box);
   box.onclick = e => { const v = e.target.closest('[data-view]'); if(v) viewImg(v.dataset.view, Object.values(c.avs || {})); };
   const on = $('#avOn'); if(on) on.onclick = async () => { c.avLive = !c.avLive; await saveChars(); avRefresh(c); toast(c.avLive ? '🖼️ Avatarul viu e pornit' : 'Avatarul viu e oprit'); };
-  const g = $('#avGen'); if(g) g.onclick = () => genAvatars(c);
+  const g = $('#avGen'); if(g) g.onclick = () => genAvatars(c, !miss);
+  const ga = $('#avGenAll'); if(ga) ga.onclick = () => genAvatars(c, true);
+  const cg = $('#avClipGo'); if(cg) cg.onclick = () => avClipsGen(c, nClip >= nCan);
+  const cq = $('#avClipQ'); if(cq) cq.onchange = () => { S.avClipQ = cq.value; saveSettings(); drawAv(c); };
 }
-async function genAvatars(c){
+async function genAvatars(c, all = true){
   if(busy){ toast('Așteaptă să termine răspunsul.'); return; }
-  const b = $('#avGen'); if(b){ b.disabled = true; b.innerHTML = '<span class="spin"></span> 0/6'; }
-  const photo = c.photo; if(!photo || !(await DB.get(photo))){ toast('Nu găsesc poza de profil.'); if(b){ b.disabled = false; b.textContent = '✨ Generează cele 6 variante'; } return; }
+  const todo = AV_V.filter(v => all || !(c.avs && c.avs[v[0]])), tot = todo.length;   // 12.3: doar cele noi, dacă le ai pe celelalte
+  const b = $('#avGen'); if(b){ b.disabled = true; b.innerHTML = `<span class="spin"></span> 0/${tot}`; }
+  const photo = c.photo; if(!photo || !(await DB.get(photo))){ toast('Nu găsesc poza de profil.'); if(b){ b.disabled = false; b.textContent = '✨ Generează variantele'; } return; }
   // 9.30: avatarele trec prin același motor ca pozele din chat (scenePhoto: fața decupată + poza de profil + unghiurile + fișa
   //       „Cum arată, pentru poze”, poză de telefon reală, fără înfrumusețare); fiecare e măsurată în telefon față de personaj
   //       și se păstrează cea mai apropiată din cel mult 3 încercări (se oprește la prima sub 0,42)
   const avs = {...(c.avs || {})}; let ok = 0; const rw0 = rwDay().usd;
-  for(const [k, , desc] of AV_V){
+  for(const [k, , desc] of todo){
     if(c.photo !== photo) break;
     try{
       const shot = `close-up selfie, head and shoulders, the face large and sharp, ${desc}, natural real moment, looking at the camera`;
@@ -7074,9 +7090,10 @@ async function genAvatars(c){
       try{ const R = await finishPerson(c, {blob:bl, fd:bd < 9 ? bd : null}, shot, null, {kind:'avatar', tag:'profil'}); bl = R.blob; }catch(e){}   // 9.92: garanția + finisarea
       try{ if(bl.type === 'image/png') bl = await toJpeg(bl, 1024, .9); }catch(e){}
       const old = avs[k]; avs[k] = await saveImg(bl); if(old) delImg(old).catch(() => {});
+      if(c.avClips && c.avClips[k]){ const oc = c.avClips[k], cc = {...c.avClips}; delete cc[k]; c.avClips = cc; if(oc.k) delImg(oc.k).catch(() => {}); }   // 12.3: clipul era al pozei vechi
       ok++;
       c.avs = {...avs}; await saveChars();
-      if(b && document.body.contains(b)) b.innerHTML = `<span class="spin"></span> ${ok}/6`;
+      if(b && document.body.contains(b)) b.innerHTML = `<span class="spin"></span> ${ok}/${tot}`;
     }catch(e){ toast('O variantă n-a mers: ' + e.message, 3500); if(e.cap) break; }
   }
   const spent = rwDay().usd - rw0;   // 9.37
@@ -7089,6 +7106,109 @@ function avRefresh(c){
   if(!$('#vHome').hidden) renderHome();
   if(cur === c && $('#chAv')){ $('#chAv').outerHTML = avatarHTML(cur, 'av" id="chAv'); const bg = $('#chatBg'); if(bg && cur.photo && ['clar', 'poza'].includes(cur.bg || 'clar')) bg.dataset.bgk = photoNow(cur); hydrate(document); }
 }
+
+/* ───────── 🎬 12.3: avatarul viu se mișcă ─────────
+   Local (gratuit, mereu, dacă animațiile sunt pornite): poza „respiră” (o mișcare lentă de cameră) și apare lin; varianta se schimbă
+   singură când se schimbă momentul zilei sau dispoziția, fără să redeschizi ceva (verificare o dată pe minut).
+   Clipuri AI (opțional, Runware P-Video, `prunaai:p-video@0`): din fiecare variantă, un clip de 4 s (respiră, clipește, mișcă ușor
+   capul), făcut o singură dată; se redă în buclă, fără sunet, doar cât se vede (cel mult 4 deodată). */
+const AV_CLIP_MDL = 'prunaai:p-video@0', AV_CLIP_S = 4;
+const AV_CLIP_Q = {clar:{draft:false, usd:.02}, rapid:{draft:true, usd:.005}};   // $ pe secundă de clip (Runware, 720p; ciorna e mai mică)
+const avClipPer = () => (AV_CLIP_Q[S.avClipQ] || AV_CLIP_Q.clar).usd * AV_CLIP_S;
+const AV_MOTION = {vesel:'laughing softly and naturally', trist:'pensive, breathing slowly, glancing slightly away and back', drag:'a warm tender look, a soft smile slowly appearing', masa:'relaxed, a small natural movement at the table'};
+const avClipOf = (c, k) => { const x = c && c.avClips && c.avClips[k]; return x && (x.k || x.url) && c.avs && x.src === c.avs[k] ? x : null; };
+function avDelay(id){ let h = 0; for(const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) | 0; return -(Math.abs(h) % 10000) / 1000 + 's'; }
+function avClipHTML(c, k){ const x = avClipOf(c, k); if(!x || !fxOn()) return ''; return `<video class="avclip" ${x.k ? `data-vk="${esc(x.k)}"` : `data-vu="${esc(x.url)}"`} muted loop playsinline preload="metadata" aria-hidden="true"></video>`; }
+let avIO = null; const avPlaying = new Set(), avSeen = new Set();
+async function avVideos(root){
+  for(const v of root.querySelectorAll('video.avclip[data-vk], video.avclip[data-vu]')){
+    const u = v.dataset.vk ? await imgUrl(v.dataset.vk) : v.dataset.vu; v.removeAttribute('data-vk'); v.removeAttribute('data-vu'); if(!u) continue;
+    v.muted = true; v.src = u; v.addEventListener('playing', () => v.classList.add('on'), {once:true}); v.addEventListener('error', () => v.remove(), {once:true});
+    if(!('IntersectionObserver' in window)){ v.play().catch(() => {}); continue; }
+    if(!avIO) avIO = new IntersectionObserver(es => { for(const e of es){ const x = e.target;
+      if(e.isIntersecting && e.intersectionRatio >= .5 && !document.hidden){ if(avPlaying.size >= 4){ const o = avPlaying.values().next().value; o.pause(); avPlaying.delete(o); } x.play().then(() => avPlaying.add(x)).catch(() => {}); }
+      else { x.pause(); avPlaying.delete(x); } } }, {threshold:[0, .5]});
+    avIO.observe(v); avSeen.add(v);
+  }
+}
+document.addEventListener('visibilitychange', () => { if(document.hidden) for(const v of avPlaying) v.pause(); else for(const v of avPlaying) v.play().catch(() => {}); });
+// Runware, sarcină asincronă (video): trimite, apoi întreabă la câteva secunde până e gata
+async function rwVideo(task, signal){
+  const direct = rwDirect(), url = direct ? RW_URL : wkUrl() + '/proxy/runware/v1', auth = 'Bearer ' + (direct ? S.rwKey : S.wkTok).trim();
+  const post = async body => {
+    let r, d = null;
+    try{ r = await fetch(url, {method:'POST', signal, headers:{'content-type':'application/json', authorization:auth}, body:JSON.stringify(body)}); }
+    catch(e){ if(e.name === 'AbortError') throw e; throw new Error('Runware nu răspunde (rețea).'); }
+    try{ d = await r.json(); }catch(e){}
+    const errs = d && (d.errors || (d.error ? [d.error] : null));
+    if(!r.ok || (errs && errs.length && !(d && Array.isArray(d.data) && d.data.length))){
+      const e0 = errs && errs[0], m = String(typeof e0 === 'string' ? e0 : (e0 && (e0.message || e0.code)) || ('HTTP ' + r.status));
+      if(!direct && /imageInference|seif/i.test(m)){ const er = new Error('Worker-ul (seiful cheilor) lasă spre Runware doar poze, nu și clipuri.'); er.wk = true; throw er; }
+      throw new Error('Runware: ' + m.slice(0, 200) + (/credit|balance|insufficient/i.test(m) ? ' (reîncarcă creditul în contul Runware).' : '.'));
+    }
+    return d || {};
+  };
+  await post([task]);
+  const t0 = Date.now();
+  for(let i = 0; ; i++){
+    await naps(i ? 4000 : 8000, signal); if(signal && signal.aborted) throw new DOMException('oprit', 'AbortError');
+    const d = await post([{taskType:'getResponse', taskUUID:task.taskUUID}]);
+    const x = (d.data || []).find(y => y && y.taskUUID === task.taskUUID) || (d.data || [])[0];
+    if(x && (x.status === 'success' || x.videoURL)) return x;
+    if(x && x.status === 'error') throw new Error('Runware: clipul n-a putut fi făcut.');
+    if(Date.now() - t0 > 300e3) throw new Error('Runware: clipul durează prea mult (peste 5 minute).');
+  }
+}
+async function avClipOne(c, k, signal){
+  const src = c.avs && c.avs[k]; if(!src) return false;
+  const b = await DB.get(src); if(!b) return false;
+  const q = AV_CLIP_Q[S.avClipQ] || AV_CLIP_Q.clar;
+  const prompt = `The same person as in the image, a natural live-photo moment: breathing gently, blinking naturally, a slight natural head movement${AV_MOTION[k] ? ', ' + AV_MOTION[k] : ''}. Static camera, the same framing, light, clothes and background; keep the face exactly the same. No talking, no text.`;
+  const task = {taskType:'videoInference', taskUUID:crypto.randomUUID(), model:AV_CLIP_MDL, positivePrompt:prompt, duration:AV_CLIP_S, fps:24, numberResults:1, outputType:'URL', outputFormat:'MP4', outputQuality:85,
+    includeCost:true, deliveryMethod:'async', inputs:{frameImages:['data:image/jpeg;base64,' + await b64C(await toJpeg(b, 1024, .9))]}, settings:{audio:false, draft:q.draft, promptUpsampling:false}};
+  const x = await rwVideo(task, signal);
+  const u = x.videoURL || x.videoUrl || x.mediaURL || x.outputURL; if(!u) throw new Error('Runware n-a întors clipul.');
+  const cost = +x.cost > 0 ? +x.cost : q.usd * AV_CLIP_S;
+  if(cost < 5){ const day = rwDay(); day.usd = Math.round((day.usd + cost) * 1e6) / 1e6; day.n++; saveSettings(); addUsage(c.id, cost, 'img', null, 'profil'); }
+  let clip = {src, url:u, at:Date.now()};
+  try{ const r = await fetch(u); if(r.ok){ let v = await r.blob(); if(v.size > 1000){ if(!/^video\//.test(v.type)) v = new Blob([v], {type:'video/mp4'}); clip = {src, k:await saveImg(v), at:Date.now()}; } } }catch(e){}   // în telefon (merge și fără rețea); altfel rămâne adresa
+  if(c.avs[k] !== src){ if(clip.k) delImg(clip.k).catch(() => {}); return false; }   // varianta s-a refăcut între timp
+  const old = c.avClips && c.avClips[k]; c.avClips = {...(c.avClips || {}), [k]:clip}; if(old && old.k) delImg(old.k).catch(() => {});
+  delete c.avClipWk; await saveChars(); return true;
+}
+let avClipBusy = null;
+async function avClipsGen(c, all){
+  if(avClipBusy){ toast('Se fac deja clipurile' + (charById(avClipBusy) ? ' pentru ' + charById(avClipBusy).name : '') + '.'); return; }
+  if(!(S.rw === 'on' && S.imgProv === 'worker' && rwReady())){ toast('Clipurile se fac pe Runware: pornește-l în Setări → Poze.', 4500); return; }
+  const ks = AV_V.map(v => v[0]).filter(k => c.avs && c.avs[k] && (all || !avClipOf(c, k)));
+  if(!ks.length){ toast('Toate clipurile sunt gata.'); return; }
+  avClipBusy = c.id; let ok = 0; const d0 = rwDay().usd;
+  const btn = () => $('#avClipGo');
+  try{
+    for(const k of ks){
+      if(rwCapLeft() < avClipPer()){ toast('Plafonul Runware de azi e atins: restul clipurilor, mâine (sau mărește plafonul în Setări).', 5000); break; }
+      if(btn()){ btn().disabled = true; btn().innerHTML = `<span class="spin"></span> ${ok}/${ks.length}`; }
+      try{ if(await avClipOne(c, k)) ok++; }
+      catch(e){ if(e.wk){ c.avClipWk = 1; await saveChars(); toast('🎬 ' + e.message, 6000); break; } toast('Un clip n-a mers: ' + e.message, 4000); if(/credit|balance/i.test(e.message)) break; }
+    }
+  } finally { avClipBusy = null; }
+  const spent = rwDay().usd - d0;
+  if(ok) toast(`🎬 ${ok} ${ok === 1 ? 'clip gata' : 'clipuri gata'}${spent > 0 ? ' · ' + usd(spent) : ''}.`, 4500);
+  avRefresh(c);
+}
+// varianta de acum se schimbă singură (momentul zilei, dispoziția), fără să redeschizi ceva
+const avLast = new Map();
+function avTick(){
+  if(document.hidden) return;
+  for(const c of chars){ if(!c.avLive || !c.avs) continue; const k = avKeyNow(c); if(avLast.has(c.id) && avLast.get(c.id) !== k) avSoft(c); avLast.set(c.id, k); }
+  for(const v of [...avSeen]) if(!v.isConnected){ avSeen.delete(v); avPlaying.delete(v); if(avIO) avIO.unobserve(v); }
+}
+function avSoft(c){
+  if(!$('#vHome').hidden) renderHome();
+  if(profId === c.id && !$('#vProf').hidden) drawAv(c);
+  if(cur === c && $('#chAv')){ $('#chAv').outerHTML = avatarHTML(cur, 'av" id="chAv'); hydrate(document); }
+}
+setInterval(avTick, 60e3);
 
 /* ───────── 🗂️ carduri de personaj ───────── */
 const CARD_FIELDS = ['city', 'name', 'tag', 'aspect', 'look', 'stil', 'persona', 'speech', 'greet', 'accent', 'bg', 'aiPortrait', 'voice', 'vPitch', 'life', 'lifeOff', 'avLive', 'sendPics', 'home', 'appPrompt', 'appEn', 'frame', 'fullBox', 'appZones'];
@@ -7128,7 +7248,7 @@ async function importCard(file){
     if(chars.some(x => x.name === c.name)) c.name += ' (2)';
     if(j.photo && /^image\/(jpeg|png|webp)$/.test(j.photo.type) && typeof j.photo.data === 'string' && j.photo.data.length < 12e6) c.photo = await saveImg(b64ToBlob(j.photo.data, j.photo.type));
     if(j.full && /^image\/(jpeg|png|webp)$/.test(j.full.type) && typeof j.full.data === 'string' && j.full.data.length < 12e6) c.photoFull = await saveImg(b64ToBlob(j.full.data, j.full.type));   // 9.24
-    if(j.avs && typeof j.avs === 'object'){ c.avs = {}; for(const [k, v] of Object.entries(j.avs).slice(0, 8)) if(/^\w{1,20}$/.test(k) && v && /^image\/(jpeg|png|webp)$/.test(v.type) && typeof v.data === 'string' && v.data.length < 8e6) c.avs[k] = await saveImg(b64ToBlob(v.data, v.type)); }
+    if(j.avs && typeof j.avs === 'object'){ c.avs = {}; for(const [k, v] of Object.entries(j.avs).slice(0, 12)) if(/^\w{1,20}$/.test(k) && v && /^image\/(jpeg|png|webp)$/.test(v.type) && typeof v.data === 'string' && v.data.length < 8e6) c.avs[k] = await saveImg(b64ToBlob(v.data, v.type)); }
     chars.push(c); await saveChars(); renderHome();
     toast(`📥 ${c.name} a fost importat.`);
     charProfile(c.id);
@@ -7321,19 +7441,112 @@ async function genStickers(c){
   if(ok){ for(const x of old) delImg(x.k).catch(() => {}); c.stickers = out; await saveChars(); toast(`😺 ${ok} stickere gata!`); fxBurst('😺', 8); }
   if(profId === c.id) drawStk(c);
 }
-function stickerSheet(){
-  const c = cur;
-  if(!(c.stickers || []).length){ toast('Generează întâi stickerele din profilul lui ' + c.name + '.', 3500); charProfile(c.id); return; }
+async function stickerSheet(){   // 12.3: ale lui + ale tale (colecția ta, în toate chaturile)
+  const c = cur; if(!c) return;
   if(busy && live && live.ch === chat){ toast('Așteaptă răspunsul.'); return; }
-  openSheet(`<h4>😺 Stickere</h4><div class="stkgrid">${c.stickers.map((x, k) => `<button data-st="${k}" aria-label="${esc(x.l)}"><img data-k="${esc(x.k)}" alt=""></button>`).join('')}</div>`);
+  const mine = await myStkLoad(), his = c.stickers || [], canGen = S.imgProv !== 'none' && c.photo;
+  openSheet(`<h4>😺 Stickere</h4>
+    ${his.length ? `<div class="stkh">Cu ${esc(c.name)}</div><div class="stkgrid">${his.map((x, k) => `<button data-st="${k}" aria-label="${esc(x.l)}"><img data-k="${esc(x.k)}" alt=""></button>`).join('')}</div>`
+      : canGen ? `<div class="stkh">Cu ${esc(c.name)}<button class="btn sm" id="stkGenGo" type="button">✨ Fă-le din profil</button></div>` : ''}
+    <div class="stkh">Ale mele${mine.length ? '<button class="btn sm" id="myStkEd" type="button">✏️ Editează</button>' : ''}</div>
+    <div class="stkgrid" id="myStkG"><button class="stkadd" id="myStkAdd" type="button"><b>＋</b><small>Din poza ta</small></button>${mine.map((x, k) => `<button class="mine" data-ms="${k}" aria-label="${esc(x.l)}"><img data-k="${esc(x.k)}" alt=""></button>`).join('')}</div>`);
   hydrate($('.sheet'));
-  $$('.sheet [data-st]').forEach(b => b.onclick = async () => {
-    const x = c.stickers[+b.dataset.st]; closeSheet();
-    if(busy){ toast('Așteaptă să termine răspunsul.'); return; }
-    chat.msgs.push({id:uid(), role:'user', sticker:{k:x.k, l:x.l}, ts:Date.now()});
+  const send = async st => {
+    closeSheet(); if(busy){ toast('Așteaptă să termine răspunsul.'); return; }
+    chat.msgs.push({id:uid(), role:'user', sticker:st, ts:Date.now()});
     await saveChat(); renderMsgs(true); relBump(c, 1, 'msg');
     await reply();
+  };
+  $$('.sheet [data-st]').forEach(b => b.onclick = () => { const x = his[+b.dataset.st]; if(x) send({k:x.k, l:x.l}); });
+  let ed = false;
+  $$('.sheet [data-ms]').forEach(b => b.onclick = async () => {
+    const x = mine[+b.dataset.ms]; if(!x) return;
+    if(ed){ myStk = (myStk || []).filter(y => y !== x); await myStkSave(); b.remove(); toast('Scos din stickerele tale (în mesajele trimise rămâne).'); return; }
+    send({k:x.k, l:x.l, mine:1});
   });
+  const e = $('#myStkEd'); if(e) e.onclick = () => { ed = !ed; $('#myStkG').classList.toggle('ed', ed); e.textContent = ed ? '✓ Gata' : '✏️ Editează'; };
+  $('#myStkAdd').onclick = () => myStkAdd(true);
+  const g = $('#stkGenGo'); if(g) g.onclick = () => { closeSheet(); charProfile(c.id); };
+}
+/* 😺 12.3: stickerele tale. Din poza ta, aplicația decupează singură persoana (în telefon, același model ca adâncimea din apelul video)
+   și pune contur alb; sau păstrezi toată poza, rotunjită. Personajul „vede” stickerul prin descriere (scrisă de tine sau citită
+   o singură dată din poză). Colecția stă în baza de date (`mystk`), intră în backup și e aceeași în toate chaturile. */
+let myStk = null;
+async function myStkLoad(){ if(!myStk){ const v = await DB.get('mystk').catch(() => null); myStk = Array.isArray(v) ? v.filter(x => x && x.k) : []; } return myStk; }
+async function myStkSave(){ await DB.set('mystk', myStk || []); }
+const stkCanvas = n => { const cv = document.createElement('canvas'); cv.width = cv.height = n; return cv; };
+const cvBlob = cv => new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('canvas')), 'image/png'));
+function stkFrame(src, bx, by, bw, bh){   // persoana decupată, încadrată pe 512×512, cu contur alb și o umbră ușoară
+  const N = 512, pad = 26, sc = Math.min((N - 2 * pad) / bw, (N - 2 * pad) / bh), dw = bw * sc, dh = bh * sc, dx = (N - dw) / 2, dy = (N - dh) / 2;
+  const body = stkCanvas(N), bc = body.getContext('2d'); bc.imageSmoothingQuality = 'high'; bc.drawImage(src, bx, by, bw, bh, dx, dy, dw, dh);
+  const wh = stkCanvas(N), w = wh.getContext('2d'); w.drawImage(body, 0, 0); w.globalCompositeOperation = 'source-in'; w.fillStyle = '#fff'; w.fillRect(0, 0, N, N);
+  const out = stkCanvas(N), o = out.getContext('2d');
+  o.save(); o.shadowColor = 'rgba(0,0,0,.35)'; o.shadowBlur = 12; o.shadowOffsetY = 4; o.drawImage(wh, 0, 0); o.restore();
+  for(let a = 0; a < 24; a++){ const t = a / 24 * Math.PI * 2; o.drawImage(wh, Math.cos(t) * 9, Math.sin(t) * 9); }
+  o.drawImage(body, 0, 0); return out;
+}
+async function stkCut(im){   // null dacă nu găsește o persoană (decupajul e pentru oameni)
+  const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
+  let mask = null; try{ mask = await segMask(im); }catch(e){ return null; }
+  if(!mask || mask.length < 65536) return null;
+  const mc = stkCanvas(256), mx = mc.getContext('2d'), id = mx.createImageData(256, 256);
+  let n = 0, x0 = 256, y0 = 256, x1 = -1, y1 = -1;
+  for(let i = 0; i < 65536; i++){ const a = smooth01(.35, .65, mask[i]); id.data[i * 4 + 3] = Math.round(a * 255);
+    if(a > .5){ n++; const x = i % 256, y = (i / 256) | 0; if(x < x0) x0 = x; if(x > x1) x1 = x; if(y < y0) y0 = y; if(y > y1) y1 = y; } }
+  if(n < 65536 * .03) return null;
+  mx.putImageData(id, 0, 0);
+  const full = document.createElement('canvas'); full.width = W; full.height = H; const fc = full.getContext('2d');
+  fc.drawImage(im, 0, 0, W, H); fc.globalCompositeOperation = 'destination-in'; fc.imageSmoothingEnabled = true; fc.drawImage(mc, 0, 0, W, H);
+  return stkFrame(full, x0 / 256 * W, y0 / 256 * H, (x1 - x0 + 1) / 256 * W, (y1 - y0 + 1) / 256 * H);
+}
+function stkWhole(im){   // toată poza: pătratul din mijloc, colțuri rotunjite, chenar alb
+  const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height, sq = Math.min(W, H), N = 512, m = 14, r = 70, b = 9;
+  const out = stkCanvas(N), o = out.getContext('2d');
+  const rr = (x, y, w, h, R) => { o.beginPath(); if(o.roundRect) o.roundRect(x, y, w, h, R); else o.rect(x, y, w, h); };
+  o.save(); o.shadowColor = 'rgba(0,0,0,.35)'; o.shadowBlur = 12; o.shadowOffsetY = 4; o.fillStyle = '#fff'; rr(m, m, N - 2 * m, N - 2 * m, r); o.fill(); o.restore();
+  o.save(); rr(m + b, m + b, N - 2 * (m + b), N - 2 * (m + b), r - b); o.clip(); o.drawImage(im, (W - sq) / 2, (H - sq) / 2, sq, sq, m + b, m + b, N - 2 * (m + b), N - 2 * (m + b)); o.restore();
+  return out;
+}
+async function stkDescribe(im){   // o singură dată, pe modelul mic: ce se vede (ca personajul să știe ce i-ai trimis)
+  const cv = stkCanvas(384), W = im.naturalWidth || im.width, H = im.naturalHeight || im.height, sq = Math.min(W, H);
+  cv.getContext('2d').drawImage(im, (W - sq) / 2, (H - sq) / 2, sq, sq, 0, 0, 384, 384);
+  const out = await stream('Descrii scurt o imagine pentru un sticker. Răspunzi doar cu descrierea.', [{role:'user', image:cv.toDataURL('image/jpeg', .8).split(',')[1],
+    text:'Ce se vede în poza asta? În română, cel mult 8 cuvinte, fără punct la final (ex. „un bărbat care face cu ochiul”, „o pisică somnoroasă pe canapea”).'}], {max:60, aux:true});
+  return faraLiniute(String(out || '').replace(/["„”\n]/g, ' ').replace(/\s+/g, ' ').trim()).replace(/[.\s]+$/, '').slice(0, 60);
+}
+function myStkAdd(sendAfter){
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => { const f = inp.files && inp.files[0]; if(f) myStkEdit(f, sendAfter); };
+  inp.click();
+}
+async function myStkEdit(file, sendAfter){
+  let im; try{ im = await loadImgEl(URL.createObjectURL(await toJpeg(file, 1280, .92))); }catch(e){ toast('Poza nu se poate deschide.'); return; }
+  openSheet(`<h4>😺 Sticker nou</h4><div class="stkmk"><button class="stkopt" data-o="cut" type="button" disabled><span class="spin"></span><small>✂️ Decupat</small></button><button class="stkopt on" data-o="all" type="button"><small>⬜ Toată poza</small></button></div>
+    <div class="pad"><label>Ce e pe el <small style="color:var(--tx3)">(așa îl „vede” personajul)</small></label><input id="stkL" maxlength="60" placeholder="ex. eu râzând · pisica mea · cafeaua de dimineață">
+    <p class="hint" id="stkHint">Caut persoana din poză, ca s-o decupez…</p>
+    <div class="btns" style="margin-top:10px"><button class="btn" data-close>Renunță</button><button class="btn${sendAfter && cur ? '' : ' pri'}" id="stkSave">💾 Păstrează</button>${sendAfter && cur ? '<button class="btn pri" id="stkSend">Trimite</button>' : ''}</div></div>`);
+  const sh = $('.sheet'), opt = {all:stkWhole(im), cut:null}; let pick = 'all', auto = '', typed = false;
+  const show = (o, cv) => { const b = sh.querySelector(`[data-o="${o}"]`); if(!b) return; const sp = b.querySelector('.spin'); if(sp) sp.remove(); let i = b.querySelector('img'); if(!i){ i = document.createElement('img'); i.alt = ''; b.prepend(i); } i.src = cv.toDataURL('image/png'); b.disabled = false; };
+  const sel = o => { pick = o; sh.querySelectorAll('.stkopt').forEach(x => x.classList.toggle('on', x.dataset.o === o)); };
+  show('all', opt.all);
+  sh.querySelectorAll('.stkopt').forEach(b => b.onclick = () => { if(!b.disabled) sel(b.dataset.o); });
+  const inp = $('#stkL'); inp.oninput = () => { typed = true; };
+  stkCut(im).then(cv => { if(!sh.isConnected) return; const h = $('#stkHint');
+    if(cv){ opt.cut = cv; show('cut', cv); sel('cut'); if(h) h.textContent = 'Am decupat persoana și i-am pus contur alb. Poți alege și toată poza.'; }
+    else { const b = sh.querySelector('[data-o="cut"]'); if(b) b.remove(); if(h) h.textContent = 'N-am găsit o persoană de decupat (decupajul merge pe oameni): rămâne toată poza, rotunjită.'; } }).catch(() => {});
+  stkDescribe(im).then(t => { auto = t || ''; if(auto && sh.isConnected && !typed && !inp.value) inp.value = auto; }).catch(() => {});
+  const save = async () => {
+    const cv = opt[pick] || opt.all, l = (inp.value || '').trim() || auto || 'un sticker';
+    const k = await saveImg(await cvBlob(cv)); await myStkLoad();
+    const x = {k, l:l.slice(0, 60), at:Date.now()}; myStk.unshift(x); await myStkSave(); return x;
+  };
+  $('#stkSave').onclick = async e => { e.currentTarget.disabled = true; await save(); closeSheet(); toast('😺 Sticker păstrat: îl găsești în ＋ → Stickere, în orice chat.', 3500); };
+  const sd = $('#stkSend'); if(sd) sd.onclick = async () => {
+    sd.disabled = true; const x = await save(); closeSheet();
+    if(!cur || !chat) return; if(busy){ toast('Păstrat. Așteaptă răspunsul, apoi trimite-l.'); return; }
+    chat.msgs.push({id:uid(), role:'user', sticker:{k:x.k, l:x.l, mine:1}, ts:Date.now()});
+    await saveChat(); renderMsgs(true); relBump(cur, 1, 'msg'); await reply();
+  };
 }
 
 /* ───────── ✍️ îmbunătățește-mi mesajul ───────── */
@@ -7488,7 +7701,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
   }
   else if(m.img) inner = `<div class="bub picwrap">${quoteHTML(m)}<img class="pic" data-k="${esc(m.img)}"${picAttr(m.img, true)} data-view="${esc(m.img)}" alt="">${m.text ? `<div class="cap">${fmtMsg(m.text)}</div>` : ''}${tm}${reactHTML(m)}</div>`;
   else if(m.voice && !m.pending) inner = `<div class="bub">${voiceHTML(m)}${tm}${reactHTML(m)}</div>`;
-  else if(m.sticker) inner = `<div class="stk"><img data-k="${esc(m.sticker.k)}" data-view="${esc(m.sticker.k)}" alt="${esc(m.sticker.l)}">${tm}${reactHTML(m)}</div>`;
+  else if(m.sticker) inner = `<div class="stk${m.sticker.mine ? ' mine' : ''}"><img data-k="${esc(m.sticker.k)}" data-view="${esc(m.sticker.k)}" alt="${esc(m.sticker.l)}">${tm}${reactHTML(m)}</div>`;
   else if(m.gift) inner = `<div class="bub gift"><span class="ge">${esc(m.gift.e)}</span><span class="gn">🎁 ${esc(m.gift.n)}</span>${m.text ? `<span class="gt">${esc(m.text)}</span>` : ''}${tm}${reactHTML(m)}</div>`;
   else if(m.guest){ const o = charById(m.guest) || {name:'?', id:'x'}; inner = `<div class="bub guest"><b class="gnm" style="--gc:${gColor(o)}">${esc(o.name)}</b>${fmtMsg(m.text)}${tm}${reactHTML(m)}</div>`; }   // 9.97
   else inner = `<div class="bub${m.pending ? ' typing' : ''}${!m.pending && !m.reply && isJumbo(m.text) ? ' jumbo' : ''}${!me && duoOn(cur) ? ' duob' : ''}">${quoteHTML(m)}${!me && duoOn(cur) ? duoHTML(cur, m.pending ? typedText(m) : m.text) : fmtMsg(m.pending ? typedText(m) : m.text)}${m.pending ? '' : tm}${reactHTML(m)}</div>`;   // 9.63
@@ -8385,7 +8598,7 @@ function contextUpTo(idx, chx){
       // 9.16: o reacție pusă mai târziu pe un mesaj vechi nu mai schimbă istoricul (rescris în cache la 2×); o află dintr-o notă, o dată
       if(react && (!reactAt || reactAt <= (m.ts || 0))) pre += `(am reacționat cu ${react} la mesajul tău) `; react = ''; reactAt = 0;
       if(m.reply) pre += `(răspund la: „${m.reply.text}”${m.reply.ctx ? ' ' + m.reply.ctx : ''}) `;
-      out.push({role:'user', text: pre + (m.sticker ? `[ți-am trimis un sticker cu tine: ${m.sticker.l}]` : m.gift ? `[îți trimit un cadou: ${m.gift.n}]` + (m.text ? ' ' + m.text : '') : m.img ? '[ți-am trimis o poză]' + (m.text ? ' ' + m.text : '') : m.text), _img: m.img || null});
+      out.push({role:'user', text: pre + (m.sticker ? (m.sticker.mine ? `[ți-am trimis un sticker de-al meu: ${m.sticker.l}]` : `[ți-am trimis un sticker cu tine: ${m.sticker.l}]`) : m.gift ? `[îți trimit un cadou: ${m.gift.n}]` + (m.text ? ' ' + m.text : '') : m.img ? '[ți-am trimis o poză]' + (m.text ? ' ' + m.text : '') : m.text), _img: m.img || null});
     } else {
       out.push({role:'assistant', text: m.sticker ? `*îți trimite un sticker: ${m.sticker.l}*` : (m.reply && m.text ? '[re: ' + m.reply.text.split(/\s+/).slice(0, 6).join(' ') + '] ' : '') + (m.text || '*îți trimite o poză*')});   // 9.31: reply-ul ei rămâne în istoric
       if(m.react){ react = m.react; reactAt = m.reactAt || 0; }
@@ -9130,7 +9343,7 @@ function plusMenu(){
   const o = [];
   if(S.imgProv !== 'none') o.push(['📷', `Cere o poză de la ${cur.name}`, () => askPhoto()]);
   if(S.imgProv !== 'none' && cur.photo) o.push(['👫', S.userPhoto ? `Fă o poză împreună cu ${cur.name}` : 'Poză împreună (pune-ți întâi poza în Setări)', () => S.userPhoto ? askPhoto(false, null, null, {together:true}) : (openSettings(), openSetPanel('me'))]);
-  if((cur.stickers || []).length || (S.imgProv !== 'none' && cur.photo)) o.push(['😺', (cur.stickers || []).length ? 'Trimite un sticker' : 'Stickere cu ' + cur.name, stickerSheet]);   // 8.9.3: doar unde se pot face
+  o.push(['😺', 'Trimite un sticker', stickerSheet]);   // 12.3: și stickerele tale, oriunde
   o.push(['🎁', `Trimite-i un cadou lui ${cur.name}`, giftSheet]);
   o.push(['🖼️', 'Trimite o poză din galerie', () => $('#fGal').click()]);
   o.push(['📸', 'Fă o poză cu camera', () => $('#fCam').click()]);
@@ -13003,6 +13216,7 @@ async function saveEditorNow(){
   else if(ed.photoBlob){ const old = c.photo; c.photo = await saveImg(ed.photoBlob); if(old) await delPhotoIfUnused(c, old); c.aiPortrait = !!ed.aiPortrait;
     // 9.26: avatarele vii și unghiurile făcute automat erau ale feței vechi: se scot (altfel avatarul și pozele din chat arătau altă persoană)
     if(old && c.avs){ for(const k of Object.values(c.avs)) await delImg(k).catch(() => {}); delete c.avs; c.avLive = false; }
+    if(old && c.avClips){ for(const x of Object.values(c.avClips)) if(x && x.k) await delImg(x.k).catch(() => {}); delete c.avClips; }   // 12.3
     if(old && c.refsAuto && !(ed.angles && ed.angles.length)){ for(const k of c.refs || []) await delImg(k).catch(() => {}); c.refs = []; delete c.refsAuto; c.refBoxes = {}; }
     }   // 11.0 (C4): fișa feței veche nu se mai șterge: la completarea pachetului se compară cu portretul nou și rămân unghiurile care se potrivesc
   await crSave(c);   // 9.24: poza întreagă, corpul, unghiurile, descrierea ta
@@ -13037,6 +13251,7 @@ async function deleteChar(cc){
     await delImg(c.photo);
     if(c.duo && c.duo.b && c.duo.b.photo) await delImg(c.duo.b.photo).catch(() => {});   // 9.64
     for(const k of Object.values(c.avs || {})) await delImg(k).catch(() => {});
+    for(const x of Object.values(c.avClips || {})) if(x && x.k) await delImg(x.k).catch(() => {});   // 12.3
     for(const x of c.stickers || []) await delImg(x.k).catch(() => {});
     for(const k of c.refs || []) await delImg(k).catch(() => {});
     for(const k of fidImgKeys(c)) await delImg(k).catch(() => {});   // 10.0: pozele setului-etalon și decupajele semnelor
