@@ -1161,11 +1161,6 @@ img.avl{animation:avBreath 10s ease-in-out infinite alternate,avIn .7s ease-out 
 .callv .cvid.w img.on{transform:scale(1.085) translateY(-4px)}
 .callv .cnet{position:absolute;left:50%;top:calc(64px + var(--safe-t));transform:translate(-50%,-6px);padding:5px 12px;border-radius:99px;background:#000a;color:#fff;font-size:.78rem;font-weight:600;opacity:0;transition:opacity .25s,transform .25s;z-index:6;pointer-events:none}
 .callv .cnet.on{opacity:1;transform:translate(-50%,0)}
-.callv > .cdiag{position:absolute !important;left:12px;right:12px;top:calc(84px + var(--safe-t));z-index:60 !important;max-height:calc(100% - 240px);overflow:auto;padding:14px 16px;border-radius:18px;background:#000000d9;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#fff;font-size:.8rem;line-height:1.38}
-.callv .cdiag h4{margin:0 0 10px;font-size:.95rem}
-.callv .cdiag p{margin:0 0 9px}
-.callv .cdiag p b{font-weight:700}
-.callv .cdiag .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
 .callv .cgrain{position:absolute;inset:0;opacity:var(--gr,.09);mix-blend-mode:overlay;background-image:radial-gradient(#fff 1px,transparent 1px);background-size:3px 3px;animation:grain .45s steps(4) infinite;z-index:1}
 .callv .cvid::after{z-index:2;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,#0008 100%),linear-gradient(#000a 0%,#0000 20%,#0000 58%,#000d 100%)}
 .callv.vid:not(.live) .cvid img{filter:blur(18px) brightness(.7)}
@@ -2346,6 +2341,8 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <div class="seg" id="stCallDepth"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
         <label>🌿 Fundal viu<small class="lh">Vânt, umbre de ploaie, cineva care trece, faruri noaptea.</small></label>
       <div class="seg" id="stCallBg"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label>📶 Semnal slab, rar<small class="lh">Din când în când, o secundă în care imaginea îngheață.</small></label>
+      <div class="seg" id="stCallGlitch"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
       </details>
       <h3 class="sh">🔊 Sunetul</h3>
       <label>🎧 Sunetul locului<small class="lh">Cafenea, stradă, ploaie, liniștea casei, respirațiile.</small></label>
@@ -2362,15 +2359,11 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
     </div>
 
     <div class="panel sec" data-panel="voice" data-title="Voce" hidden>
-      <label>🎙️ Voce reală de femeie<small class="lh">HeyGen prin Runware, cu cheia Runware din telefon: în apeluri, mesaje vocale și 🔊. ~$0,004 la 1.000 de caractere. Vocea se alege după fire; o asculți și o schimbi din profil → 🎙️ Vocea.</small></label>
-      <div class="seg" id="stVoiceReal"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <p class="hint" id="rvHint"></p>
-      <div class="btns"><button class="btn sm" id="stRvChars">🎙️ Vocea fiecărui personaj</button><button class="btn sm" id="stRvTest">🧪 Testează vocea reală</button></div>
-      <label>🔊 Citește mesajele cu voce<small class="lh">La 🔊 sau automat, cu vocea reală (dacă e pornită) sau a telefonului.</small></label>
+      <label>🔊 Citește mesajele cu voce<small class="lh">La 🔊 sau automat, cu vocea telefonului (gratuit).</small></label>
       <div class="seg" id="stVoice"><button data-v="off">Oprit</button><button data-v="tap">La 🔊</button><button data-v="auto">Automat</button></div>
       <label>🎤 Mesaje vocale de la personaj</label>
       <div class="seg" id="stVmsg"><button data-v="off">Niciodată</button><button data-v="rar">Rar</button><button data-v="des">Des</button></div>
-      <p class="hint" id="ttsHint">Fără voce reală (sau când Runware nu răspunde): vocea telefonului, gratuită. Tonul (mai grav / mai subțire) se alege din profilul fiecărui personaj → 🎙️ Vocea. Apelul video se face tot în telefon, fără cost: sunetul de fundal, adâncimea, lumina și „te vede dacă ești acolo” rulează în telefon, fără niciun serviciu plătit.</p>
+      <p class="hint" id="ttsHint">Vocea telefonului, gratuită. Tonul (mai grav / mai subțire) se alege din profilul fiecărui personaj → 🎙️ Vocea. Apelul video se face tot în telefon, fără cost: sunetul de fundal, adâncimea, lumina și „te vede dacă ești acolo” rulează în telefon, fără niciun serviciu plătit.</p>
       <div class="btns"><button class="btn sm" id="stTtsTest">🔊 Ascultă un test</button></div>
     </div>
 
