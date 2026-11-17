@@ -1213,6 +1213,14 @@ img.avl{animation:avBreath 10s ease-in-out infinite alternate,avIn .7s ease-out 
 .callv .cself{top:calc(96px + var(--safe-t,0px))}
 .callv .vtop{right:126px!important}
 .callv .cend{inset:0}
+/* 12.5: schimbarea imaginii e o tăietură scurtă (cu o clipă de focus), nu două fețe una peste alta */
+html .callv .cvid img,html .callv .cvid img.ex{transition:opacity .2s ease-out,transform .09s ease-out,filter .25s!important}
+html .callv.vid .cvid.rig img{transition:opacity .2s ease-out,filter .25s!important}
+html .callv .cvid.cut img.on,html .callv .cvid.cut canvas.cface{filter:blur(3px) brightness(.96)!important}
+.callv .ccprog{position:absolute!important;left:16px;top:calc(68px + var(--safe-t,0px));z-index:6;max-width:calc(100% - 140px);padding:5px 10px;border-radius:12px;background:#0009;backdrop-filter:blur(10px);font-size:.72rem;font-weight:600;line-height:1.3;animation:fi .3s}
+.callv:not(.vid) .ccprog{display:none}
+.callv.vid .ccap{transition:opacity .5s}
+.callv.vid .ccap.old:not(:has(.cme,.cdots)){opacity:0;transition:opacity 1.2s}
 /* ═══ 12.4: apelul video, vizual ═══ */
 /* clipurile reale: aceeași încadrare și aceeași mișcare de mână ca imaginea */
 .callv .cvid video.cclip{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 25%;opacity:0;transition:opacity .28s ease-out;animation:handheld 11s ease-in-out infinite alternate;pointer-events:none}
@@ -2326,6 +2334,8 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <div class="seg" id="stCallLife"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
       <label>🎬 Mișcare reală în apel: 6 clipuri scurte pe Runware din imaginea apelului (o dată pe imagine, ~$0,48 la „Clare”), cât ascultă, râde, se gândește, ce face, „pa”</label>
       <div class="seg" id="stCallClips"><button data-v="on">Pornit</button><button data-v="profil">Doar pe avatar</button><button data-v="off">Oprit</button></div>
+      <label>🗣️ Cât vorbește, în apelul video: clip real (se mișcă natural, gura nu e potrivită pe cuvinte) sau fața din telefon (gura pe cuvinte, restul nemișcat)</label>
+      <div class="seg" id="stCallTalk"><button data-v="clip">Clip real</button><button data-v="face">Fața din telefon</button></div>
       <label>👄 Gura și clipitul din cadre reale ale ei (o dată pe imagine, 4 poze pe Runware, ~1–2 ¢; cel mult 3 imagini noi pe zi)</label>
       <div class="seg" id="stCallSprites"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
       <label>📷 Camera ca a unui telefon (obiectiv larg de aproape, focusul care caută, granulație noaptea)</label>
