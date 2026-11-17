@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '13.1';
+const APP_VER = '13.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -10705,6 +10705,7 @@ function startCall(opts = {}){
       <button id="clFlip" class="vonly" aria-label="Întoarce camera">${ICO.flip}<span>Întoarce</span></button>
       <button id="clSee" class="vonly${call.see ? ' off' : ''}" aria-label="Te vede">${ICO.eye}<span>Te vede</span></button>
       <button id="clBarge" class="${call.barge ? 'off' : ''}" aria-label="Întreruperi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8a8 8 0 0 0 16 0v-3a2 2 0 0 0-4 0"/></svg><span>Întrerup</span></button>
+      <button id="clDiag" class="vonly" aria-label="Starea apelului"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M11 8v3.5M11 14h.01"/></svg><span>Stare</span></button>
       <button id="clMore" class="vonly" aria-label="Mai mult"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>Mai mult</span></button>
       <button id="clEnd" class="end" aria-label="Închide">${ICO.end}<span>Închide</span></button></div>
     <div class="cmore" id="clMoreP"><div class="cmrx"></div><div class="cmgrid"></div></div>`;
@@ -10728,6 +10729,7 @@ function startCall(opts = {}){
   const vb = $('#clVid'); if(vb) vb.onclick = () => { if(call === c) setVideo(!c.video); };
   $('#clFlip').onclick = () => { c.facing = c.facing === 'user' ? 'environment' : 'user'; camOn(); };
   $('#clSee').onclick = () => { c.see = !c.see; S.callSee = c.see ? 'on' : 'off'; saveSettings(); $('#clSee').classList.toggle('off', c.see); toast(c.see ? `👁️ ${c.c.name} te vede` : `🙈 ${c.c.name} nu te mai vede (doar te aude)`); };
+  { const d = $('#clDiag'); if(d) d.onclick = e => { e.stopPropagation(); callDiagShow(c); }; }   // 13.2
   $('#clBarge').onclick = () => { c.barge = !c.barge; S.callBarge = c.barge ? 'on' : 'off'; saveSettings(); $('#clBarge').classList.toggle('off', c.barge); toast(c.barge ? (IS_ANDROID ? '✋ O poți întrerupe vorbind peste ea. Dacă vocea ei nu se mai aude (mai ales cu căști Bluetooth), oprește-l la loc.' : '✋ O poți întrerupe vorbind peste ea') : 'Întreruperile vocale sunt oprite (atingerea subtitrării încă merge)', 3000); if(!c.barge && c.bargeRec){ try{ c.bargeRec.abort(); }catch(e){} } };
   // atingi subtitrarea (sau imaginea) cât vorbește: se oprește și te ascultă
   v.addEventListener('click', e => { if(c.wasCalm){ c.wasCalm = false; return; } if(c.state === 'speak' && !e.target.closest('.cbtns,.vreact,.cself,.vtop')) callInterrupt(c, ''); });
@@ -11173,12 +11175,26 @@ function vfGL(cv){
 }
 // punctele feței pe o imagine (o dată per imagine; ținute în memorie pentru apel)
 const vfCache = new Map();
+/* 13.2: dacă detectorul rapid nu găsește fața (ochelari, unghi, lumină), încearcă detectorul mare, apoi pe cel sensibil, apoi o
+   estimează din ochii și nasul găsite de MoveNet (`vfLmFromPose`, după o față medie de 68 de puncte). `L.how` spune care a mers. */
 async function vfLandmarks(img){
   const key = img.currentSrc || img.src; if(vfCache.has(key)) return vfCache.get(key);
-  const f = await faceApi();
-  const r = (await f.detectAllFaces(img, new f.TinyFaceDetectorOptions({inputSize:608, scoreThreshold:.4})).withFaceLandmarks()).sort((a, b) => b.detection.box.area - a.detection.box.area)[0];
-  const out = r ? r.landmarks.positions.map(p => [p.x, p.y]) : null;
+  const f = await faceApi(), big = rs => rs.sort((a, b) => b.detection.box.area - a.detection.box.area)[0];
+  let r = big(await f.detectAllFaces(img, new f.TinyFaceDetectorOptions({inputSize:608, scoreThreshold:.4})).withFaceLandmarks()), how = r ? 'detector rapid' : '';
+  if(!r){ if(!f.nets.ssdMobilenetv1.isLoaded) await f.nets.ssdMobilenetv1.loadFromUri(FA + 'model'); r = big(await f.detectAllFaces(img, new f.SsdMobilenetv1Options({minConfidence:.3})).withFaceLandmarks()); if(r) how = 'detector mare'; }
+  if(!r){ r = big(await f.detectAllFaces(img, new f.TinyFaceDetectorOptions({inputSize:416, scoreThreshold:.2})).withFaceLandmarks()); if(r) how = 'detector sensibil'; }
+  let out = r ? r.landmarks.positions.map(p => [p.x, p.y]) : null;
+  if(!out){ let kp = null; try{ kp = await vfPose(img); }catch(e){} out = vfLmFromPose(kp); if(out) how = 'estimată din ochi'; }
+  if(out) out.how = how;
   vfCache.set(key, out); return out;
+}
+const VF_TPL = [[-1.137,0.07],[-1.097,0.383],[-1.048,0.688],[-0.994,0.952],[-0.891,1.246],[-0.747,1.469],[-0.577,1.626],[-0.348,1.79],[0.0,1.882],[0.336,1.794],[0.542,1.647],[0.705,1.495],[0.846,1.246],[0.957,0.96],[1.007,0.683],[1.059,0.39],[1.078,0.084],[-0.902,-0.253],[-0.777,-0.375],[-0.601,-0.414],[-0.431,-0.403],[-0.283,-0.351],[0.306,-0.341],[0.449,-0.393],[0.606,-0.417],[0.79,-0.378],[0.906,-0.27],[-0.011,0.024],[-0.011,0.246],[-0.011,0.46],[-0.025,0.647],[-0.195,0.789],[-0.113,0.816],[-0.013,0.837],[0.085,0.805],[0.173,0.79],[-0.682,-0.013],[-0.583,-0.061],[-0.437,-0.061],[-0.309,0.014],[-0.418,0.07],[-0.57,0.052],[0.298,0.017],[0.437,-0.069],[0.591,-0.068],[0.677,0.002],[0.575,0.067],[0.423,0.049],[-0.404,1.175],[-0.261,1.124],[-0.102,1.083],[-0.018,1.101],[0.07,1.077],[0.242,1.141],[0.408,1.186],[0.254,1.262],[0.128,1.307],[-0.001,1.317],[-0.12,1.312],[-0.252,1.27],[-0.378,1.178],[-0.138,1.173],[-0.011,1.179],[0.109,1.185],[0.366,1.181],[0.109,1.185],[-0.003,1.189],[-0.114,1.184]];   // 13.2: fața medie (68 de puncte), față de mijlocul ochilor, în distanțe dintre ochi
+function vfLmFromPose(kp){
+  if(!kp) return null; const e1 = kp[1], e2 = kp[2];
+  if(!e1 || !e2 || e1[2] < .3 || e2[2] < .3) return null;
+  const [a, b] = e1[0] < e2[0] ? [e1, e2] : [e2, e1], dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy); if(d < 8) return null;
+  const ca = dx / d, sa = dy / d, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  return VF_TPL.map(([x, y]) => [mx + (x * ca - y * sa) * d, my + (x * sa + y * ca) * d]);
 }
 // 9.14: poziția corpului (MoveNet Lightning, în telefon): umeri, coate, încheieturi, șolduri — o dată per imagine
 let poseP = null; const poseCache = new Map();
@@ -11269,9 +11285,14 @@ async function vfSwitch(c, img){
   const tok = V.tok = (V.tok || 0) + 1;
   try{
     if(!img.complete || !img.naturalWidth) await new Promise((res, rej) => { img.addEventListener('load', res, {once:true}); img.addEventListener('error', rej, {once:true}); });
-    const L = await vfLandmarks(img); if(tok !== V.tok || call !== c) return;
+    V.why = 'caut fața în imagine…';
+    let L = null;
+    try{ L = await vfLandmarks(img); }
+    catch(e){ V.why = 'detectorul de față a dat eroare: ' + String(e && e.message || e).slice(0, 120); if((V.retry = (V.retry || 0) + 1) <= 3) setTimeout(() => { if(call === c && c.vf === V && V.tok === tok) vfSwitch(c, img); }, 4000); return; }   // 13.2
+    if(tok !== V.tok || call !== c) return;
     const W0 = img.naturalWidth, H0 = img.naturalHeight;
-    if(!L || (L[16][0] - L[0][0]) < W0 * .06){ return; }   // fără față sau prea mică: rămâne imaginea simplă
+    if(!L || (L[16][0] - L[0][0]) < W0 * .06){ V.why = L ? 'fața e prea mică în imagine' : 'nu găsesc fața în imagine (nici ochii)'; return; }   // fără față sau prea mică: rămâne imaginea simplă
+    V.how = L.how || '';
     const k = Math.min(1, 1024 / Math.max(W0, H0)), W = Math.round(W0 * k), H = Math.round(H0 * k);
     V.cv.width = W; V.cv.height = H;
     const pts = L.map(([x, y]) => [x * k, y * k]);
@@ -11329,10 +11350,10 @@ async function vfSwitch(c, img){
     gl.viewport(0, 0, W, H);
     V.ib = V.ib || gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, V.ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, V.idx, gl.STATIC_DRAW);
     vfDraw(c, performance.now());
-    V.cv.classList.add('on');
+    V.cv.classList.add('on'); V.why = '';
     vfDepth(c, tok, img, {W, H, cx, cy, fw, fh, shL, shR});   // 9.23: harta de adâncime (în fundal, o dată per imagine)
     vfSprLoad(c, tok, img, pts, all).catch(e => console.warn('cadrele reale', e.message));   // 9.81: gura și clipitul din cadre reale, dacă există
-  }catch(e){ console.warn('fața care vorbește', e.message); }
+  }catch(e){ console.warn('fața care vorbește', e.message); V.why = 'eroare la fața care vorbește: ' + String(e && e.message || e).slice(0, 120); }
 }
 /* ═════════ 👄 9.81: cadrele reale ale feței (gura a / o / e, ochii închiși) ═════════
    O dată pe imagine (Runware, ~4 editări): aceeași poză, schimbat DOAR gura sau ochii. În apel, fiecare cadru se aliniază pe față
@@ -11413,9 +11434,7 @@ function vfDraw(c, now){
   const heard = c.heardAt && now - c.heardAt < 900;
   const tS = now / 1000, br0 = Math.sin(tS * Math.PI * 2 / 4.2);
   const LIFE = S.callLife !== 'off', BH = LIFE ? vfBehave(c, V, now, st) : null;   // 9.81: ce face între replici
-  // 9.81: semnal slab, rar: imaginea îngheață o clipă, apoi pixeli (doar cât nu vorbește)
-  if(S.callCam !== 'off' && S.callGlitch !== 'off' && c.t0){ if(!V.glNext) V.glNext = now + 150e3 + Math.random() * 150e3;
-    if(now > V.glNext && st !== 'speak'){ c.glitch = {freezeUntil:now + 450 + Math.random() * 500, pixUntil:now + 1500}; V.glNext = now + 200e3 + Math.random() * 220e3; netFlash(c); } }
+  // 13.2: fără „semnal slab” (pixelii mari și înghețarea arătau ca o eroare)
   // ── gura: cadrele-cheie ale literelor; fără cuvinte de la voce, un vorbit generic cât vorbește
   V.kf = V.kf.filter(x => now < x.t + 400);
   for(const x of V.kf) if(!x.done && x.src && x.t <= now){ x.done = 1; if(x.smile) V.smileT = now; if(x.laugh) V.laughT = now; if(x.end){ V.nods.push({t:now, a:x.end === 'q' ? .4 : .9}); if(x.end === 'q'){ V.brow = now; V.tiltT = now; } else { V.lensUntil = now + 1200 + Math.random() * 800; V.sacAt = now; } } }   // 9.62
@@ -11631,12 +11650,13 @@ function netFlash(c){
   v.classList.add('weak'); clearTimeout(v._wk); v._wk = setTimeout(() => v.classList.remove('weak'), 2600);   // 12.4
 }
 function vfStart(c){
-  if(S.callFace === 'off' || c.vf) return;
+  if(S.callFace === 'off'){ c.vfWhy = 'fața care vorbește e oprită (Setări → Apeluri)'; return; }   // 13.2: motivul, în 🔎 Starea apelului
+  if(c.vf) return;
   const cvd = $('.callv .cvid'); if(!cvd) return;
   const cv = document.createElement('canvas'); cv.className = 'cface';
   cv.style.animationDelay = -((performance.now() - (c.tImgs || performance.now())) / 1000) + 's';   // în pas cu pozele de dedesubt
   let g; try{ g = vfGL(cv); }catch(e){ g = null; }
-  if(!g) return;   // fără WebGL: rămâne imaginea simplă
+  if(!g){ c.vfWhy = 'telefonul n-a pornit WebGL: rămâne imaginea simplă, fără gură'; return; }   // fără WebGL: rămâne imaginea simplă
   cvd.insertBefore(cv, cvd.querySelector('.cgrain')); cvd.classList.add('vf');
   c.vf = {cv, g, q:[], open:0, ready:false};
   cv.addEventListener('webglcontextlost', e => { e.preventDefault(); if(c.vf) c.vf.ready = false; });
@@ -12363,10 +12383,11 @@ async function ccEnsure(c){
   ccLoad(c);
   const why = ccWhyNot(cc), prof = S.callClips === 'profil' && !av && k0 !== cc.photo;
   const todo = CC_KINDS.filter(k => !set.v[k]);
+  c.ccWhy = prof ? '„Mișcare reală” e pusă doar pentru poza de profil (Setări → Apeluri)' : why || '';   // 13.2
   if(!todo.length || prof) return;
   if(why){ setTimeout(() => ccChip(c, '🎬 Fără mișcare reală: ' + why, 9000), 3200); return; }   // 12.5: spus clar, pe ecranul apelului
   toast(`🎬 Pregătesc mișcarea ei reală pentru imaginea asta: ${todo.length} ${todo.length === 1 ? 'clip' : 'clipuri'}, ~${usd(ccCost(todo))}, o singură dată pentru locul ăsta. Apelul merge între timp.`, 5500);
-  let done = CC_KINDS.length - todo.length; const prog = () => ccChip(c, `🎬 Mișcarea ei reală · ${done}/${CC_KINDS.length}`);
+  let done = CC_KINDS.length - todo.length; const prog = () => { c.ccMaking = done < CC_KINDS.length; ccChip(c, `🎬 Mișcarea ei reală · ${done}/${CC_KINDS.length}`); };
   prog();
   let i = 0, stop = false;
   const work = async () => {
@@ -12375,10 +12396,11 @@ async function ccEnsure(c){
       if(rwCapLeft() < avClipPer()){ if(!stop) toast('Plafonul Runware de azi e atins: restul mișcării, data viitoare.', 4500); stop = true; break; }
       try{ const r = await rwClip(cc, k0, ccPrompt(kind, set.env), undefined, CC_LITE.has(kind)); if(r){ set.v[kind] = r; done++; await saveChars(); if(call === c){ ccAdd(c, kind, r); prog(); } } }
       catch(e){ if(e.wk){ cc.avClipWk = 1; saveChars(); if(!stop) toast('🎬 ' + e.message + ' Pune cheia Runware direct în telefon (Setări → Poze).', 6500); stop = true; }
-        else if(/credit|balance/i.test(e.message)){ if(!stop) toast(e.message, 5000); stop = true; } }
+        else if(/credit|balance/i.test(e.message)){ if(!stop) toast(e.message, 5000); stop = true; }
+        c.ccErr = String(e && e.message || e).slice(0, 160); }   // 13.2
     }
   };
-  await Promise.all([work(), work()]);
+  await Promise.all([work(), work()]); c.ccMaking = false;
   ccChip(c, done >= CC_KINDS.length ? '🎬 Mișcarea ei reală e gata' : '', 2500);
   ccPrune(cc); saveChars();
 }
@@ -12422,6 +12444,11 @@ function ccRun(c){
   c.ccT = setInterval(() => {
     if(call !== c){ clearInterval(c.ccT); return; }
     const L = c.cl; if(!L || !c.video || !c.t0) return;
+    { const v0 = L.cur, t1 = performance.now();   // 13.2: un clip blocat (nu mai avansează) sau care n-a pornit nu ține imaginea înghețată
+      if(v0 && v0 !== 1 && v0.classList.contains('on')){
+        if(v0 !== L.wv || v0.currentTime !== L.wt){ L.wv = v0; L.wt = v0.currentTime; L.wAt = t1; }
+        else if(t1 - L.wAt > (v0.paused && c.state === 'speak' ? 2500 : 1600)){ ccOff(c, v0, true); L.wv = null; L.stalls = (L.stalls || 0) + 1; if(!(v0.paused && c.state === 'speak')) c.ccErr = `clipul „${v0.dataset.kind}” s-a blocat la redare; a revenit fața care vorbește`; return; }
+      } else if(v0 && v0 !== 1 && t1 - (L.lastAny || 0) > 4000){ ccOff(c, v0, true); c.ccErr = `clipul „${v0.dataset.kind}” n-a pornit`; return; } }
     if(c.lit && c.lit.tgn){ const L0 = c.lit, C = L0.cur; C.gn = C.gn.map((x, i) => x + (L0.tgn[i] - x) * .12); C.sat += (L0.tsat - C.sat) * .12; C.fl += (L0.tfl - C.fl) * .12; }   /* lumina se apropie de ținta ei și cât rulează un clip */
     const LC = c.lit && c.lit.cur, cvd = L.cv || (L.cv = $('.callv .cvid')); if(LC && cvd){ const warm = Math.max(0, LC.gn[0] - LC.gn[2]); cvd.style.setProperty('--cf', `brightness(${LC.fl.toFixed(3)}) saturate(${LC.sat.toFixed(3)}) sepia(${Math.min(.4, warm * 1.8).toFixed(3)})`); }   // 12.6
     const now = performance.now(), since = k => now - (L.last[k] || 0), quiet = now - (L.lastAny || 0), has = k => L.els[k] && L.els[k] !== 1;
@@ -12444,6 +12471,39 @@ function callIntro(c){
   setTimeout(() => { if(call === c && c.state !== 'speak') ccPlay(c, 'activ'); }, 1500);
 }
 const CALL_BYE = {ro:['Pa, pa!', 'Hai, pa!', 'Bine, vorbim. Pa!', 'Pa! Vorbim.'], en:['Bye!', 'Okay, bye!', 'Talk soon, bye!']};
+/* 13.2: 🔎 Starea apelului — ce se vede și de ce, ca să nu ghicim: imaginea, fața și gura, clipurile, vocea, Runware */
+function callDiag(c){
+  const cc = c.c, V = c.vf, L = c.cl, out = [], k0 = c.pics && c.pics[0];
+  let env = '?'; try{ env = ambEnv(c); }catch(e){}
+  out.push(['🖼️ Imaginea', !c.video ? 'apel doar audio' : c.framePending ? `se pregătește imaginea de apel pentru „${env}”` : k0 && callFrameOf(cc, env) === k0 ? `imaginea de apel pentru „${env}”` : `poza de profil sau din chat${c.frameLate ? ' (imaginea de apel va fi gata data viitoare)' : ''}`]);
+  const clipOn = !!(L && L.cur && L.cur !== 1 && L.cur.classList.contains('on'));
+  out.push(['👄 Fața și gura', !c.video ? '—' : c.vfWhy || (!V ? 'nepornită încă' : V.ready ? `găsită (${V.how || 'detector'}) · ${V.spr ? 'gura din cadre reale' : 'gura desenată'} · acum se vede ${clipOn ? 'un clip' : 'fața care vorbește'}` : (V.why || 'caut fața…'))]);
+  const set = cc.callClips && k0 ? cc.callClips[k0] : null, n = set && set.v ? CC_KINDS.filter(k => set.v[k]).length : 0;
+  let cl = !c.video ? '—' : S.callClips === 'off' ? 'oprite (Setări → Apeluri)' : c.framePending ? 'așteaptă imaginea de apel' : c.ccWhy || `${n}/${CC_KINDS.length} gata${c.ccMaking ? ', se fac acum' : ''}`;
+  if(clipOn) cl += ` · rulează „${L.cur.dataset.kind}”${L.cur.paused ? ' (pe pauză)' : ''}`;
+  if(c.ccErr) cl += ` · ultima problemă: ${c.ccErr}`;
+  out.push(['🎬 Clipurile', cl]);
+  const w = rvWhy(cc);
+  out.push(['🎙️ Vocea', (w ? 'a telefonului: ' + w : 'reală · ' + rvLabel(cc) + (RV.cur ? ' · vorbește' : RV.q.length ? ` · ${RV.q.length} în coadă` : '')) + (RV.lastErr ? ` · ultima eroare: ${RV.lastErr}` : '')]);
+  const busyMin = S.rwBusyAt ? Math.round((Date.now() - S.rwBusyAt) / 60e3) : null;
+  out.push(['⚡ Runware', `${String(S.rwKey || '').trim() ? 'cheia în telefon' : 'fără cheie în telefon'} · azi ${usd(rwDay().usd)}${busyMin != null && busyMin < 15 ? ` · „aglomerat” acum ${busyMin} min` : ''}`]);
+  return out;
+}
+function callDiagShow(c){
+  const v = $('.callv'); if(!v || call !== c) return;
+  let el = v.querySelector('.cdiag'); v.classList.remove('more');
+  if(el){ el.remove(); clearInterval(c.dgT); return; }
+  el = document.createElement('div'); el.className = 'cdiag'; el.addEventListener('click', e => e.stopPropagation()); v.appendChild(el);
+  const close = () => { el.remove(); clearInterval(c.dgT); };
+  const draw = () => {
+    if(call !== c || !el.isConnected){ clearInterval(c.dgT); return; }
+    el.innerHTML = `<h4>🔎 Starea apelului</h4>${callDiag(c).map(([a, b]) => `<p><b>${esc(a)}</b><br>${esc(b)}</p>`).join('')}<div class="btns"><button class="btn sm" data-dgc>Copiază</button><button class="btn sm pri" data-dgx>Închide</button></div>`;
+    el.querySelector('[data-dgx]').onclick = close;
+    el.querySelector('[data-dgc]').onclick = () => { const t = `Taifas ${APP_VER} · ${cc0()}\n` + callDiag(c).map(([a, b]) => `${a}: ${b}`).join('\n'); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copiat. Îl poți lipi în chat cu Claude.', 2200)).catch(() => toast('Nu pot copia aici.', 1800)); };
+  };
+  const cc0 = () => c.c.name + ' · ' + new Date().toLocaleString('ro-RO');
+  draw(); c.dgT = setInterval(draw, 1000);
+}
 function callHangup(c){
   if(call !== c) return;
   if(c.ending || !c.t0 || c.state === 'ring'){ endCall(); history.back(); return; }   // a doua atingere (sau încă sună): imediat
@@ -12469,7 +12529,7 @@ function callSheHangs(c, m){
 function callLayout(v, on){
   const P = v.querySelector('#clMoreP'), grid = P && P.querySelector('.cmgrid'), rx = P && P.querySelector('.cmrx'), bar = v.querySelector('.cbtns'), rail = v.querySelector('.vreact'), end = v.querySelector('#clEnd'), more = v.querySelector('#clMore');
   if(!P) return;
-  for(const id of ['clSee', 'clBarge', 'clAdd']){ const b = v.querySelector('#' + id); if(!b) continue; if(on) grid.appendChild(b); else bar.insertBefore(b, more || end); }
+  for(const id of ['clSee', 'clBarge', 'clAdd', 'clDiag']){ const b = v.querySelector('#' + id); if(!b) continue; if(on) grid.appendChild(b); else bar.insertBefore(b, more || end); }
   if(rail){ if(on){ for(const b of [...rail.children]) rx.appendChild(b); } else for(const b of [...rx.children]) rail.appendChild(b); }
   if(!on) v.classList.remove('more');
 }
@@ -13907,7 +13967,7 @@ const aiReady = () => hasKey('anthropic');
 const FIELDS = {stKey:'key', stModel:'model', stUser:'userName', stAbout:'userAbout', stBday:'userBday',
   stWkBase:'wkBase', stWkTok:'wkTok', stWkModel:'wkModel', stWkSize:'wkSize',
   stPin:'pIn', stPout:'pOut', stVkBase:'wkBase', stVkTok:'wkTok', stRwKey:'rwKey'};
-const SEGS = {stCallFill:'callFill', stCallClips:'callClips', stCallTalk:'callTalk', stCallReal:'callReal', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallGlitch:'callGlitch', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
+const SEGS = {stCallFill:'callFill', stCallClips:'callClips', stCallTalk:'callTalk', stCallReal:'callReal', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
 SEGS.stVoiceReal = 'voiceReal';   // 12.9
 let setPanel = null, setPanelPushed = false;
 /* 8.7: actualizare din aplicație. Codul vine oricum din rețea la pornire;

@@ -1161,6 +1161,11 @@ img.avl{animation:avBreath 10s ease-in-out infinite alternate,avIn .7s ease-out 
 .callv .cvid.w img.on{transform:scale(1.085) translateY(-4px)}
 .callv .cnet{position:absolute;left:50%;top:calc(64px + var(--safe-t));transform:translate(-50%,-6px);padding:5px 12px;border-radius:99px;background:#000a;color:#fff;font-size:.78rem;font-weight:600;opacity:0;transition:opacity .25s,transform .25s;z-index:6;pointer-events:none}
 .callv .cnet.on{opacity:1;transform:translate(-50%,0)}
+.callv > .cdiag{position:absolute !important;left:12px;right:12px;top:calc(84px + var(--safe-t));z-index:60 !important;max-height:calc(100% - 240px);overflow:auto;padding:14px 16px;border-radius:18px;background:#000000d9;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#fff;font-size:.8rem;line-height:1.38}
+.callv .cdiag h4{margin:0 0 10px;font-size:.95rem}
+.callv .cdiag p{margin:0 0 9px}
+.callv .cdiag p b{font-weight:700}
+.callv .cdiag .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
 .callv .cgrain{position:absolute;inset:0;opacity:var(--gr,.09);mix-blend-mode:overlay;background-image:radial-gradient(#fff 1px,transparent 1px);background-size:3px 3px;animation:grain .45s steps(4) infinite;z-index:1}
 .callv .cvid::after{z-index:2;background:radial-gradient(120% 90% at 50% 40%,transparent 55%,#0008 100%),linear-gradient(#000a 0%,#0000 20%,#0000 58%,#000d 100%)}
 .callv.vid:not(.live) .cvid img{filter:blur(18px) brightness(.7)}
@@ -2341,8 +2346,6 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <div class="seg" id="stCallDepth"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
         <label>🌿 Fundal viu<small class="lh">Vânt, umbre de ploaie, cineva care trece, faruri noaptea.</small></label>
       <div class="seg" id="stCallBg"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-        <label>📶 Semnal slab, rar<small class="lh">Din când în când, o secundă în care imaginea îngheață.</small></label>
-      <div class="seg" id="stCallGlitch"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
       </details>
       <h3 class="sh">🔊 Sunetul</h3>
       <label>🎧 Sunetul locului<small class="lh">Cafenea, stradă, ploaie, liniștea casei, respirațiile.</small></label>
