@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '13.2';
+const APP_VER = '13.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -796,10 +796,11 @@ function genDiagHTML(m){
   const sil = m.bd != null ? Math.max(0, Math.round(100 - m.bd * 250)) + '%' : null;
   return `<details class="gdiag"><summary>🔍 De ce arată așa (ce a primit generatorul)</summary>
     <p>🖼️ ${esc(g.mdl)} · motor ${g.eng === 'id' ? 'identitate (vechi)' : g.eng === 'flux3' ? 'FLUX 3' : 'ca în creator'} · repere: ${esc(g.refs)}</p>
+    ${(g.rwc || []).length ? `<p>⚡ Runware: ${g.rwc.map(x => `${x.n > 1 ? x.n + '× ' : ''}${x.w}×${x.h}${x.mdl === RW_KV ? ' KV' : ''} ${(x.ms / 1000).toFixed(1).replace('.', ',')} s`).join(' · ')}</p>` : ''}
     <p>👤 Fața față de portret: <b>${pct(g.fd)}</b>${g.ret ? ' (după retuș)' : ''}${sil ? ` · 🧍 silueta față de poza întreagă: <b>${sil}</b>${g.bfix ? ' (refăcută o dată)' : ''}` : ''}</p>
     ${g.lk || (g.look && typeof g.look === 'object') ? `<p>🎨 Măsurat în telefon față de portret: ${esc(lookLineRo(g.lk || g.look, cur) || 'nimic măsurabil în poza asta')}</p>` : ''}${g.pov || g.sref || g.pose ? `<p>🎬 Cadrul: ${[g.pov ? '👁️ din ochii tăi' : '', g.sref ? 'decorul luat din poza dinainte' : '', g.pose && poseLineRo(g.pose) ? 'poziția măsurată: ' + esc(poseLineRo(g.pose)) : ''].filter(Boolean).join(' · ')}</p>` : ''}${g.must ? `<p>✅ Trăsături obligatorii: ${g.must.miss && g.must.miss.length ? '<b>au picat: ' + esc(g.must.miss.join('; ')) + '</b>' : g.must.n ? 'toate cele ' + g.must.n + ' vizibile se potrivesc' : 'niciuna vizibilă în cadru'}</p>` : ''}
     <p>🧍 Corpul a venit din: <b>${esc(BODY_SRC_RO[g.src] || g.src)}</b></p>
-    ${(g.sheet || []).length ? `<p>🧩 Fișa de identitate: unghiurile <b>${esc(g.sheet.join(' + '))}</b> (pentru scena asta)</p>` : ''}${g.dr ? `<p>✏️ Aleasă din ${g.dr} schițe, apoi refăcută mare${g.dfd != null ? ` (schița: ${pct(g.dfd)})` : ''}</p>` : ''}${(g.fix || []).length ? `<p>🩹 Reparat doar: <b>${esc(g.fix.join(', '))}</b> (restul pozei a rămas)</p>` : ''}${g.skin ? '<p>🎨 Tenul adus la tenul din portret (pe telefon)</p>' : ''}${g.garRet ? '<p>🛡️ Garanția: fața a fost potrivită încă o dată după portret (era prea departe)</p>' : ''}${g.fwarn != null ? `<p>⚠️ Fața a rămas sub prag (${g.fwarn}%).</p>` : ''}${g.fin ? '<p>✨ Finisată pe telefon: balans de alb, expunere, claritate fină, granulație de senzor</p>' : ''}${g.bwarn != null ? `<p>⚠️ Corpul a rămas sub prag (${g.bwarn}%), chiar după refacere.</p>` : ''}${g.tm ? `<p>⏱️ ${g.tm.total ? '<b>' + (g.tm.total / 1000).toFixed(1).replace('.', ',') + ' s</b>: ' : ''}${[['scena', 'scena'], ['schite', 'schițe'], ['variante', 'variante'], ['alegere', 'alegere'], ['final', 'poza mare'], ['retus', 'retuș'], ['verificare', 'verificare'], ['reparare', 'reparare'], ['garantie', 'garanție'], ['masurare', 'măsurare'], ['finisare', 'finisare']].filter(([k]) => g.tm[k] > 50).map(([k, l]) => l + ' ' + (g.tm[k] / 1000).toFixed(1).replace('.', ',') + ' s').join(' · ')}${g.fast ? ' · fără verificare (deja măsurată ca bună)' : ''}</p>` : ''}${g.miss ? `<p>🎲 Ai respins varianta de dinainte pentru: <b>${esc(PFB_RO[g.miss] || g.miss)}</b></p>` : ''}${g.corr ? `<p style="color:var(--tx3);font-size:.8rem">Corectura trimisă: ${esc(g.corr)}</p>` : ''}
+    ${(g.sheet || []).length ? `<p>🧩 Fișa de identitate: unghiurile <b>${esc(g.sheet.join(' + '))}</b> (pentru scena asta)</p>` : ''}${g.dr ? `<p>✏️ Aleasă din ${g.dr} schițe, apoi refăcută mare${g.dfd != null ? ` (schița: ${pct(g.dfd)})` : ''}</p>` : ''}${(g.fix || []).length ? `<p>🩹 Reparat doar: <b>${esc(g.fix.join(', '))}</b> (restul pozei a rămas)</p>` : ''}${g.skin ? '<p>🎨 Tenul adus la tenul din portret (pe telefon)</p>' : ''}${g.garRet ? '<p>🛡️ Garanția: fața a fost potrivită încă o dată după portret (era prea departe)</p>' : ''}${g.fwarn != null ? `<p>⚠️ Fața a rămas sub prag (${g.fwarn}%).</p>` : ''}${g.fin ? '<p>✨ Finisată pe telefon: balans de alb, expunere, claritate fină, granulație de senzor</p>' : ''}${g.bwarn != null ? `<p>⚠️ Corpul a rămas sub prag (${g.bwarn}%), chiar după refacere.</p>` : ''}${g.tm ? `<p>⏱️ ${g.tm.total ? '<b>' + (g.tm.total / 1000).toFixed(1).replace('.', ',') + ' s</b>: ' : ''}${[['scena', 'scena'], ['cadru', 'confirmare cadru'], ['schite', 'schițe'], ['variante', 'variante'], ['alegere', 'alegere'], ['final', 'poza mare'], ['retus', 'retuș'], ['verificare', 'verificare'], ['reparare', 'reparare'], ['garantie', 'garanție'], ['masurare', 'măsurare'], ['finisare', 'finisare']].filter(([k]) => g.tm[k] > 50).map(([k, l]) => l + ' ' + (g.tm[k] / 1000).toFixed(1).replace('.', ',') + ' s').join(' · ')}${tmRest(g.tm)}${g.fast ? ' · fără verificare (deja măsurată ca bună)' : ''}</p>` : ''}${g.miss ? `<p>🎲 Ai respins varianta de dinainte pentru: <b>${esc(PFB_RO[g.miss] || g.miss)}</b></p>` : ''}${g.corr ? `<p style="color:var(--tx3);font-size:.8rem">Corectura trimisă: ${esc(g.corr)}</p>` : ''}
     ${g.pf != null && g.pf > FACE_OK ? `<p>⚠️ Portretul și poza întreagă nu par aceeași față (${pct(g.pf)}). Pozele din chat iau fața din portret. Dacă vrei fața din poza întreagă, deschide-o și apasă „👤 Față”.</p>` : g.pf != null ? `<p>✅ Portretul și poza întreagă: aceeași față (${pct(g.pf)})</p>` : ''}
     <p style="color:var(--tx3);font-size:.8rem;line-height:1.45">${typeof g.look === 'string' ? esc(g.look) : ''}</p></details>`;
 }
@@ -2701,7 +2702,7 @@ function kitEnsure(c, o = {}){
 // (3) garanția + finisarea, după orice generare cu personajul
 async function finishPerson(c, r, shot, signal, opt = {}){
   if(!r || !r.blob) return r;
-  const photo = (c.stil || 'photo') === 'photo', tm = opt.tm, t0 = performance.now();
+  const photo = (c.stil || 'photo') === 'photo', tm = opt.tm, t0 = performance.now(), m0 = tm && tm.s ? tm.s.masurare || 0 : 0, f0 = tm && tm.s ? tm.s.finisare || 0 : 0;
   if(photo && !opt.noChar && S.imgProv === 'worker'){
     if(r.fd === undefined || opt.together){ try{ r.fd = (await localFace(r.blob, c)).d; }catch(e){} }   // împreună: fața ei, dintre cele două
     // fața prea departe → retuș cu același model, păstrat doar dacă telefonul măsoară că s-a apropiat
@@ -2734,7 +2735,7 @@ async function finishPerson(c, r, shot, signal, opt = {}){
   if(r.gen){ if(r.ps && (r.ps.k || r.ps.hw)) r.gen.pose = {k:r.ps.k, want:r.ps.want, bad:r.ps.bad, hw:r.ps.hw, hbad:r.ps.hbad}; if(opt.pov) r.gen.pov = true; if(r.sref) r.gen.sref = true;
     r.gen.fin = !!r.fin; r.gen.fwarn = r.faceWarn ?? null; r.gen.bwarn = r.bodyWarn ?? null; r.gen.garRet = !!r.garRet; r.gen.kind = opt.kind || 'chat'; if(r.fd != null) r.gen.fd = Math.round(r.fd * 1000) / 1000; r.gen.lk = lookLite(r.lk); if(r.check && r.check.must) r.gen.must = {n:r.check.must.filter(x => x != null).length, miss:(r.check.mustMiss || []).map(x => x.en)}; }
   if(photo && S.imgProv === 'worker' && !opt.noLog) r.fidE = fidLog(c, r, opt);   // 10.0 (F11)
-  if(tm && tm.s) tm.s.garantie = (tm.s.garantie || 0) + performance.now() - t0;
+  if(tm && tm.s) tm.s.garantie = (tm.s.garantie || 0) + performance.now() - t0 - ((tm.s.masurare || 0) - m0) - ((tm.s.finisare || 0) - f0);   // 13.3: fără măsurare și finisare (au rândul lor)
   return r;
 }
 async function renderPerson(c, shot, signal, opt = {}){
@@ -3880,10 +3881,10 @@ async function bestScene(c, shot, signal, corr, opt = {}){
   if(!ok.length) throw rs[0].reason;
   pstage(signal, '🎯 Alege poza cea mai reușită', 93);
   const tP = performance.now();
-  for(const x of ok){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.np = crowdOn(shot, opt) ? await extraPeople(x.blob) : 0; }   // 9.87 (4): și claritatea   // 10.4: și câte persoane   // 10.0: și culorile, proporțiile feței, vârsta aparentă
+  await Promise.all(ok.map(async x => { x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.np = crowdOn(shot, opt) ? await extraPeople(x.blob) : 0; }));   // 13.3: toate schițele deodată   // 9.87 (4): și claritatea   // 10.4: și câte persoane   // 10.0: și culorile, proporțiile feței, vârsta aparentă
   // 9.36: și silueta (piept, talie, șolduri) față de poza întreagă, măsurată în telefon; fața rămâne criteriul principal
   const rb = framingOf(shot).k !== 'close' ? await refBodySig(c).catch(() => null) : null;
-  const rbs = rb ? await refBodySigs(c).catch(() => []) : []; if(rb) for(const x of ok){ x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); }   // 9.85: față de poza de corp cu aceeași poziție
+  const rbs = rb ? await refBodySigs(c).catch(() => []) : []; if(rb) await Promise.all(ok.map(async x => { x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); }));   // 13.3   // 9.85: față de poza de corp cu aceeași poziție
   // 9.42: cu motorul „ca în creator”, contează și cât respectă cererea (altfel câștiga varianta care copia poza de profil)
   // 9.86 (d): cât respectă cererea se întreabă doar dacă ai cerut detalii sau dacă primele două sunt aproape (altfel e clar cine câștigă)
   const shMax = () => Math.max(0, ...ok.map(x => x.sh || 0));
@@ -4237,7 +4238,7 @@ async function rwRun(...a){
     }
   } finally { if(fg){ rwFg = Math.max(0, rwFg - 1); rwFgEnd = Date.now(); } }
 }
-const rwStats = {busy:0};
+const rwStats = {busy:0}; let rwLastMdl = '', rwCallN = 0; const rwCalls = [];
 async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
   const f3 = mdl === RW_F3;
   const task = f3 ? {taskType:'imageInference', taskUUID:crypto.randomUUID(), model:RW_F3, positivePrompt:String(prompt).slice(0, 30000),
@@ -4266,7 +4267,7 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
     const er = new Error('Runware: ' + String(m).slice(0, 200) + (/credit|balance|insufficient/i.test(m) ? ' (reîncarcă creditul în contul Runware).' : '.'));
     // 9.91: cât cere Runware să așteptăm (retryAfter în corp sau Retry-After în antet), la coada modelului plină
     const ra = +((e0 && typeof e0 === 'object' && e0.retryAfter) || r.headers.get('retry-after') || 0); if(ra > 0) er.retryAfter = Math.min(30, ra);
-    if(mdl === RW_KV && [400, 404, 422].includes(r.status) && /\bmodel\b|\bAIR\b|air ?id|unsupported model|not (found|available)/i.test(String(m))){ S.kvBad = Date.now(); saveSettings(); return await rwRun1(prompt, refs, w, h, signal, RW_KL, n); }   // 11.6 (K1): KV refuzat → klein 9B
+    if(mdl === RW_KV && [400, 404, 422].includes(r.status) && /\bmodel\b|\bAIR\b|air ?id|unsupported model|not (found|available)/i.test(String(m))){ S.kvBad = Date.now(); S.kvBadWhy = String(m).slice(0, 90); saveSettings(); return await rwRun1(prompt, refs, w, h, signal, RW_KL, n); }   // 11.6 (K1): KV refuzat → klein 9B
     er.code = e0 && typeof e0 === 'object' ? e0.code || '' : ''; er.status = r.status; throw er;
   }
   const its = d.data.filter(x => x && (x.imageBase64Data || x.imageDataURI)), it = its[0];
@@ -4278,11 +4279,27 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
     else S.f3Avg = S.f3Avg > 0 ? S.f3Avg * .8 + cost * .2 : cost;
     S.rwLast = {usd:cost, ms:Math.round(performance.now() - t0), w, h, refs:refs.length}; saveSettings();
   }
-  rwFails = 0;
+  rwFails = 0; rwLastMdl = mdl;   // 13.3: fiecare cerere, cu timpul ei
+  rwCalls.push({i:++rwCallN, ms:Math.round(performance.now() - t0), mdl, w, h, n:its.length, refs:refs.length}); if(rwCalls.length > 60) rwCalls.shift();
   const blobs = its.map(x => b64ToBlob(x.imageBase64Data || String(x.imageDataURI).split(',')[1], 'image/jpeg'));
   return n > 1 ? blobs : blobs[0];
 }
+/* 13.3: ce rămâne din total după pașii numiți (salvare, pregătirea reperelor, raportul pozei) */
+const TM_KEYS = ['scena', 'cadru', 'schite', 'variante', 'alegere', 'final', 'retus', 'verificare', 'reparare', 'garantie', 'masurare', 'finisare'];
+function tmRest(t){ if(!t || !t.total) return ''; const r = t.total - TM_KEYS.reduce((a, k) => a + (t[k] > 50 ? t[k] : 0), 0); return r > 1000 ? ` · altele ${(r / 1000).toFixed(1).replace('.', ',')} s` : ''; }
+// 13.3: modelul real al ultimei poze și starea KV
+const kvOff = () => !!(S.kvBad && Date.now() - S.kvBad < 7 * 864e5);
+const kvWhy = () => kvOff() ? `Runware a refuzat KV pe ${new Date(S.kvBad).toLocaleDateString('ro-RO')}${S.kvBadWhy ? ` („${S.kvBadWhy}”)` : ''}; revine singur pe ${new Date(S.kvBad + 7 * 864e5).toLocaleDateString('ro-RO')}` : '';
+const kleinLbl = () => lastImgProv !== 'runware' ? 'Klein 9B (Cloudflare)' : rwLastMdl === RW_KV ? 'Klein 9B KV' : S.photoModel === 'kleinkv' ? `Klein 9B clasic (în loc de KV: ${kvWhy() || 'KV indisponibil'})` : 'Klein 9B';
+function kvDraw(){
+  const e = $('#stKvSt'); if(!e) return;
+  if(S.photoModel !== 'kleinkv'){ e.hidden = true; return; }
+  e.hidden = false;
+  e.innerHTML = kvOff() ? `⚠️ Merge pe Klein 9B clasic: ${esc(kvWhy())}. <button type="button" class="btn sm" id="stKvRe">Încearcă KV din nou</button>` : `✅ KV activ${rwLastMdl === RW_KV && S.rwLast ? ` · ultima cerere: ${(S.rwLast.ms / 1000).toFixed(1).replace('.', ',')} s` : ''}`;
+  const b = $('#stKvRe'); if(b) b.onclick = () => { delete S.kvBad; delete S.kvBadWhy; saveSettings(); kvDraw(); toast('Următoarea poză încearcă din nou KV.', 2200); };
+}
 function drawRw(){
+  kvDraw();   // 13.3
   const w = $('#stRwWrap'); if(!w) return;
   w.hidden = S.imgProv !== 'worker';
   $('#stRwBox').hidden = S.rw !== 'on';
@@ -9944,7 +9961,7 @@ async function askPhoto(spont, target, mode, opt = {}){
   }
   busy = new AbortController(); live = {c, ch, photo:true, stage:{t:'✨ Se pregătește', p:8, pv:0}}; setBusyUI(true);
   $('#sugg').innerHTML = '';
-  const rw0 = rwDay().usd, rwN0 = rwDay().n;   // 9.37: cât a costat poza asta pe Runware (toate generările ei)
+  const rw0 = rwDay().usd, rwN0 = rwDay().n, rwC0 = rwCallN;   // 13.3: cererile Runware ale pozei   // 9.37: cât a costat poza asta pe Runware (toate generările ei)
   const pT = setInterval(pTick, 120);
   try{
     const promised = !target && spont && ch.nextShot ? ch.nextShot.t : '';      // descrierea scrisă chiar de personaj când a trimis poza
@@ -9974,7 +9991,7 @@ async function askPhoto(spont, target, mode, opt = {}){
     }
     else if(target && mode === 'same' && target.scene){ shot = target.scene; where = target.where || null; asked = target.asked || []; sceneOpt = await sceneOptSame(c, target, opt); }
     else { const tS = performance.now(); let pl = await planShot(c, ch, {promised, exclude:m, signal:busy.signal, together}); tm.s.scena = performance.now() - tS;
-      pl = await framePreview(c, ch, m, pl, {spont, target, mode, promised, together, signal:busy.signal});   // 10.1 (S4): confirmi sau corectezi cadrul
+      { const tC = performance.now(); pl = await framePreview(c, ch, m, pl, {spont, target, mode, promised, together, signal:busy.signal}); const dC = performance.now() - tC; if(dC > 300) tm.s.cadru = dC; }   // 13.3: confirmarea cadrului, separat   // 10.1 (S4): confirmi sau corectezi cadrul
       sceneOpt = await sceneOptOf(c, ch, m, pl, pl.together);   // 10.1 (S5, S8)
       shot = pl.shot; where = pl.where; together = pl.together; asked = pl.asked || []; shot = giftDetail(c, shot, where);
       // 9.56: leagă cererea explicită de expunere din ultimele mesaje de fotografia generată, chiar dacă planificatorul a omis-o.
@@ -10001,7 +10018,7 @@ async function askPhoto(spont, target, mode, opt = {}){
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && !peopleIn.self)})
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt});
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
-    if(gdiag && gdiag.tm) gdiag.tm.total = performance.now() - tm.t0;
+    if(gdiag){ gdiag.tm = {...tm.s, total:performance.now() - tm.t0}; gdiag.rwc = rwCalls.filter(x => x.i > rwC0).map(({i, ...x}) => x); if(gdiag.mdl === 'Klein 9B') gdiag.mdl = kleinLbl(); }   // 13.3: tot, inclusiv pașii de după (garanția, măsurarea, finisarea)
     const k = await saveImg(blob);
     clearInterval(pT); if(live && live.stage){ live.stage.t = '✅ Gata'; live.stage.pv = 100; const st = $('#msgs .picload .plst'); if(st) st.textContent = '✅ Gata'; pDraw(100); await new Promise(r => setTimeout(r, 420)); }
     if(target){
