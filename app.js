@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '12.8';
+const APP_VER = '12.9';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -38,7 +38,7 @@ const DEF = {
   userName:'', userAbout:'', len:'mediu', font:16,
   imgProv:'none',
   wkBase:'', wkTok:'', wkModel:'eco', wkSize:'768x1024',
-  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
+  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
   vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
 };
 let S = {...DEF};
@@ -4201,8 +4201,18 @@ const RW_TRANSIENT = /temporarily unavailable|high demand|overload|try again|tim
    Acum: cel mult 2 cereri Runware în același timp; ce rulează în fundal (fișe, poza întreagă automată, cadre pentru apel)
    așteaptă cât timp faci o poză tu; la „aglomerat” se așteaptă cât cere Runware (+ decalaj), de cel mult 4 ori. */
 const RW_MAX = 2; let rwActive = 0, rwFg = 0, rwBg = 0; const rwWait = [];
+/* 12.9 (3): lucrul din fundal (fișe, unghiuri, poza întreagă, cadrul de apel dinainte) așteaptă și 20 s după ultima poză a ta, tot apelul
+   și 15 min după un „aglomerat” de la Runware; ce se face pentru apelul în curs are `RW_CALL_SIG` și trece. Clipurile (rwVideo) nu sunt atinse. */
+const RW_CALL_SIG = new AbortController().signal, RW_BUSY_PAUSE = 15 * 60e3; let rwFgEnd = 0;
+function rwBgHold(){
+  if(rwFg > 0) return true;
+  if(window.__rwHoldOff) return false;   // testele vechi: ca înainte
+  if(Date.now() - rwFgEnd < 20e3) return true;
+  try{ if(call) return true; }catch(e){}
+  return !!(S.rwBusyAt && Date.now() - S.rwBusyAt < RW_BUSY_PAUSE);
+}
 const rwSlot = async fg => {
-  while(rwActive >= (fg ? RW_MAX + (rwBg > 0 ? 1 : 0) : RW_MAX) || (!fg && rwFg > 0)) await new Promise(r => { rwWait.push(r); setTimeout(r, 1500); });
+  while(rwActive >= (fg ? RW_MAX + (rwBg > 0 ? 1 : 0) : RW_MAX) || (!fg && rwBgHold())) await new Promise(r => { rwWait.push(r); setTimeout(r, 1500); });
   rwActive++; if(!fg) rwBg++;
 };
 const rwFree = fg => { rwActive = Math.max(0, rwActive - 1); if(fg === false) rwBg = Math.max(0, rwBg - 1); const w = rwWait.splice(0); w.forEach(f => f()); };
@@ -4221,7 +4231,7 @@ async function rwRun(...a){
         held = false; rwFree(fg); await naps(ms, signal);
       } finally { if(held) rwFree(fg); }
     }
-  } finally { if(fg) rwFg = Math.max(0, rwFg - 1); }
+  } finally { if(fg){ rwFg = Math.max(0, rwFg - 1); rwFgEnd = Date.now(); } }
 }
 const rwStats = {busy:0};
 async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
@@ -5390,7 +5400,8 @@ async function gLifeSweep(){
 
 /* ───────── CONVERSAȚIE ───────── */
 async function openChat(id, push = true, tid, dir){
-  whenIdle(() => { const cc = charById(id); if(cc) kitEnsure(cc, {delay:0}); }, 5000);   // 9.92: partea gratuită a pachetului; 10.6 (C): doar când nu atingi ecranul, iar modelele de recunoaștere se încarcă abia când ceri o poză
+  whenIdle(() => { const cc = charById(id); if(cc) kitEnsure(cc, {delay:0}); }, 5000);
+  whenIdle(() => callFramePre(id), 15000, 180e3);   // 12.9: cadrul de apel, dinainte   // 9.92: partea gratuită a pachetului; 10.6 (C): doar când nu atingi ecranul, iar modelele de recunoaștere se încarcă abia când ceri o poză
   cur = charById(id); if(!cur) return;
   threadsOf(cur);
   tid = tid || cur.thread || 'main';
@@ -7954,7 +7965,8 @@ function ttsText(t, neural){
     .replace(/\s+([,.!?…])/g, '$1').replace(/\s{2,}/g, ' ').trim();
 }
 const vtagHTML = t => esc(t).replace(VTAG_RE, (all, w) => VTAGS[w.trim().toLowerCase()] ? `<span class="vtag">(${esc(w.trim())})</span>` : all);
-function voiceLabel(c){ return (c.vName ? '🗣️ ' + c.vName : 'Vocea telefonului') + (c.vPitch && c.vPitch !== 1 ? (c.vPitch < 1 ? ' · mai gravă' : ' · mai subțire') : ''); }
+function voiceLabel(c){ if(rvOn(c)) return '🎙️ ' + rvLabel(c) + ' · voce reală';   // 12.9
+  return (c.vName ? '🗣️ ' + c.vName : 'Vocea telefonului') + (c.vPitch && c.vPitch !== 1 ? (c.vPitch < 1 ? ' · mai gravă' : ' · mai subțire') : ''); }
 const ttsKey = m => 'aud:' + m.id + ':' + (m.alt || 0);
 
 // mesaj vocal: undă reală dacă există înregistrare, altfel stabilă (din id)
@@ -8098,11 +8110,13 @@ function ttsKeepAlive(u){
 }
 // oprește tot: replicile din coadă se încheie acum (ca în browser), apoi motorul de voce
 function ttsCancel(){
+  rvStop();   // 12.9: și vocea reală
   const all = [...TTS_KEEP]; TTS_KEEP.clear();
   all.forEach(u => ttsFinish(u, {type:'error', error:'interrupted', utterance:u}));
   try{ window.speechSynthesis && speechSynthesis.cancel(); }catch(e){}
 }
 function ttsPlay(u){
+  if(u && u._rc && rvOn(u._rc)) return rvPlay(u);   // 12.9: personajul are voce reală
   // păstrează handlerele puse de cel care cheamă, apoi le învelește
   u._start = u.onstart; u._end = u.onend || u.onerror; ttsWire(u);
   try{ if(speechSynthesis.paused) speechSynthesis.resume(); }catch(e){}
@@ -8123,7 +8137,7 @@ function speakPhone(c, text, onEnd){
   let off = 0, full = segs.map(x => x.t).join(' ');
   parts.forEach(({p, k:who}, k) => {
     const v = V[who] || V[0], sameV = who && same2;
-    const u = new SpeechSynthesisUtterance(p.trim()); u.lang = lang; if(v) u.voice = v;
+    const u = new SpeechSynthesisUtterance(p.trim()); u.lang = lang; if(v) u.voice = v; if(!who) u._rc = c;
     const at = full.indexOf(p.trim(), off); const base0 = at >= 0 ? at : off; off = base0 + p.trim().length;
     u.pitch = Math.min(2, Math.max(.1, B[who] * (sameV ? .84 : 1) * (1 + (k % 2 ? .02 : -.02)))); u.rate = (/\?\s*$/.test(p) ? 1.02 : .97) * (who ? 1.06 : 1);
     u.onboundary = e => { if(window.__talk) window.__talk(e, base0); };
@@ -8149,6 +8163,192 @@ function ttsGate(){
   ttsGateAt = need;
   return ttsGateP = new Promise(res => setTimeout(res, need - now));
 }
+/* ═════════ 🎙️ 12.9: vocea reală (HeyGen Voice 1.0 Turbo, prin Runware, direct din telefon) ═════════
+   (1) Fiecare personaj feminin primește singur o voce reală după fire (`rvAuto`: caldă, calmă, veselă, energică, relaxată, serioasă),
+       aleasă stabil după id; din profil → 🎙️ Vocea o asculți (▶) și o schimbi, sau alegi „doar vocea telefonului”.
+   (2) Merge peste tot unde vorbea telefonul: `ttsPlay` trimite replica la Runware (`rvPlay`) dacă personajul are voce reală.
+       Replicile se cer toate deodată și se redau în ordine (`RV.q`); cuvintele se aprind pe durata reală a sunetului,
+       iar gura urmează volumul real al vocii (`RV.amp`, din analizorul WebAudio).
+   (3) Pornirea: la începutul apelului se pregătesc „Hm…”, „Păi…”, „Pa, pa!” (`rvWarm`); când răspunsul întârzie, unul din ele
+       acoperă așteptarea, apoi vine prima propoziție (cerută separat, ca să sosească repede).
+   (4) Rezerva: Runware nu răspunde (eroare / peste 9 s în apel) → replica asta o spune vocea telefonului; după 3 eșecuri la rând,
+       5 minute doar vocea telefonului. Cost: $0,000004 pe caracter (~$0,004 la 1.000 de caractere), în Consum la „voce”. */
+const RV_MODEL = 'heygen:voice@1.0-turbo', RV_USD_CH = 0.000004, RV_LANGS = 'ar be bg ca cs da de el en es fa fi fr he hi hr hu id it ja ko mk ms nl pl pt ro ru sk sl sr sv ta th tl tr uk vi zh'.split(' ');
+const RV_VOICES = [
+  {id:'41f17b4ebd334ac99a91c2aada5f86d7', n:'Cecily', d:'caldă, prietenoasă', g:'cald'},
+  {id:'48476d5a314943149b9522fb666b128a', n:'Noelle', d:'caldă, liniștitoare', g:'cald'},
+  {id:'3195f3da04c94984a0a77a4b757c8119', n:'Elowen', d:'caldă, liniștitoare', g:'calm'},
+  {id:'83548de556df48ba8c09c42a57c51d85', n:'Nadine', d:'calmă, blândă', g:'calm'},
+  {id:'6ab7f456be114a109f8c8006567f638c', n:'Felicity', d:'veselă, vioaie', g:'vesel'},
+  {id:'75300849b571414c8d62693289cb6509', n:'Sabrina', d:'veselă, vioaie', g:'vesel'},
+  {id:'880609d7e76e4360ba44e65f0774d4e6', n:'Marielle', d:'veselă, vioaie', g:'vesel'},
+  {id:'69a83c97b51a4bb5a3d0fb0ce1699431', n:'Corinne', d:'luminoasă, energică', g:'energic'},
+  {id:'660022d4c7ff428cbb5787685e8df571', n:'Iona', d:'luminoasă, energică', g:'energic'},
+  {id:'f415c3cd23db47c1b4fe834387d26449', n:'Jocelyn', d:'luminoasă, energică', g:'energic'},
+  {id:'a6752292cd204ac4a80a25fb575b1327', n:'Tabitha', d:'de conversație, relaxată', g:'relaxat'},
+  {id:'aa9746e325ff46d482a54fe5bc87890f', n:'Meredith', d:'serioasă, așezată', g:'serios'}];
+const RV_FIRE = {
+  vesel:/vesel|jucăuș|jucaus|amuzant|glum|haios|hazli|năzdrăvan|nazdravan|zâmbăre|zambare|optimist|copilăros|cheerful|playful|bubbly|funny/i,
+  energic:/energ|dinamic|sportiv|îndrăzne|indrazne|aventur|pasional|explozi|impulsiv|curajo|neastâmpăr|wild|bold|energetic|passionate/i,
+  calm:/calm|liniștit|linistit|blând|bland|timid|sfios|introvert|visător|visator|delicat|discret|rezervat|shy|gentle|quiet/i,
+  cald:/cald|grijuli|afectuos|tandr|dulce|matern|empatic|iubito|drăgăl|dragal|sweet|caring|warm|affectionate/i,
+  serios:/serios|sobru|ambiți|ambiti|profesion|elegant|rafinat|sarcastic|dominan|rece\b|distant|stăpân|stapan|strict|cold|serious/i,
+  relaxat:/relaxat|lejer|cool\b|boem|direct|spontan|nonșalant|nonsalant|chill|easygoing|laid.?back/i};
+function rvAuto(c){
+  const t = [c.persona, c.tagline, c.desc, c.look, c.aspect].filter(Boolean).join(' ').slice(0, 1600);
+  let best = 'cald', bn = 0;
+  for(const [g, re] of Object.entries(RV_FIRE)){ const n = (t.match(new RegExp(re.source, 'gi')) || []).length; if(n > bn){ bn = n; best = g; } }
+  const vs = RV_VOICES.filter(v => v.g === best); let h = 0; for(const ch of String(c.id || c.name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return vs[h % vs.length];
+}
+const rvVoiceOf = c => (c && c.rvVoice && RV_VOICES.find(v => v.id === c.rvVoice)) || rvAuto(c || {});
+const rvLang = c => String(langOf(c) || 'ro-RO').slice(0, 2).toLowerCase();
+const RV = {cache:new Map(), q:[], cur:null, amp:-1, ac:null, an:null, buf:null, raf:0, fail:0, failAt:0};
+// poate avea voce reală (cheia Runware în telefon, nu e personaj masculin, limba e suportată)
+function rvAvail(c){ return !!(c && S.voiceReal !== 'off' && String(S.rwKey || '').trim() && genderOf(c) !== 'm' && RV_LANGS.includes(rvLang(c)) && rwCapLeft() >= .01); }
+// o are acum: feminin sau voce aleasă de tine; nu după 3 eșecuri la rând (5 minute)
+function rvOn(c){
+  if(!rvAvail(c) || c.rvVoice === 'off') return false;
+  if(!c.rvVoice && genderOf(c) !== 'f') return false;
+  if(RV.fail >= 3 && Date.now() - RV.failAt < 5 * 60e3) return false;
+  return navigator.onLine !== false;
+}
+function rvFetch(c, text, o = {}){
+  const v = rvVoiceOf(c), t = String(text || '').trim().slice(0, 4900), ex = o.ex ?? .9, key = v.id + '|' + ex + '|' + t;
+  if(RV.cache.has(key)) return RV.cache.get(key);
+  const p = (async () => {
+    if(!t) throw new Error('nimic de spus');
+    const task = {taskType:'audioInference', taskUUID:crypto.randomUUID(), model:RV_MODEL, speech:{text:t, voice:v.id, language:rvLang(c)}, outputType:'base64Data', outputFormat:'MP3',
+      audioSettings:{channels:1, bitrate:64}, includeCost:true, deliveryMethod:'sync', settings:{expressiveness:ex}};
+    const tac = new AbortController(), tT = setTimeout(() => tac.abort(), o.ms || 25000);
+    let r, d = null;
+    try{
+      try{ r = await fetch(RW_URL, {method:'POST', signal:tac.signal, headers:{'content-type':'application/json', authorization:'Bearer ' + String(S.rwKey).trim()}, body:JSON.stringify([task])}); }
+      catch(e){ throw new Error(tac.signal.aborted ? 'Vocea Runware: timp depășit' : 'Vocea Runware: rețea'); }
+      try{ d = await r.json(); }catch(e){}
+    } finally { clearTimeout(tT); }
+    const errs = d && (d.errors || (d.error ? [d.error] : null)), x = d && Array.isArray(d.data) ? d.data.find(y => y && (y.audioBase64Data || y.audioDataURI || y.audioURL)) : null;
+    if(!r.ok || !x){
+      const e0 = errs && errs[0], m = String(typeof e0 === 'string' ? e0 : (e0 && (e0.message || e0.code)) || ('HTTP ' + r.status));
+      if(RW_TRANSIENT.test(m)) S.rwBusyAt = Date.now();
+      throw new Error('Vocea Runware: ' + m.slice(0, 160) + (/credit|balance|insufficient/i.test(m) ? ' (reîncarcă creditul în contul Runware)' : ''));
+    }
+    let blob;
+    if(x.audioBase64Data || x.audioDataURI) blob = b64ToBlob(x.audioBase64Data || String(x.audioDataURI).split(',')[1], 'audio/mpeg');
+    else blob = await (await fetch(x.audioURL)).blob();
+    const cost = +x.cost >= 0 && +x.cost < 1 ? +x.cost : t.length * RV_USD_CH;
+    const day = rwDay(); day.usd = Math.round((day.usd + cost) * 1e6) / 1e6; saveSettings();
+    addUsage(c && c.id, cost, 'voc', null, o.tag || 'voce');
+    RV.fail = 0; p.ok = true;
+    return blob;
+  })();
+  RV.cache.set(key, p);
+  p.catch(e => { RV.cache.delete(key); RV.fail++; RV.failAt = Date.now(); console.warn(e && e.message); });
+  while(RV.cache.size > 90) RV.cache.delete(RV.cache.keys().next().value);
+  return p;
+}
+function rvAC(){
+  try{
+    if(!RV.ac || RV.ac.state === 'closed'){ RV.ac = new (window.AudioContext || window.webkitAudioContext)(); RV.an = RV.ac.createAnalyser(); RV.an.fftSize = 1024; RV.an.connect(RV.ac.destination); RV.buf = new Float32Array(RV.an.fftSize); }
+    if(RV.ac.state === 'suspended') RV.ac.resume().catch(() => {});
+  }catch(e){ RV.ac = null; }
+  return RV.ac;
+}
+addEventListener('pointerdown', () => { if(S.voiceReal !== 'off' && String(S.rwKey || '').trim()) rvAC(); }, {passive:true, capture:true});   // sunetul se deblochează la o atingere
+// replica u (o SpeechSynthesisUtterance pregătită de cel care cheamă): se cere la Runware și intră în coadă
+function rvPlay(u){
+  u._start = u.onstart; u._end = u.onend || u.onerror; u._cut = true;   // _cut: viteza vocii de telefon nu se calibrează pe asta
+  u._rv = rvFetch(u._rc, u.text, {tag:u._rtag}); u._rv.catch(() => {});
+  if(u._fill){   // „hm…”: doar dacă e deja gata și nu vorbește nimic acum; altfel nu mai are rost
+    if(RV.cur || !u._rv.ok){ ttsFinish(u, {type:'end', utterance:u}); return u; }
+    RV.q.unshift(u);
+  } else RV.q.push(u);
+  rvNext(); return u;
+}
+async function rvNext(){
+  if(RV.cur || !RV.q.length) return;
+  const u = RV.cur = RV.q.shift();
+  let blob = null;
+  try{ blob = await Promise.race([u._rv, sleep(u._wait || (call ? 9000 : 20000)).then(() => { throw new Error('prea încet'); })]); }catch(e){ blob = null; }
+  if(RV.cur !== u) return;
+  if(!blob){ rvPhone(u); return; }
+  const ac = rvAC(); let ab = null;
+  try{ if(ac && ac.state === 'running') ab = await ac.decodeAudioData(await blob.arrayBuffer()); }catch(e){ ab = null; }
+  if(RV.cur !== u) return;
+  if(ab){
+    const src = ac.createBufferSource(), g = ac.createGain(); src.buffer = ab; g.gain.value = Math.max(.05, Math.min(1, u.volume ?? 1)); src.connect(g); g.connect(RV.an);
+    u._src = src; src.onended = () => rvDone(u, 'end'); src.start(); rvBegin(u, ab.duration);
+    return;
+  }
+  const a = new Audio(URL.createObjectURL(blob)); u._el = a; a.volume = Math.max(.05, Math.min(1, u.volume ?? 1));
+  a.onended = () => rvDone(u, 'end'); a.onerror = () => { if(RV.cur === u && !u._st) rvPhone(u); else rvDone(u, 'end'); };
+  a.play().then(() => { if(RV.cur === u) rvBegin(u, Number.isFinite(a.duration) && a.duration > 0 ? a.duration : ttsEst(u) / 1000); }).catch(() => { if(RV.cur === u) rvPhone(u); });
+}
+function rvBegin(u, dur){
+  u._st = performance.now(); u._tm = [];
+  try{ u._start && u._start.call(u, {type:'start', utterance:u}); }catch(e){ console.warn(e); }
+  // cuvintele, pe durata reală a sunetului (subtitrarea se aprinde, gura le urmează)
+  const L = u.text.length || 1, lead = .08, span = Math.max(.2, dur - lead - .15);
+  for(const mm of u.text.matchAll(/[\p{L}\p{N}'’-]+/gu)){ const i = mm.index; u._tm.push(setTimeout(() => { if(RV.cur === u && u.onboundary) try{ u.onboundary({name:'word', charIndex:i, charLength:mm[0].length, utterance:u}); }catch(e){} }, (lead + i / L * span) * 1000)); }
+  if(u._src && !RV.raf) RV.raf = requestAnimationFrame(rvAmp);
+}
+function rvAmp(){
+  const u = RV.cur; if(!u || !u._src || !RV.an){ RV.amp = -1; RV.raf = 0; return; }
+  RV.an.getFloatTimeDomainData(RV.buf); let s = 0; for(let i = 0; i < RV.buf.length; i++) s += RV.buf[i] * RV.buf[i];
+  const r = Math.sqrt(s / RV.buf.length); RV.amp = RV.amp < 0 ? r : RV.amp * .45 + r * .55;
+  RV.raf = requestAnimationFrame(rvAmp);
+}
+function rvClear(u){ (u._tm || []).forEach(clearTimeout); u._tm = []; try{ u._src && u._src.stop(); }catch(e){} try{ if(u._el){ u._el.pause(); URL.revokeObjectURL(u._el.src); } }catch(e){} }
+function rvDone(u, type){
+  if(u._fin) return; rvClear(u);
+  if(RV.cur === u){ RV.cur = null; RV.amp = -1; }
+  ttsFinish(u, {type, utterance:u});
+  rvNext();
+}
+// Runware n-a dat sunetul la timp: replica asta o spune vocea telefonului, apoi coada merge mai departe
+function rvPhone(u){
+  if(u._fin) return;
+  const end0 = u._end; u._rvPh = true;
+  u._end = function(ev){ try{ end0 && end0.call(u, ev); } finally { if(RV.cur === u){ RV.cur = null; rvNext(); } } };
+  ttsWire(u);
+  try{ if(speechSynthesis.paused) speechSynthesis.resume(); }catch(e){}
+  try{ speechSynthesis.speak(u); }catch(e){ ttsFinish(u, {type:'error', error:'speak'}); }
+  ttsWatch();
+}
+// oprește tot ce e în coada vocii reale (ce a rămas în vocea telefonului oprește `ttsCancel`)
+function rvStop(){
+  const all = [RV.cur, ...RV.q].filter(Boolean); RV.q = []; RV.cur = null; RV.amp = -1;
+  for(const u of all){ rvClear(u); if(!u._rvPh) ttsFinish(u, {type:'error', error:'interrupted', utterance:u}); }
+}
+const rvBusy = () => !!(RV.cur || RV.q.length);
+// la începutul apelului: replicile scurte, gata dinainte (acoperă așteptarea primei propoziții)
+const RV_WARM = ['Păi…', 'Stai…', 'Păi, stai…', 'Hmm, păi…', 'Îhî…', 'Aha…', 'Da…'];
+async function rvWarm(c){
+  const cc = c && c.c; if(!cc || !rvOn(cc) || rvLang(cc) !== 'ro') return;
+  const all = [...RV_WARM, ...(CALL_BYE.ro || [])].flatMap(t => callChunks(t).flatMap(([s]) => ttsSplitLong(s).map(x => x.trim()))).filter(Boolean);
+  for(let i = 0; i < all.length; i += 2){ if(call !== c) return; await Promise.allSettled(all.slice(i, i + 2).map(t => rvFetch(cc, t, {tag:'apel'}))); }
+}
+const rvLabel = c => { const v = rvVoiceOf(c); return v.n + ' · ' + v.d; };
+function rvSample(c, id){ const k = c.rvVoice; c.rvVoice = id; stopAllVoice(); speakPhone(c, SAMPLE(c)); if(k === undefined) delete c.rvVoice; else c.rvVoice = k; }
+// foaia 🎙️ Vocea: vocile reale sus (▶ ascultă, alege), apoi vocile telefonului (rezerva)
+function rvPickHTML(c){
+  if(!rvAvail(c)) return S.voiceReal !== 'off' && !String(S.rwKey || '').trim() ? '<p class="hint">🎙️ Vocea reală (HeyGen) merge cu cheia Runware pusă în telefon: Setări → Claude și chei → 🔑 Cheie Runware.</p>' : '';
+  const on = rvOn(c), curV = on ? rvVoiceOf(c) : null, auto = rvAuto(c);
+  const row = v => `<div class="vrow${curV && c.rvVoice === v.id ? ' on' : ''}"><button type="button" class="opt" data-rvn="${v.id}"><i>🎙️</i>${esc(v.n)} <small>${esc(v.d)}</small>${curV && c.rvVoice === v.id ? ' ✓' : ''}</button><button type="button" class="btn sm" data-rvt="${v.id}" aria-label="Ascultă">▶</button></div>`;
+  return `<p style="margin:2px 0 6px"><b>Voce reală</b> <small class="hint">(HeyGen prin Runware, ~$0,004 la 1.000 de caractere)</small></p>
+    <button type="button" class="opt" data-rvauto><i>✨</i>Automat, după fire <small>(${esc(auto.n)} · ${esc(auto.d)})</small>${on && !c.rvVoice ? ' ✓' : ''}</button>
+    ${RV_VOICES.map(row).join('')}
+    <button type="button" class="opt" data-rvoff><i>📱</i>Doar vocea telefonului${c.rvVoice === 'off' || (!on && !c.rvVoice) ? ' ✓' : ''}</button>
+    <p style="margin:12px 0 4px"><b>Vocea telefonului</b> <small class="hint">(rezerva, când Runware nu răspunde)</small></p>`;
+}
+function rvPickBind(c, done){
+  const save = async id => { if(id === undefined) delete c.rvVoice; else c.rvVoice = id; await saveChars(); closeSheet(); done && done(); if(id !== 'off') voiceSample(c); };
+  $$('.sheet [data-rvt]').forEach(b => b.onclick = () => rvSample(c, b.dataset.rvt));
+  $$('.sheet [data-rvn]').forEach(b => b.onclick = () => save(b.dataset.rvn));
+  const a = $('.sheet [data-rvauto]'); if(a) a.onclick = () => save(genderOf(c) === 'f' ? undefined : rvAuto(c).id);
+  const o = $('.sheet [data-rvoff]'); if(o) o.onclick = () => save('off');
+}
+
 voxLoad();   // 9.69: lista de voci se încarcă de la pornire (pe Android vine abia după câteva sute de ms)
 // înregistrarea păstrată (din versiunile cu voce umană), dacă există
 const audioFor = m => DB.get(ttsKey(m)).catch(() => null);
@@ -8174,6 +8374,11 @@ async function playVoice(m, el){
       return;
     }
   }
+  if(cur && rvOn(cur) && m.text){   // 12.9
+    btn.innerHTML = '<span class="spin"></span>';
+    try{ const b = await rvFetch(cur, ttsText(m.text, false), {tag:'vocal', ms:30000}); if(vPlaying !== el) return; await DB.set(ttsKey(m), b); vPlaying = null; btn.textContent = '▶'; return playVoice(m, el); }
+    catch(e){ if(vPlaying !== el) return; btn.textContent = '▶'; toast('🎙️ Vocea reală n-a mers acum; vorbește vocea telefonului.', 3000); }
+  }
   const t0 = Date.now(), dur = total * 1000;
   btn.textContent = '❚❚';
   el._t = setInterval(() => prog((Date.now() - t0) / dur), 80);
@@ -8196,13 +8401,14 @@ function pickVoice(c, done){
   const g = genderOf(c), vs = [...phoneVoices(langOf(c))].sort((a, b) => voxScore(b, g, langOf(c)) - voxScore(a, g, langOf(c))), cur0 = phoneVoice(langOf(c), c), auto = (() => { const k = c.vName; delete c.vName; const v = phoneVoice(langOf(c), c); if(k) c.vName = k; return v; })();
   const gIco = v => ({f:' ♀', m:' ♂'})[voxGender(v)] || '';
   const row = (v, i) => `<div class="vrow${cur0 && cur0.name === v.name ? ' on' : ''}"><button type="button" class="opt" data-vn="${i}"><i>${v.localService === false ? '🌐' : '📱'}</i>${esc(v.name)}${gIco(v)}${cur0 && cur0.name === v.name ? ' ✓' : ''}</button><button type="button" class="btn" data-vt="${i}" aria-label="Ascultă">▶</button></div>`;
-  openSheet(`<h4>🎙️ Vocea lui ${esc(c.name)}</h4><div class="pad">
+  openSheet(`<h4>🎙️ Vocea lui ${esc(c.name)}</h4><div class="pad">${rvPickHTML(c)}
     ${vs.length ? vs.slice(0, 12).map(row).join('') + '<p class="hint">🌐 = voce de rețea (de obicei cea mai naturală, are nevoie de internet) · 📱 = voce din telefon. Alte voci românești: Setări Android → Ieșire text în vorbire.</p>' : '<p class="hint">Telefonul nu are încă o voce pentru limba asta. O poți instala din Setări Android → Ieșire text în vorbire.</p>'}
     <button type="button" class="opt" data-vdiag><i>🔧</i>Verifică vocea (ce răspunde telefonul)</button><p class="hint" id="vDiag" hidden></p>
     <button type="button" class="opt" data-vauto data-vc="${esc(String(c.id))}"><i>✨</i>Alege automat${auto ? ` <small>(${esc(auto.name)}${gIco(auto)})</small>` : ''}${c.vName ? '' : ' ✓'}</button>
     <p style="margin:12px 0 4px"><b>Tonul</b></p>
     <div class="seg" id="vPit"><button type="button" data-p=".85" class="${c.vPitch && c.vPitch < 1 ? 'on' : ''}">Mai gravă</button><button type="button" data-p="0" class="${!c.vPitch || c.vPitch === 1 ? 'on' : ''}">Normală</button><button type="button" data-p="1.18" class="${c.vPitch > 1 ? 'on' : ''}">Mai subțire</button></div>
     <div class="btns"><button class="btn pri" data-close>Gata</button></div></div>`);
+  rvPickBind(c, done);   // 12.9
   $$('.sheet [data-vt]').forEach(b => b.onclick = () => { const v = vs[+b.dataset.vt], keep = c.vName; c.vName = v.name; voiceSample(c); c.vName = keep; });
   $$('.sheet [data-vn]').forEach(b => b.onclick = async () => { c.vName = vs[+b.dataset.vn].name; await saveChars(); voiceSample(c); closeSheet(); done(); });
   // 9.70: diagnostic: rostește o propoziție direct din atingere și arată ce face motorul de voce (pornit / terminat / eroare)
@@ -9782,7 +9988,8 @@ async function askPhoto(spont, target, mode, opt = {}){
       if(sp > 0 && gn > 0){ m.rwCost = Math.round(sp * 1e5) / 1e5; m.rwGens = gn; const P = S.rwPhoto || {n:0, avg:0, gens:0}; P.avg = P.n ? P.avg * .8 + sp * .2 : sp; P.gens = P.n ? P.gens * .8 + gn * .2 : gn; P.n++; S.rwPhoto = P; saveSettings(); } }
     // 9.36: o poză foarte reușită devine reper; personajul fără poză întreagă primește una (o dată, în fundal)
     // 10.0 (F9): o poză reușită devine reper doar dacă o alegi tu („📌 Reper” în vizualizator), nu singură
-    if(!together) setTimeout(() => kitEnsure(c, {gen:true, toast:true, delay:0}), 1200);   // 9.92: pachetul de identitate
+    if(!together) setTimeout(() => kitEnsure(c, {gen:true, toast:true, delay:0}), 1200);
+    if(!together) whenIdle(() => callFramePre(c.id), 20000, 240e3);   // 12.9: s-a mutat poate în alt loc   // 9.92: pachetul de identitate
     if(S.imgProv === 'worker') setTimeout(() => loadNeurons(lastImgProv !== 'runware'), 1500);   // 9.20: poza a mers pe Runware → fără avertismente Cloudflare
   }catch(e){
     const msg = e.message || '';
@@ -10508,6 +10715,7 @@ function startCall(opts = {}){
   // 8.16: expresiile ei (generate o dată pentru imaginea de bază)
   c.expr0 = pics[0]; if(exprSetOf(c.c, c.expr0)) exprInject(c);
   if(pics.length) vfStart(c);   // 9.5: fața care vorbește
+  rvWarm(c);   /* 12.9: replicile scurte, gata dinainte */
   if(video) callFrameEnsure(c);   // 12.7: întâi cadrul de apel (dacă lipsește pentru locul ăsta)
   if(video) setTimeout(() => ccEnsure(c), 50);   // 12.5: clipurile încep să se facă încă de când sună
   // 9.81: gura și clipitul din cadre reale, pregătite o dată pentru imaginea de bază (în fundal; apelul merge între timp)
@@ -10553,7 +10761,7 @@ function callState(t, cls){ const el = $('#clState'); if(el){ el.textContent = t
 function endCall(){
   if(!call) return;
   const c = call;
-  call = null; c.alive = false; clearInterval(c.tick); clearInterval(c.picT); clearInterval(c.ccT); clearTimeout(c.hangT); clearTimeout(c.lifeT); clearTimeout(c.refT); window.__talk = null; ringback(false); callWake(c, false); vfStop(c);
+  call = null; c.alive = false; clearInterval(c.tick); clearInterval(c.picT); clearInterval(c.ccT); clearTimeout(c.hangT); clearTimeout(c.lifeT); clearTimeout(c.refT); window.__talk = null; rvStop(); ringback(false); callWake(c, false); vfStop(c);
   try{ c.bargeRec && c.bargeRec.abort(); }catch(e){} clearInterval(c.pollT); clearInterval(c.watchT); clearTimeout(c.exT);
   // 9.23
   ambStop(c); clearInterval(c.litT); clearInterval(c.presT); showHide(c, true); if(c.rig){ cancelAnimationFrame(c.rig.raf); c.rig = null; }
@@ -10587,12 +10795,12 @@ function callClean(t){
 }
 // o propoziție pusă la coadă în vocea telefonului; subtitrarea crește odată cu ea
 // 9.23: vocea cu emoție (`callProso`): ton, viteză și volum după starea ei, propoziție și oră; frazele lungi în două bucăți, cu pauză reală
-function callSay(c, text, capOff, who){   // 9.98 (11): who = cine vorbește, când e și altcineva în apel
+function callSay(c, text, capOff, who, fill){   // 9.98 (11): who = cine vorbește, când e și altcineva în apel
   // 9.69: bucăți de cel mult ~170 de caractere, vocea după genul ei, redare prin `ttsPlay` (fără blocaje pe „vorbește”)
   const parts = callChunks(text).flatMap(([s, at]) => { let o = 0; return ttsSplitLong(s).map(x => { const r = [x.trim(), at + o]; o += x.length; return r; }); }).filter(([s]) => s);
   const vc = who || c.c, v = phoneVoice(langOf(vc), vc), rid = c._rid;
   return Promise.all(parts.map(([s, at], k) => new Promise(res => {
-    const u = new SpeechSynthesisUtterance(s); u.lang = langOf(vc); if(v) u.voice = v;
+    const u = new SpeechSynthesisUtterance(s); u.lang = langOf(vc); if(v) u.voice = v; u._rc = vc; u._rtag = 'apel'; if(fill) u._fill = 1;   // 12.9
     const P = callProso(c, s, text, v); u.pitch = who ? Math.min(2, P.pitch + .14) : P.pitch * (c.sleepy ? .96 : 1); u.rate = P.rate * (c.sleepy && !who ? .9 : 1); u.volume = P.vol;   // 9.98: alt ton pentru a doua voce
     u.onstart = () => { u._t0 = performance.now(); if(!who) ccTalk(c, true); if(call === c && c.state !== 'listen'){ c.state = 'speak'; callState(who ? who.name + ' vorbește' : 'vorbește', 'speak'); callBarge(c); if(!who) vfUtter(c, u); } };   // 9.62: gura pe cronologia textului
     u.onboundary = e => { if(window.__talk) window.__talk(e, capOff + at); };
@@ -10657,9 +10865,10 @@ async function callReply(opts){
   c.pollT = setInterval(() => { if(call !== c) return clearInterval(c.pollT); if(m && m.text && !m.err){ exOf(); speakNew(false); } }, 120);
   // 9.62: dacă răspunsul întârzie, un „hm…” scurt, ca un om care se gândește (local, fără cost; nu la începutul apelului, nu în altă limbă)
   clearTimeout(c.fillT); if(!opts.pro && !learnOn(c.c) && S.callFill !== 'off') c.fillT = setTimeout(() => {
-    if(call !== c || c.state !== 'think' || said || c.interrupted || (m && callClean(m.text || '').length > 3)) return;
+    const rvq = rvOn(c.c);   // 12.9: cu vocea reală, „hm…” acoperă și așteptarea sunetului primei propoziții
+    if(call !== c || c.state !== 'think' || (said && !rvq) || c.interrupted || (!rvq && m && callClean(m.text || '').length > 3)) return;
     const q = /\?\s*$/.test(c.lastHeard || ''), F = q ? ['Păi…', 'Stai…', 'Păi, stai…', 'Hmm, păi…'] : ['Îhî…', 'Aha…', 'Da…', 'Păi…'];   // 9.69: „Mhm” / „Mm” erau citite literă cu literă de vocile de telefon
-    if(Math.random() < .65) callSay(c, F[Math.floor(Math.random() * F.length)], 0);
+    if(rvq || Math.random() < .65) callSay(c, F[Math.floor(Math.random() * F.length)], 0, undefined, rvq);
   }, 1100);
   try{ await run; } catch(e){}
   clearInterval(c.pollT); clearTimeout(c.fillT); done = true;
@@ -10834,9 +11043,9 @@ async function exprGen(c, baseK){
   const same = async b => { if(!ref) return 0; try{ const fs = await faceDescs(b); return fs.length ? Math.min(...fs.map(f => fdist(f.d, ref))) : 1; }catch(e){ return 0; } };
   const one = async ([k, [, en]]) => {
     const p = `Edit this exact photo: the same person, the same face and identity, the same clothes, the same pose, background, framing and light. Change ONLY the facial expression to: ${en}. Keep the real skin texture. Photorealistic, natural, no other changes.`;
-    let b = await genImage(p, base, null, null, {force:{two:false, px:768}, model, quiet:true, why:'expresii'}), d = await same(b); addUsage(c.id, imgPrice(), 'img', null, 'apel');
+    let b = await genImage(p, base, RW_CALL_SIG, null, {force:{two:false, px:768}, model, quiet:true, why:'expresii'}), d = await same(b); addUsage(c.id, imgPrice(), 'img', null, 'apel');
     if(d > .45 && (S.imgProv !== 'worker' || capLeft() >= per)){   // fața a alunecat: încă o încercare, rămâne cea mai apropiată
-      try{ const b2 = await genImage(p, base, null, null, {force:{two:false, px:768}, model, quiet:true, why:'expresii'}), d2 = await same(b2); addUsage(c.id, imgPrice(), 'img', null, 'apel'); if(d2 < d){ b = b2; d = d2; } }catch(e){}
+      try{ const b2 = await genImage(p, base, RW_CALL_SIG, null, {force:{two:false, px:768}, model, quiet:true, why:'expresii'}), d2 = await same(b2); addUsage(c.id, imgPrice(), 'img', null, 'apel'); if(d2 < d){ b = b2; d = d2; } }catch(e){}
     }
     try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
     set[k] = await saveImg(b); await saveChars();
@@ -11147,8 +11356,8 @@ async function sprGen(ch, baseK, onDone){
     const set = ch.vfs[baseK] = ch.vfs[baseK] || {};
     await Promise.allSettled(SPR_KEYS.filter(k => !set[k]).map(async k => {
       const p = `Edit this exact photo: the same person, the same face and identity, the same head position, angle and size in the frame, the same clothes, pose, background, framing and light. Change ONLY this: ${SPR_ASK[k]}. Everything else stays exactly as it is. Photorealistic, the real skin texture.`;
-      let b = await genImage(p, base, null, null, {force:{two:false, px:768}, model:S.wkChat || 'ancorat', quiet:true, why:'gura'}), dd = await same(b); addUsage(ch.id, imgPrice(), 'img', null, 'apel');
-      if(dd > .45){ try{ const b2 = await genImage(p, base, null, null, {force:{two:false, px:768}, model:S.wkChat || 'ancorat', quiet:true, why:'gura'}), d2 = await same(b2); addUsage(ch.id, imgPrice(), 'img', null, 'apel'); if(d2 < dd){ b = b2; dd = d2; } }catch(e){} }
+      let b = await genImage(p, base, RW_CALL_SIG, null, {force:{two:false, px:768}, model:S.wkChat || 'ancorat', quiet:true, why:'gura'}), dd = await same(b); addUsage(ch.id, imgPrice(), 'img', null, 'apel');
+      if(dd > .45){ try{ const b2 = await genImage(p, base, RW_CALL_SIG, null, {force:{two:false, px:768}, model:S.wkChat || 'ancorat', quiet:true, why:'gura'}), d2 = await same(b2); addUsage(ch.id, imgPrice(), 'img', null, 'apel'); if(d2 < dd){ b = b2; dd = d2; } }catch(e){} }
       if(dd > .5) return;   // altă față: nu-l păstrăm
       try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
       set[k] = await saveImg(b);
@@ -11179,6 +11388,7 @@ function vfDraw(c, now){
     tO = (prev.o * (prev.a || 1)) * (1 - m) + (next.o * (next.a || 1)) * m; tW = prev.w * (1 - m) + next.w * m; tP = (prev.p ? 1 - m : 0) + (next.p ? m : 0); }
   else if(next && next.t - now < 120){ tO = next.o * (next.a || 1) * (1 - (next.t - now) / 120); tW = 1 + (next.w - 1) * (1 - (next.t - now) / 120); tP = next.p ? 1 - (next.t - now) / 120 : 0; }
   if(s && !V.kf.length && now - (V.lastWord || 0) > 450){ const t = now / 1000; tO = Math.max(0, .55 * Math.sin(t * 11.3) * Math.sin(t * 3.1 + 1) + .15 * Math.sin(t * 23)); tW = 1 + .06 * Math.sin(t * 4.7); }
+  if(s && RV.cur && RV.amp >= 0){ const a = Math.min(1, RV.amp / .11); tO = a < .06 ? tO * .12 : Math.max(tO * (.45 + .7 * a), a * .5); }   // 12.9: volumul real
   if(!s){ tO = 0; tW = 1; tP = 0; }
   if(BH){ if(BH.open > tO){ tO = BH.open; tW = .92; } if(BH.press > tP) tP = BH.press; }   // 9.81: căscat, buze strânse când se gândește
   V.open = ease(V.open, tO, .6, .42); V.wid = ease(V.wid, tW, .45, .35); V.press = ease(V.press, tP, .6, .4);
@@ -12017,14 +12227,14 @@ function callPicsNow(cc, ch){
   return [cc.photo];                                                            // (3) poza de profil
 }
 function callFrameCan(){ return S.imgProv !== 'none' && aiReady(); }
-async function callFrameMake(cc, ch, env){
+async function callFrameMake(cc, ch, env, signal = null){
   const w = ch && ch.where && Date.now() - (ch.where.ts || 0) < 6 * 36e5 ? ch.where : {};
   const out = w.outfit && !/(nud|naked|topless|lingerie|underwear|\bbra\b|panties|gol[ăa]|dezbr|lenjerie|chilo|sutien|bikini)/i.test(w.outfit) ? w.outfit : '';
   const place = [w.place, w.room].filter(Boolean).join(', ').slice(0, 160) || CC_PLACE[env] || CC_PLACE.casa;
   const shot = `front camera selfie during a video call, the phone held at arm's length, head and shoulders in frame, the face large, sharp and well lit, looking straight into the camera, ${place}${out ? ', wearing ' + out : ''}${w.light ? ', ' + w.light : ''}, natural real moment, ordinary phone front camera photo`;
   let bl = null, bd = 9;
   for(let t = 0; t < 3; t++){
-    const r = await scenePhoto(cc, shot, null, t ? 'keep exactly the face of the reference: same face shape, eyes, nose, lips, skin and age' : '', {why:'apel'});
+    const r = await scenePhoto(cc, shot, signal, t ? 'keep exactly the face of the reference: same face shape, eyes, nose, lips, skin and age' : '', {why:'apel'});
     addUsage(cc.id, imgPrice(), 'img', null, 'apel');
     const d = (await localFace(r.blob, cc)).d;
     if(d == null){ if(!bl) bl = r.blob; break; }
@@ -12032,7 +12242,7 @@ async function callFrameMake(cc, ch, env){
     if(d < .42) break;
   }
   if(!bl) throw new Error('cadrul n-a ieșit');
-  try{ const R = await finishPerson(cc, {blob:bl, fd:bd < 9 ? bd : null}, shot, null, {kind:'avatar', tag:'apel'}); bl = R.blob; }catch(e){}
+  try{ const R = await finishPerson(cc, {blob:bl, fd:bd < 9 ? bd : null}, shot, signal, {kind:'avatar', tag:'apel'}); bl = R.blob; }catch(e){}
   try{ if(bl.type === 'image/png') bl = await toJpeg(bl, 1024, .9); }catch(e){}
   const k = await saveImg(bl);
   const old = cc.callFrames && cc.callFrames[env];
@@ -12041,15 +12251,33 @@ async function callFrameMake(cc, ch, env){
   await saveChars();
   return k;
 }
+/* 12.9 (2): cadrul de apel se face dinainte, în fundal, pentru locul în care e acum (după ce deschizi chatul și după o poză nouă),
+   doar la personajele pe care le-ai sunat pe video. În apel: dacă tot lipsește, cel mult 20 s (`CALL_FRAME_WAIT`); apoi clipurile pornesc
+   pe imaginea de acum, iar cadrul rămâne pentru apelul următor (nu se mai schimbă imaginea în mijlocul apelului). */
+const CALL_FRAME_WAIT = 20000, CF_PRE = {};
+async function callFramePre(id){
+  const cc = charById(id); if(!cc || !cc.photo || !callFrameCan() || S.callClips === 'off' || CF_PRE.job) return;
+  try{ if(call) return; }catch(e){}
+  let ch = null; try{ ch = await DB.get(chatKey(cc.id, cc.thread)); }catch(e){}
+  if(!(ch && ch.lastCall && ch.lastCall.video) && !cc.callFrames) return;
+  let env = 'casa'; try{ env = ambEnv({c:cc, ch}); }catch(e){}
+  const k0 = cc.id + ':' + env; if(callFrameOf(cc, env) || Date.now() - (CF_PRE[k0] || 0) < 30 * 60e3) return;
+  CF_PRE[k0] = Date.now();
+  const job = CF_PRE.job = {k:k0, p:callFrameMake(cc, ch, env)};
+  try{ await job.p; }catch(e){ console.warn('cadrul de apel (fundal):', e && e.message); } finally { if(CF_PRE.job === job) CF_PRE.job = null; }
+}
 async function callFrameEnsure(c){
   if(callHarness() && !window.__callFrameTest) return;
   const cc = c.c; let env = 'casa'; try{ env = ambEnv(c); }catch(e){}
   if(!c.video || !cc.photo || callFrameOf(cc, env) || !callFrameCan() || c.frameBusy) return;
   c.framePending = true; c.frameBusy = true;
   setTimeout(() => { if(call === c && c.framePending) ccChip(c, '📹 Pregătesc imaginea de apel pentru locul ăsta…'); }, 2500);
-  let k = null; try{ k = await callFrameMake(cc, c.ch, env); }catch(e){ k = null; }
-  c.frameBusy = false; c.framePending = false;
-  if(call !== c){ return; }
+  c.frameCutT = setTimeout(() => { if(call !== c || !c.framePending) return; c.framePending = false; c.frameLate = true; ccChip(c, '📹 Imaginea de apel va fi gata data viitoare; acum pornesc pe imaginea asta', 4500); c.ccOn = false; ccEnsure(c); }, window.__cfWait || CALL_FRAME_WAIT);
+  const pj = CF_PRE.job && CF_PRE.job.k === cc.id + ':' + env ? CF_PRE.job.p : null;   // se face deja în fundal: îl așteptăm pe acela
+  let k = null; try{ k = await (pj || callFrameMake(cc, c.ch, env, RW_CALL_SIG)); }catch(e){ k = null; }
+  clearTimeout(c.frameCutT); c.frameBusy = false;
+  if(c.frameLate || call !== c){ c.framePending = false; return; }
+  c.framePending = false;
   if(!k){ ccChip(c, ''); c.ccOn = false; ccEnsure(c); return; }   // n-a mers: rămâne imaginea de acum
   ccChip(c, '', 0); callFrameSwitch(c, k);
 }
@@ -13643,6 +13871,7 @@ const FIELDS = {stKey:'key', stModel:'model', stUser:'userName', stAbout:'userAb
   stWkBase:'wkBase', stWkTok:'wkTok', stWkModel:'wkModel', stWkSize:'wkSize',
   stPin:'pIn', stPout:'pOut', stVkBase:'wkBase', stVkTok:'wkTok', stRwKey:'rwKey'};
 const SEGS = {stCallFill:'callFill', stCallClips:'callClips', stCallTalk:'callTalk', stCallReal:'callReal', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallGlitch:'callGlitch', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
+SEGS.stVoiceReal = 'voiceReal';   // 12.9
 let setPanel = null, setPanelPushed = false;
 /* 8.7: actualizare din aplicație. Codul vine oricum din rețea la pornire;
    asta prinde versiunile apărute cât aplicația a stat deschisă și forțează reîncărcarea curată. */
@@ -13729,7 +13958,8 @@ function renderSetSummary(){
   $('#sum_img').textContent = ip;
   $('#sum_chat').textContent = {scurt:'Scurte', mediu:'Medii', lung:'Lungi'}[S.len] + ' · ' + (S.chatMode === 'chat' ? 'chat pe telefon' : 'roleplay') + (S.typeReal === 'off' ? '' : ' · ritm real');   // 12.8
   { const sc = $('#sum_calls'); if(sc) sc.textContent = (S.callClips === 'off' ? 'Fără clipuri' : S.callClips === 'profil' ? 'Clipuri doar pe avatar' : 'Mișcare reală') + (S.callReal === 'off' ? ' · răspunde mereu' : ' · ca un om') + (S.callAmb === 'off' ? '' : ' · sunetul locului'); }
-  { const sv = $('#sum_voice'); if(sv) sv.textContent = 'Citire ' + ({off:'oprită', tap:'la 🔊', auto:'automată'}[S.voice] || '') + ' · vocale ' + ({off:'niciodată', rar:'rar', des:'des'}[S.vmsg] || 'rar'); }
+  { const rh = $('#rvHint'); if(rh) rh.textContent = S.voiceReal === 'off' ? 'Oprită: vorbește vocea telefonului.' : String(S.rwKey || '').trim() ? '✅ Cheia Runware e în telefon: personajele feminine vorbesc cu voce reală.' : '⚠️ Lipsește cheia Runware din telefon (Claude și chei → 🔑 Cheie Runware); până atunci, vocea telefonului.'; }
+  { const sv = $('#sum_voice'); if(sv) sv.textContent = (S.voiceReal !== 'off' && String(S.rwKey || '').trim() ? 'Voce reală · ' : '') + 'Citire ' + ({off:'oprită', tap:'la 🔊', auto:'automată'}[S.voice] || '') + ' · vocale ' + ({off:'niciodată', rar:'rar', des:'des'}[S.vmsg] || 'rar'); }
   { const sl = $('#sum_life'); if(sl) sl.textContent = [S.pro === 'on' ? 'Îți scrie prima' : '', S.story === 'on' ? 'stories' : '', S.feed !== 'off' ? 'statusuri' : '', S.social !== 'off' ? 'se cunosc între ele' : ''].filter(Boolean).join(' · ') || 'Liniște'; }
   $('#sum_lock').textContent = S.lock === 'bio' ? 'Amprentă + PIN' : S.lock === 'pin' ? 'PIN' : 'Oprită';
   $('#sum_push').textContent = S.pushOn ? 'Pornite' : 'Oprite';
