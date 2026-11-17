@@ -1213,6 +1213,79 @@ img.avl{animation:avBreath 10s ease-in-out infinite alternate,avIn .7s ease-out 
 .callv .cself{top:calc(96px + var(--safe-t,0px))}
 .callv .vtop{right:126px!important}
 .callv .cend{inset:0}
+/* ═══ 12.4: apelul video, vizual ═══ */
+/* clipurile reale: aceeași încadrare și aceeași mișcare de mână ca imaginea */
+.callv .cvid video.cclip{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 25%;opacity:0;transition:opacity .28s ease-out;animation:handheld 11s ease-in-out infinite alternate;pointer-events:none}
+.callv .cvid video.cclip.on{opacity:1}
+.callv .cvid video.cclip.out{transition:opacity .5s ease-in-out}
+.callv .cvid video.cclip.out.fast{transition:opacity .3s ease-in-out}
+.callv.vid .cvid.rig video.cclip{animation:none!important;transform:var(--rig,scale(1.07))!important}
+.callv.vid:not(.live) .cvid video.cclip{opacity:0}
+/* începutul: telefonul ridicat, apoi potrivit */
+@keyframes cintro{0%{transform:translateY(16%) rotate(-6deg) scale(1.18);filter:blur(7px) brightness(.5)}55%{transform:translateY(-1.5%) rotate(1deg) scale(1.03);filter:blur(1.5px) brightness(.92)}100%{transform:none;filter:none}}
+.callv .cvid.intro{animation:cintro 1.6s cubic-bezier(.2,.75,.25,1) both}
+/* granulație fină, ca la un senzor de telefon (nu puncte) */
+.callv .cgrain{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:160px 160px;opacity:calc(var(--gr,.09) * .8);inset:-8px}
+.callv.vid[data-st=speak] .cvid{box-shadow:none}
+/* sus: numele, unda când vorbește, semnalul */
+.callv.vid .vtop{right:16px!important;flex-direction:row;flex-wrap:wrap;align-items:center;column-gap:10px}
+.callv.vid .vtop .vname{font-size:1.32rem;font-weight:800;letter-spacing:-.3px;display:inline-flex;align-items:center;gap:8px}
+.callv.vid .vtop .vmeta{flex-basis:100%;order:3}
+.vwave{display:inline-flex;align-items:center;gap:2px;height:14px;opacity:0;transition:opacity .25s}
+.vwave b{width:3px;height:30%;border-radius:2px;background:#fff;animation:vwave .9s ease-in-out infinite}
+.vwave b:nth-child(2){animation-delay:-.3s}.vwave b:nth-child(3){animation-delay:-.6s}.vwave b:nth-child(4){animation-delay:-.15s}
+@keyframes vwave{0%,100%{height:25%}50%{height:100%}}
+.callv[data-st=speak] .vwave{opacity:1}
+.vsig{display:inline-flex;align-items:flex-end;gap:2px;height:12px;margin-left:auto;order:2}
+.vsig b{width:3px;border-radius:1px;background:#fff;transition:background .3s}
+.vsig b:nth-child(1){height:30%}.vsig b:nth-child(2){height:55%}.vsig b:nth-child(3){height:80%}.vsig b:nth-child(4){height:100%}
+.callv.weak .vsig b:nth-child(n+2){background:#ffffff40}
+.callv:not(.vid) .vsig{display:none}
+/* cât sună: camera ta pe tot ecranul, ea în mijloc, apoi camera ta se strânge în colț */
+.callv .cself{transition:width .55s cubic-bezier(.2,.8,.2,1),height .55s cubic-bezier(.2,.8,.2,1),top .55s cubic-bezier(.2,.8,.2,1),right .55s cubic-bezier(.2,.8,.2,1),left .55s,border-radius .55s,filter .55s,box-shadow .55s}
+.callv.vid:not(.live) .cself:not([hidden]){top:0!important;right:0!important;left:0!important;width:100%!important;height:100%!important;border-radius:0!important;border-color:transparent!important;box-shadow:none!important;z-index:1!important;filter:brightness(.5) saturate(.85) blur(1px)}
+.callv.vid:not(.live) .cmain{position:absolute!important;top:16%;left:0;right:0;margin:0;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:5}
+.callv.vid:not(.live) .cmain::before{content:'Apel video';font-size:.72rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;opacity:.75;margin-bottom:14px}
+.callv.vid:not(.live) .cava{display:block;width:124px;height:124px;margin-bottom:12px}
+.callv.vid:not(.live) .cava img,.callv.vid:not(.live) .cava span{width:124px;height:124px;box-shadow:0 0 0 4px #ffffff26,0 18px 50px #000a}
+.callv.vid:not(.live) h2{display:block;font-size:1.9rem;text-shadow:0 2px 14px #000a}
+.callv.vid:not(.live) #clState{background:none;backdrop-filter:none;font-size:.98rem;opacity:.85;padding:0}
+.callv.vid:not(.live) .vtop{opacity:0}
+.callv.vid:not(.live) .cbtns{margin-top:auto}
+.callv.vid:not(.live) .ccap{display:none}
+/* subtitrarea: ultimele rânduri, cu trecere moale sus */
+.callv.vid .ccap{background:#0b0910a6;border:1px solid #ffffff14;backdrop-filter:blur(16px) saturate(1.2);font-weight:500;line-height:1.42;max-height:calc(4.26em + 20px);overflow:hidden}
+.callv.vid .ccap.ovf{-webkit-mask-image:linear-gradient(transparent 0,#000 1.6em);mask-image:linear-gradient(transparent 0,#000 1.6em)}
+.callv.vid .ccap .cme{color:color-mix(in srgb,var(--acc) 55%,#fff);font-style:italic}
+.callv.vid #clState.listen::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#3ddc84;margin-right:7px;vertical-align:middle;box-shadow:0 0 0 0 #3ddc8488;animation:clisten 1.4s ease-out infinite}
+@keyframes clisten{0%{box-shadow:0 0 0 0 #3ddc8499}100%{box-shadow:0 0 0 9px #3ddc8400}}
+.callv.vid[data-st=speak] #clState{opacity:0}
+/* butoanele: o singură bară de sticlă; rarele sub „Mai mult” */
+.callv.vid .cbtns{gap:6px;padding:10px 10px;border-radius:34px;background:#14111a73;backdrop-filter:blur(22px) saturate(1.3);border:1px solid #ffffff1a;box-shadow:0 12px 40px #0006}
+.callv.vid .cbtns button svg{width:52px;height:52px;padding:15px;background:#ffffff1f}
+.callv.vid .cbtns button.off svg{background:#fff;color:#111}
+.callv.vid .cbtns .end svg{width:64px;padding:15px 20px;border-radius:26px;background:#ff3b4e}
+.callv.vid .cbtns button span{font-size:.6rem;opacity:.85}
+.callv.vid .vreact{display:none!important}
+.callv:not(.vid) #clMore,.callv:not(.vid) .cmore{display:none}
+.callv .cmore{position:absolute!important;left:12px;right:12px;bottom:calc(118px + env(safe-area-inset-bottom,0px));z-index:7;padding:14px;border-radius:26px;background:#14111ad9;backdrop-filter:blur(24px) saturate(1.3);border:1px solid #ffffff1a;box-shadow:0 18px 50px #000a;opacity:0;transform:translateY(14px) scale(.98);pointer-events:none;transition:opacity .22s,transform .22s}
+.callv.more .cmore{opacity:1;transform:none;pointer-events:auto}
+.callv.more #clMore svg{background:#fff;color:#111}
+.cmore .cmrx{display:flex;justify-content:space-between;align-items:center;gap:6px;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid #ffffff14}
+.cmore .cmrx button{width:46px;height:46px;border-radius:50%;background:#ffffff14;border:0;font-size:1.35rem;display:grid;place-items:center}
+.cmore .cmrx button:active{transform:scale(.88)}
+.cmore .cmrx .vlook{width:auto;border-radius:23px;padding:0 14px;display:flex;flex-direction:row;gap:6px;font-size:1.1rem;background:color-mix(in srgb,var(--acc) 45%,#0006)}
+.cmore .cmrx .vlook small{font-size:.74rem;font-weight:700}
+.cmore .cmgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cmore .cmgrid button{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;border-radius:18px;background:#ffffff0f;color:#fff;font-size:.72rem;font-weight:600}
+.cmore .cmgrid button svg{width:24px;height:24px;padding:0;background:none}
+.cmore .cmgrid button.off{background:#fff;color:#111}
+.callv.calm .cmore{opacity:0;pointer-events:none}
+/* final: „Sună din nou” */
+.cendb{margin-top:18px}
+.cendb button{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:999px;background:#3ddc84;color:#08130c;font-weight:800;font-size:.95rem;border:0;box-shadow:0 10px 30px #3ddc8455}
+.cendb button svg{width:20px;height:20px}
+@media (prefers-reduced-motion:reduce){.callv .cvid.intro{animation:none}.vwave b{animation:none}}
 
 /* 8.14: apel primit */
 .incall{position:fixed;inset:0;z-index:160;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:calc(60px + var(--safe-t,0px)) 24px calc(50px + var(--safe-b,0px));background:#0b0910;animation:callin .3s ease-out;overflow:hidden}
@@ -2251,6 +2324,8 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <div class="seg" id="stCallPres"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
       <label>🎭 Viața feței în apel: capul se întoarce puțin, micro-expresii, se uită în jur, oftează, înghite, cască noaptea</label>
       <div class="seg" id="stCallLife"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+      <label>🎬 Mișcare reală în apel: 6 clipuri scurte pe Runware din imaginea apelului (o dată pe imagine, ~$0,48 la „Clare”), cât ascultă, râde, se gândește, ce face, „pa”</label>
+      <div class="seg" id="stCallClips"><button data-v="on">Pornit</button><button data-v="profil">Doar pe avatar</button><button data-v="off">Oprit</button></div>
       <label>👄 Gura și clipitul din cadre reale ale ei (o dată pe imagine, 4 poze pe Runware, ~1–2 ¢; cel mult 3 imagini noi pe zi)</label>
       <div class="seg" id="stCallSprites"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
       <label>📷 Camera ca a unui telefon (obiectiv larg de aproape, focusul care caută, granulație noaptea)</label>
