@@ -1689,6 +1689,11 @@ input:focus,textarea:focus,select:focus{border-color:color-mix(in srgb,var(--acc
 #stFindRes button small{display:block;color:var(--tx3);font-size:.74rem}
 #stFindRes p{padding:10px 14px;margin:0;color:var(--tx3);font-size:.85rem}
 .panel h3.sh{margin:26px 0 2px}
+/* 12.8: setările: titlu scurt + explicație mică dedesubt */
+#vSet label small.lh{display:block;font-weight:400;font-size:.78rem;color:var(--tx3);margin-top:3px;line-height:1.35}
+#vSet .pintro{margin:0 0 6px}
+#vSet .panel .seg + label{margin-top:18px}
+#vSet details.sadv > summary small{font-weight:400}
 details.sadv{margin-top:14px;padding:10px 12px;border-radius:14px;background:var(--bg2);border:1px solid var(--line)}
 details.sadv>summary{list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;color:var(--tx)}
 details.sadv>summary::-webkit-details-marker{display:none}
@@ -2150,32 +2155,49 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       </div>
       <div class="sfind"><input id="stFind" type="text" inputmode="search" placeholder="🔎 Caută o setare: voce, plafon, temă, backup…" autocomplete="off" enterkeyhint="search"><div id="stFindRes"></div></div>
       <div class="sgroup"><h4>Esențiale</h4>
-        <button class="srow" data-p="ai"><i style="background:linear-gradient(135deg,#9b5cff,#6a4cff)">🧠</i><span><b>Inteligența (Claude)</b><small id="sum_ai"></small></span><em>›</em></button>
+        <button class="srow" data-p="ai"><i style="background:linear-gradient(135deg,#9b5cff,#6a4cff)">🧠</i><span><b>Claude și chei</b><small id="sum_ai"></small></span><em>›</em></button>
         <button class="srow" data-p="img"><i style="background:linear-gradient(135deg,#ff4f9a,#ff6b4a)">🖼️</i><span><b>Poze</b><small id="sum_img"></small></span><em>›</em></button>
       </div>
       <div class="sgroup"><h4>Conversații</h4>
-        <button class="srow" data-p="chat"><i style="background:linear-gradient(135deg,#22c3a6,#16a085)">💬</i><span><b>Răspunsuri, voce și viața personajelor</b><small id="sum_chat"></small></span><em>›</em></button>
+        <button class="srow" data-p="chat"><i style="background:linear-gradient(135deg,#22c3a6,#16a085)">💬</i><span><b>Răspunsuri</b><small id="sum_chat"></small></span><em>›</em></button>
+        <button class="srow" data-p="calls"><i style="background:linear-gradient(135deg,#ff5e7e,#d63a8c)">📞</i><span><b>Apeluri</b><small id="sum_calls"></small></span><em>›</em></button>
+        <button class="srow" data-p="voice"><i style="background:linear-gradient(135deg,#f5a623,#e5732f)">🎙️</i><span><b>Voce</b><small id="sum_voice"></small></span><em>›</em></button>
+        <button class="srow" data-p="life"><i style="background:linear-gradient(135deg,#7bc96f,#3f9e5a)">🌱</i><span><b>Viața personajelor</b><small id="sum_life"></small></span><em>›</em></button>
+      </div>
+      <div class="sgroup"><h4>Tu și aplicația</h4>
         <button class="srow" data-p="me"><i style="background:linear-gradient(135deg,#4f8cff,#2f6bff)">👤</i><span><b>Despre tine</b><small id="sum_me"></small></span><em>›</em></button>
         <button class="srow" data-p="look"><i style="background:linear-gradient(135deg,#ffb020,#ff8a00)">🎨</i><span><b>Aspect</b><small id="sum_look"></small></span><em>›</em></button>
+        <button class="srow" data-p="push"><i style="background:linear-gradient(135deg,#ffb020,#ff6a3d)">🔔</i><span><b>Notificări</b><small id="sum_push"></small></span><em>›</em></button>
+        <button class="srow" data-p="lock"><i style="background:linear-gradient(135deg,#3ac2a0,#1f8f78)">🔒</i><span><b>Blocare</b><small id="sum_lock"></small></span><em>›</em></button>
       </div>
-      <div class="sgroup"><h4>Siguranță și date</h4>
+      <div class="sgroup"><h4>Bani și date</h4>
         <button class="srow" data-p="cost"><i style="background:linear-gradient(135deg,#5fd39a,#2fa86d)">💰</i><span><b>Consum</b><small id="sum_cost"><span id="stCostMini"></span></small></span><em>›</em></button>
         <button class="srow" data-p="data"><i style="background:linear-gradient(135deg,#8a8f9c,#5e6370)">💾</i><span><b>Backup și restaurare</b><small id="sum_data">Personaje, conversații, poze</small></span><em>›</em></button>
-        <button class="srow" data-p="lock"><i style="background:linear-gradient(135deg,#3ac2a0,#1f8f78)">🔒</i><span><b>Blocare</b><small id="sum_lock"></small></span><em>›</em></button>
-        <button class="srow" data-p="push"><i style="background:linear-gradient(135deg,#ffb020,#ff6a3d)">🔔</i><span><b>Notificări</b><small id="sum_push"></small></span><em>›</em></button>
         <button class="srow" id="stWrapped"><i style="background:linear-gradient(135deg,#ff4f9a,#9b5cff)">📊</i><span><b>Taifas Wrapped</b><small>Luna ta în cifre și momente</small></span><em>›</em></button>
       </div>
       <div class="updRow"><span class="hint" id="stVer"></span><button class="btn sm" id="stUpd">⟳ Caută actualizare</button></div>
     </div>
 
-    <div class="panel sec" data-panel="ai" data-title="Inteligența" hidden>
+    <div class="panel sec" data-panel="ai" data-title="Claude și chei" hidden>
       <div class="welcome" id="stWelcome" hidden><b>Bun venit în Taifas 👋</b>Lipește cheia Anthropic și apasă „Testează". Gata, restul e opțional.</div>
+      <p class="hint pintro">Ce trebuie ca să meargă totul: cheia Claude, apoi (pentru poze) Worker-ul și, dacă vrei clipuri în apeluri, cheia Runware în telefon.</p>
       <div id="stAnt">
         <label for="stKey">Cheie Anthropic</label>
         <input id="stKey" type="password" placeholder="sk-ant-…" autocomplete="off">
       </div>
       <div class="btns"><button type="button" class="btn" id="stTest">Testează</button></div>
       <div class="status" id="stTestRes"></div>
+      <div id="stWk" hidden>
+        <details class="sadv" id="stWkConn"><summary>🔗 Conexiunea cu Worker-ul <small id="stWkConnSum"></small></summary>
+          <label for="stWkBase">Adresa Worker-ului (se termină în /v1)</label>
+          <input id="stWkBase" type="url" placeholder="https://taifas-imagini.….workers.dev/v1">
+          <label for="stWkTok">Parolă (TOKEN)</label>
+          <input id="stWkTok" type="password" autocomplete="off">
+        </details>
+      </div>
+      <details class="sadv" id="stRwKeyDet"><summary>🔑 Cheie Runware în telefon <small>pentru clipurile din apeluri; pozele merg și prin Worker</small></summary>
+        <input id="stRwKey" type="password" placeholder="goală = cheia din Worker (RUNWARE_KEY)" autocomplete="off" aria-label="Cheie Runware în telefon">
+      </details>
       <details class="sadv" id="stVaultDet"><summary>🔐 Unde stau cheile <small>telefon sau Worker (seif)</small></summary>
         <div class="seg" id="stVault"><button data-v="off">În telefon</button><button data-v="on">În Worker (seif)</button></div>
         <div id="stVaultBox" hidden>
@@ -2199,36 +2221,26 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
         <div class="seg" id="stAux"><button data-v="on">Haiku (ieftin)</button><button data-v="off">Modelul principal</button></div>
         <div class="hint">Personajul răspunde mereu cu modelul principal; doar sarcinile din spate folosesc modelul mic.</div>
       </details>
-    </div>
-
-    <div class="panel sec" data-panel="me" data-title="Despre tine" hidden>
-      <label for="stUser">Cum să-ți spună personajele</label>
-      <input id="stUser" placeholder="ex. Costi">
-      <label for="stAbout">Despre tine (pentru toate personajele)</label>
-      <textarea id="stAbout" rows="3" placeholder="ce vrei să știe orice personaj despre tine"></textarea>
-      <label for="stBday">🎂 Ziua ta de naștere (anul nu contează)</label>
-      <input id="stBday" type="date">
-      <p class="hint">În ziua ta, personajele îți scriu primele să-ți ureze.</p>
-      <label style="margin-top:14px">Poza ta (pentru pozele împreună cu personajele)</label>
-      <div class="mephoto"><div class="mpimg" id="stMeImg">🙂</div><div><div class="btns" style="margin-top:0"><button type="button" class="btn sm" id="stMePick">📷 Alege poza</button><button type="button" class="btn sm dan" id="stMeDel" hidden>Șterge</button></div><small id="stMeInfo">O poză clară, cu fața ta, din față. Rămâne doar în telefon și intră în backup.</small></div></div>
-      <input type="file" id="fMe" accept="image/*" hidden>
+      <h3 class="sh">💸 Costul textului</h3>
+      <p class="hint">Reglaje care schimbă doar cât plătești la Claude, nu cum scrie personajul. Implicitul e deja bun.</p>
+      <label>⚡ Amestec Sonnet / Haiku<small class="lh">Mesajele simple le scrie Haiku (de ~15× mai ieftin); tot ce contează (emoție, scene, sfaturi, poze) rămâne pe modelul principal.</small></label>
+      <div class="seg" id="stSmart"><button data-v="off">Doar principal</button><button data-v="putin">Puțin</button><button data-v="echilibrat">Echilibrat</button><button data-v="mult">Mult</button></div>
+      <p class="hint">Puțin: doar „ok / haha / noapte bună”. Echilibrat: și replicile scurte de zi cu zi; în grup, cele care se alătură discuției. Mult: și replicile mai lungi, fără emoție sau decizii; modelul principal scrie tot regulat, ca personajul să-și păstreze vocea. Fiecare personaj poate avea nivelul lui: profil → ⚡ Amestec.</p>
+      <label>⏱️ Cache-ul conversației<small class="lh">„1 oră” e cel mai ieftin de obicei; „5 min” doar dacă scrii mereu în rafale.</small></label>
+      <div class="seg" id="stCacheTtl"><button data-v="1h">1 oră</button><button data-v="auto">Rafale</button><button data-v="5m">5 min</button></div>
+      <label>🧾 Câte mesaje recente primește personajul<small class="lh">Restul e în rezumat. Mai multe = ține minte mai bine, costă mai mult.</small></label>
+      <div class="seg" id="stCtx"><button data-v="20">Economic · 20</button><button data-v="30">Normal · 30</button><button data-v="60">Mare · 60</button></div>
+      <label>🧠 Rezumat după pauză<small class="lh">După o pauză, ce e mai vechi intră în rezumat și rămân ultimele 12 mesaje: cam jumătate din cost.</small></label>
+      <div class="seg" id="stCtxCompact"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
     </div>
 
     <div class="panel sec" data-panel="img" data-title="Poze" hidden>
       <div class="seg" id="stImg"><button data-v="none">Oprite</button><button data-v="worker">Pornite (Worker-ul meu)</button></div>
-      <div id="stWk" hidden>
-        <details class="sadv" id="stWkConn"><summary>🔗 Conexiunea cu Worker-ul <small id="stWkConnSum"></small></summary>
-          <label for="stWkBase">Adresa Worker-ului (se termină în /v1)</label>
-          <input id="stWkBase" type="url" placeholder="https://taifas-imagini.….workers.dev/v1">
-          <label for="stWkTok">Parolă (TOKEN)</label>
-          <input id="stWkTok" type="password" autocomplete="off">
-        </details>
-      </div>
       <div id="stChatWrap">
-        <h3 class="sh">📷 Pozele din chat</h3>
+        <h3 class="sh">⚡ Unde și cât</h3>
         <p class="hint" id="stWkChatHint"></p>
         <div id="stRwWrap">
-          <label>Unde se fac pozele (FLUX.2 klein 9B, fidelitate maximă)</label>
+          <label>Unde se fac pozele<small class="lh">Runware: fidelitate maximă (FLUX.2 klein 9B). Cloudflare rămâne ca rezervă.</small></label>
           <div class="seg" id="stRw"><button data-v="off">Cloudflare</button><button data-v="on">⚡ Runware</button></div>
           <p class="hint" id="stRwHint"></p>
           <div id="stRwBox" hidden>
@@ -2243,24 +2255,23 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
             <label style="margin-top:10px">Plafon zilnic Runware</label>
             <div class="seg" id="stRwCap"><button data-v="0.25">$0,25</button><button data-v="0.5">$0,50</button><button data-v="1">$1</button><button data-v="none">Fără</button></div>
             <div class="neur" id="stRwDay" style="margin-top:8px"></div>
-            <details class="sadv"><summary>🔑 Cheie Runware în telefon <small>opțional</small></summary>
-              <input id="stRwKey" type="password" placeholder="goală = cheia din Worker (RUNWARE_KEY)" autocomplete="off" aria-label="Cheie Runware în telefon">
-            </details>
           </div>
         </div>
-        <label style="margin-top:14px">👥 Poze cu oamenii din viața personajului (sora, prietena, colegul…)</label>
-        <div class="seg" id="stPeople"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-        <label style="margin-top:14px">Poze spontane (toate personajele cu poză de profil)</label>
-        <div class="seg" id="stSpont"><button data-v="off">Niciodată</button><button data-v="rar">Rar</button><button data-v="des">Des</button></div>
-        <label style="margin-top:14px">🎬 Cadrul propus: înainte de o poză cerută de tine, vezi ce a înțeles și poți corecta</label>
-        <div class="seg" id="stShotPrev"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-        <label style="margin-top:14px">👁️ Când ești lângă ea în scenă, poza e din ochii tăi (nu selfie)</label>
-        <div class="seg" id="stPov"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-        <label style="margin-top:14px">🛋️ Același loc ca în poza dinainte: păstrează decorul ei</label>
-        <div class="seg" id="stSceneRef"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <h3 class="sh">📷 Cum se fac pozele</h3>
+        <label>🎬 Cadrul propus<small class="lh">Înainte de o poză cerută de tine vezi ce a înțeles și poți corecta.</small></label>
+      <div class="seg" id="stShotPrev"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label>👁️ Din ochii tăi<small class="lh">Când ești lângă ea în scenă, poza e din perspectiva ta, nu selfie.</small></label>
+      <div class="seg" id="stPov"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label>🛋️ Același decor<small class="lh">În același loc ca în poza dinainte, păstrează decorul.</small></label>
+      <div class="seg" id="stSceneRef"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label>👥 Oamenii din viața ei<small class="lh">Poze și cu sora, prietena, colegul…</small></label>
+      <div class="seg" id="stPeople"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label>📸 Poze spontane<small class="lh">Îți trimite singură poze (toate personajele cu poză de profil).</small></label>
+      <div class="seg" id="stSpont"><button data-v="off">Niciodată</button><button data-v="rar">Rar</button><button data-v="des">Des</button></div>
       </div>
+      <details class="sadv" id="stCfDet"><summary>☁️ Cloudflare <small>rezerva și reglajele Worker-ului</small></summary>
       <div id="stCfSec">
-        <h3 class="sh">☁️ Cloudflare</h3>
+        
         <div class="neur" id="stNeur"></div>
         <label>Planul tău Cloudflare Workers</label>
         <div class="seg" id="stCfPlan"><button data-v="free">Gratuit</button><button data-v="paid">Paid · $5/lună</button></div>
@@ -2277,6 +2288,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
           <div class="hint" id="stWkEst"></div>
         </details>
       </div>
+      </details>
       <details class="sadv" id="stTestDet"><summary>🧪 Teste și comparații</summary>
         <div class="btns" style="margin-top:4px"><button type="button" class="btn sm" id="stRwTest">⚡ Testează Runware</button></div>
         <div class="status" id="stRwRes"></div>
@@ -2285,95 +2297,113 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       </details>
     </div>
 
-    <div class="panel sec" data-panel="chat" data-title="Răspunsuri și voce" hidden>
-      <h3 class="sh" style="margin-top:0">💬 Răspunsurile</h3>
+    <div class="panel sec" data-panel="chat" data-title="Răspunsuri" hidden>
+      <h3 class="sh" style="margin-top:0">✍️ Cum scrie</h3>
       <label>Lungimea răspunsurilor</label>
       <div class="seg" id="stLen"><button data-v="scurt">Scurte</button><button data-v="mediu">Medii</button><button data-v="lung">Lungi</button></div>
-      <label>✂️ Lungimea urmează mesajul tău (la un mesaj scurt, răspuns scurt)</label>
+      <label>✂️ Lungimea urmează mesajul tău<small class="lh">La un mesaj scurt de-al tău, răspuns scurt.</small></label>
       <div class="seg" id="stLenAuto"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <h3 class="sh">💸 Cost mai mic, aceeași calitate</h3>
-      <label>⚡ Amestec Sonnet / Haiku: mesajele simple le scrie Haiku 5.5 (de ~15× mai ieftin), cu tot ce știe personajul; tot ce contează (emoție, scene, sfaturi, planuri, întrebări serioase, poze) rămâne pe modelul principal. La orice dubiu, modelul principal. Pe un răspuns Haiku, ↻ ⚡→🧠 îl reface pe modelul principal, iar conversația aceea stă 45 min doar pe el.</label>
-      <div class="seg" id="stSmart"><button data-v="off">Doar principal</button><button data-v="putin">Puțin</button><button data-v="echilibrat">Echilibrat</button><button data-v="mult">Mult</button></div>
-      <p class="hint">Puțin: doar „ok / haha / noapte bună”. Echilibrat: și replicile scurte de zi cu zi; în grup, cele care se alătură discuției. Mult: și replicile mai lungi, fără emoție sau decizii; modelul principal scrie tot regulat, ca personajul să-și păstreze vocea. Fiecare personaj poate avea nivelul lui: profil → ⚡ Amestec.</p>
-      <label>⏱️ Cache-ul conversației: „1 oră” e cel mai ieftin de obicei; „5 min” doar dacă scrii mereu în rafale, fără pauze (după o pauză mai lungă tot istoricul se rescrie)</label>
-      <div class="seg" id="stCacheTtl"><button data-v="1h">1 oră</button><button data-v="auto">Rafale</button><button data-v="5m">5 min</button></div>
-      <label>Câte mesaje recente primește personajul (restul e în rezumat)</label>
-      <div class="seg" id="stCtx"><button data-v="20">Economic · 20</button><button data-v="30">Normal · 30</button><button data-v="60">Mare · 60</button></div>
-      <label>🧠 După o pauză: ce e mai vechi intră în rezumat și rămân ultimele 12 mesaje (după pauză istoricul se rescrie oricum; așa costă cam jumătate)</label>
-      <div class="seg" id="stCtxCompact"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>Butonul ↻ de sub răspuns</label>
-      <div class="seg" id="stRegen"><button data-v="off">O variantă nouă</button><button data-v="on">🎰 +2 variante la cerere</button></div>
-      <label>⌨️ Ritm real de scris: „scrie…” cât ar dura mesajul pe telefon, apoi apare întreg</label>
-      <div class="seg" id="stTypeReal"><button data-v="on">Pornit</button><button data-v="off">Oprit (textul curge imediat)</button></div>
-      <label>💬 Stilul implicit al conversațiilor (fiecare îl poate schimba din meniul conversației)</label>
+      <label>💬 Stilul conversațiilor<small class="lh">Implicit pentru conversațiile noi; fiecare îl poate schimba din meniul ei.</small></label>
       <div class="seg" id="stChatMode"><button data-v="rp">🎭 Roleplay (*acțiuni*)</button><button data-v="chat">📱 Chat pe telefon</button></div>
-      <label>💞 Tonul apropierii în conversațiile dintre adulți</label>
+      <label>💞 Tonul apropierii<small class="lh">În conversațiile dintre adulți.</small></label>
       <div class="seg" id="stRpStyle"><button data-v="natural">Natural</button><button data-v="romantic">Romantic</button><button data-v="open">🔥 Deschis la flirt și intimitate</button></div>
       <p class="hint">Modul „Deschis” încurajează răspunsuri receptive la invitații intime consensuale, fără refuzuri automate. Personajele rămân în caracter; nu activează nuditate pentru personaje minore sau cu vârsta neclară.</p>
-      <label>Sugestii de răspuns</label>
+      <h3 class="sh">⌨️ Cum apar</h3>
+      <label>⌨️ Ritm real de scris<small class="lh">„Scrie…” cât ar dura mesajul pe telefon, apoi apare întreg.</small></label>
+      <div class="seg" id="stTypeReal"><button data-v="on">Pornit</button><button data-v="off">Oprit (textul curge imediat)</button></div>
+      <label>↻ Butonul de sub răspuns</label>
+      <div class="seg" id="stRegen"><button data-v="off">O variantă nouă</button><button data-v="on">🎰 +2 variante la cerere</button></div>
+      <label>💡 Sugestii de răspuns</label>
       <div class="seg" id="stSugg"><button data-v="off">Doar la 💡</button><button data-v="auto">După fiecare mesaj</button></div>
-      <h3 class="sh">🎙️ Vocea</h3>
-      <label>Citire cu voce a mesajelor scrise (la 🔊 sau automat)</label>
-      <div class="seg" id="stVoice"><button data-v="off">Oprit</button><button data-v="tap">La 🔊</button><button data-v="auto">Automat</button></div>
-      <label>Mesaje vocale de la personaj</label>
-      <div class="seg" id="stVmsg"><button data-v="off">Niciodată</button><button data-v="rar">Rar</button><button data-v="des">Des</button></div>
-      <label>🗣️ În apelul video, fața vorbește (buze, clipit, mișcarea capului)</label>
-      <div class="seg" id="stCallFace"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>🎧 Sunetul camerei ei în apel (cafenea, stradă, ploaie, liniștea casei) și respirațiile</label>
-      <div class="seg" id="stCallAmb"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>💬 „Îhî”, „da”, „aha” cât vorbești tu</label>
-      <div class="seg" id="stCallBack"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>🤔 „Hm…”, „Păi…” când se gândește mai mult la răspuns (ca la telefon, în loc de tăcere)</label>
-      <div class="seg" id="stCallFill"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>🪟 Adâncime 3D în apelul video (fundalul se mișcă altfel decât ea)</label>
-      <div class="seg" id="stCallDepth"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>💡 Lumina ei reală (ora ei, apusul, norii din orașul ei, lumina ecranului)</label>
-      <div class="seg" id="stCallLight"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>👁️ Observă dacă ești acolo (ieși din cadru, te uiți în altă parte, întuneric), doar în telefon</label>
-      <div class="seg" id="stCallPres"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>🎭 Viața feței în apel: capul se întoarce puțin, micro-expresii, se uită în jur, oftează, înghite, cască noaptea</label>
-      <div class="seg" id="stCallLife"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>🎬 Mișcare reală în apel: 8 clipuri scurte pe Runware (vorbește, ascultă, ce face, se gândește, râde, „pa”), o dată pe loc (dormitor, bucătărie, afară…), ~$0,40 la „Clare”</label>
-      <div class="seg" id="stCallClips"><button data-v="on">Pornit</button><button data-v="profil">Doar pe avatar</button><button data-v="off">Oprit</button></div>
-      <label>📵 Ca un om: noaptea poate dormi (nu răspunde sau răspunde somnoroasă), la volan sau în ședință respinge și te sună ea după, uneori o întrerupe ceva în apel</label>
+    </div>
+
+    <div class="panel sec" data-panel="calls" data-title="Apeluri" hidden>
+      <p class="hint pintro">Totul pornit = cel mai real. Detaliile fine sunt pliate mai jos; nu e nevoie să le atingi.</p>
+      <label>📵 Ca un om<small class="lh">Noaptea poate dormi (nu răspunde sau răspunde somnoroasă); la volan sau în ședință respinge și te sună ea după; uneori o întrerupe ceva.</small></label>
       <div class="seg" id="stCallReal"><button data-v="on">Pornit</button><button data-v="off">Răspunde mereu</button></div>
-      <label>🗣️ Cât vorbește, în apelul video: clip real (se mișcă natural, gura nu e potrivită pe cuvinte) sau fața din telefon (gura pe cuvinte, restul nemișcat)</label>
+      <h3 class="sh">🎬 Imaginea</h3>
+      <label>🎬 Mișcare reală (clipuri Runware)<small class="lh">8 clipuri scurte o dată pe loc (dormitor, bucătărie, afară…), ~$0,40 la „Clare”. Cer cheia Runware în telefon.</small></label>
+      <div class="seg" id="stCallClips"><button data-v="on">Pornit</button><button data-v="profil">Doar pe avatar</button><button data-v="off">Oprit</button></div>
+      <label>🗣️ Cât vorbește<small class="lh">Clip real: se mișcă natural, gura nu e potrivită pe cuvinte. Fața din telefon: gura pe cuvinte, restul nemișcat.</small></label>
       <div class="seg" id="stCallTalk"><button data-v="clip">Clip real</button><button data-v="face">Fața din telefon</button></div>
-      <label>👄 Gura și clipitul din cadre reale ale ei (o dată pe imagine, 4 poze pe Runware, ~1–2 ¢; cel mult 3 imagini noi pe zi)</label>
+      <label>👄 Fața vorbește<small class="lh">Buze, clipit și mișcarea capului pe imaginea ei, în telefon.</small></label>
+      <div class="seg" id="stCallFace"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+      <details class="sadv" id="stCallFine"><summary>🎛️ Detalii de imagine <small>lumină, cameră, fundal, semnal</small></summary>
+        <label>👄 Gura și clipitul din cadre reale<small class="lh">O dată pe imagine, 4 poze pe Runware (~1–2 ¢); cel mult 3 imagini noi pe zi.</small></label>
       <div class="seg" id="stCallSprites"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>📷 Camera ca a unui telefon (obiectiv larg de aproape, focusul care caută, granulație noaptea)</label>
+        <label>🎭 Viața feței<small class="lh">Capul se întoarce puțin, micro-expresii, se uită în jur, oftează, cască noaptea.</small></label>
+      <div class="seg" id="stCallLife"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label>💡 Lumina ei reală<small class="lh">Ora ei, apusul, norii din orașul ei, lumina ecranului.</small></label>
+      <div class="seg" id="stCallLight"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label>📷 Camera ca a unui telefon<small class="lh">Obiectiv larg de aproape, focusul care caută, granulație noaptea.</small></label>
       <div class="seg" id="stCallCam"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>📶 Din când în când, o secundă de semnal slab (imaginea îngheață, pixeli)</label>
-      <div class="seg" id="stCallGlitch"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>🌿 Fundal viu (vânt, umbre de ploaie, cineva care trece, faruri noaptea, lumină printre frunze)</label>
+        <label>🪟 Adâncime 3D<small class="lh">Fundalul se mișcă altfel decât ea.</small></label>
+      <div class="seg" id="stCallDepth"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+        <label>🌿 Fundal viu<small class="lh">Vânt, umbre de ploaie, cineva care trece, faruri noaptea.</small></label>
       <div class="seg" id="stCallBg"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
-      <label>😊 Îți vede expresia (zâmbet, râs, surpriză) și răspunde la ea, doar în telefon</label>
+        <label>📶 Semnal slab, rar<small class="lh">Din când în când, o secundă în care imaginea îngheață.</small></label>
+      <div class="seg" id="stCallGlitch"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+      </details>
+      <h3 class="sh">🔊 Sunetul</h3>
+      <label>🎧 Sunetul locului<small class="lh">Cafenea, stradă, ploaie, liniștea casei, respirațiile.</small></label>
+      <div class="seg" id="stCallAmb"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+      <label>🤔 „Hm…”, „Păi…”<small class="lh">Când se gândește mai mult la răspuns, în loc de tăcere.</small></label>
+      <div class="seg" id="stCallFill"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+      <label>💬 „Îhî”, „da” cât vorbești tu<small class="lh">Pe Android rămâne oprit (ar opri microfonul); în video dă din cap.</small></label>
+      <div class="seg" id="stCallBack"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+      <h3 class="sh">👀 Cum te observă</h3>
+      <label>😊 Îți vede expresia<small class="lh">Zâmbet, râs, surpriză; doar în telefon.</small></label>
       <div class="seg" id="stCallMirror"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+      <label>👁️ Observă dacă ești acolo<small class="lh">Ieși din cadru, te uiți în altă parte, e întuneric; doar în telefon.</small></label>
+      <div class="seg" id="stCallPres"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+    </div>
+
+    <div class="panel sec" data-panel="voice" data-title="Voce" hidden>
+      <label>🔊 Citește mesajele cu voce<small class="lh">La 🔊 sau automat, cu vocea telefonului (gratuit).</small></label>
+      <div class="seg" id="stVoice"><button data-v="off">Oprit</button><button data-v="tap">La 🔊</button><button data-v="auto">Automat</button></div>
+      <label>🎤 Mesaje vocale de la personaj</label>
+      <div class="seg" id="stVmsg"><button data-v="off">Niciodată</button><button data-v="rar">Rar</button><button data-v="des">Des</button></div>
       <p class="hint" id="ttsHint">Vocea telefonului, gratuită. Tonul (mai grav / mai subțire) se alege din profilul fiecărui personaj → 🎙️ Vocea. Apelul video se face tot în telefon, fără cost: sunetul de fundal, adâncimea, lumina și „te vede dacă ești acolo” rulează în telefon, fără niciun serviciu plătit.</p>
       <div class="btns"><button class="btn sm" id="stTtsTest">🔊 Ascultă un test</button></div>
-      <h3 class="sh">🌱 Viața personajelor</h3>
-      <label>Personajul îți scrie primul după 8 ore de pauză</label>
+    </div>
+
+    <div class="panel sec" data-panel="life" data-title="Viața personajelor" hidden>
+      <h3 class="sh" style="margin-top:0">📲 Cu tine</h3>
+      <label>💬 Îți scrie prima<small class="lh">După 8 ore de pauză.</small></label>
       <div class="seg" id="stPro"><button data-v="off">Nu</button><button data-v="on">Da</button></div>
-      <label>📱 Statusuri în Noutăți (personajele postează ce fac)</label>
+      <label>📱 Statusuri în Noutăți<small class="lh">Personajele postează ce fac.</small></label>
       <div class="seg" id="stFeed"><button data-v="off">Oprite</button><button data-v="text">Doar text</button><button data-v="poze">Cu poze</button></div>
-      <label>📸 Stories (o poză pe zi de la personajele cu care vorbești, dispare după 24 de ore)</label>
+      <label>📸 Stories<small class="lh">O poză pe zi de la cele cu care vorbești; dispare după 24 de ore. Cel mult 3 pe zi, între 9 și 23.</small></label>
       <div class="seg" id="stStory"><button data-v="off">Oprite</button><button data-v="on">Pornite</button></div>
-      <p class="hint">Cel mult 3 pe zi, între 9 și 23, doar cu poze activate. Fiecare story e o poză generată.</p>
-      <label>👯 Personajele se cunosc între ele (se pomenesc, își comentează postările)</label>
+      <label>📔 Jurnalul personajului<small class="lh">O intrare pe zi, automat.</small></label>
+      <div class="seg" id="stJrn"><button data-v="off">Oprit</button><button data-v="on">Pornit</button></div>
+      <h3 class="sh">👯 Între ele</h3>
+      <label>👯 Se cunosc între ele<small class="lh">Se pomenesc, își comentează postările.</small></label>
       <div class="seg" id="stSocial"><button data-v="on">Da</button><button data-v="off">Nu</button></div>
-      <label>💌 Își transmit între ele (una îți spune că alta o să-ți scrie, și chiar îți scrie; cine e lângă ea poate intra în conversație)</label>
+      <label>💌 Își transmit între ele<small class="lh">Una îți spune că alta o să-ți scrie, și chiar îți scrie; cine e lângă ea poate intra în conversație.</small></label>
       <div class="seg" id="stCross"><button data-v="on">Da</button><button data-v="off">Nu</button></div>
-      <label>☕ Au viața lor între ele (un mic episod pe zi pentru prietenii apropiați, pe care îl știu amândouă)</label>
+      <label>☕ Au viața lor<small class="lh">Un mic episod pe zi pentru prietenii apropiați.</small></label>
       <div class="seg" id="stSocLife"><button data-v="on">Da</button><button data-v="off">Nu</button></div>
-      <label>🗞️ Veștile mari ajung la toți (o veste de-a ei sau de-a ta; cele apropiate îți scriu despre ea)</label>
+      <label>🗞️ Veștile mari ajung la toți<small class="lh">O veste de-a ei sau de-a ta; cele apropiate îți scriu despre ea.</small></label>
       <div class="seg" id="stNews"><button data-v="on">Da</button><button data-v="off">Nu</button></div>
-      <label>📷 Poze împreună din viața lor (rar, cel mult una la 2-3 zile; fiecare e o poză generată)</label>
+      <label>📷 Poze împreună<small class="lh">Rar, cel mult una la 2–3 zile; fiecare e o poză generată.</small></label>
       <div class="seg" id="stSocPics"><button data-v="on">Da</button><button data-v="off">Nu</button></div>
-      <label>🎁 Planuri comune pentru tine (cu câteva zile înainte de ziua ta, pun la cale o surpriză)</label>
+      <label>🎁 Planuri pentru tine<small class="lh">Cu câteva zile înainte de ziua ta pun la cale o surpriză.</small></label>
       <div class="seg" id="stPlans"><button data-v="on">Da</button><button data-v="off">Nu</button></div>
       <div class="btns" style="margin-top:8px"><button class="btn" id="stSocMap" type="button">🕸️ Harta relațiilor</button></div>
-      <label>Jurnalul personajului (o intrare pe zi, automat)</label>
-      <div class="seg" id="stJrn"><button data-v="off">Oprit</button><button data-v="on">Pornit</button></div>
+    </div>
+
+    <div class="panel sec" data-panel="me" data-title="Despre tine" hidden>
+      <label for="stUser">Cum să-ți spună personajele</label>
+      <input id="stUser" placeholder="ex. Costi">
+      <label for="stAbout">Despre tine (pentru toate personajele)</label>
+      <textarea id="stAbout" rows="3" placeholder="ce vrei să știe orice personaj despre tine"></textarea>
+      <label for="stBday">🎂 Ziua ta de naștere (anul nu contează)</label>
+      <input id="stBday" type="date">
+      <p class="hint">În ziua ta, personajele îți scriu primele să-ți ureze.</p>
+      <label style="margin-top:14px">Poza ta (pentru pozele împreună cu personajele)</label>
+      <div class="mephoto"><div class="mpimg" id="stMeImg">🙂</div><div><div class="btns" style="margin-top:0"><button type="button" class="btn sm" id="stMePick">📷 Alege poza</button><button type="button" class="btn sm dan" id="stMeDel" hidden>Șterge</button></div><small id="stMeInfo">O poză clară, cu fața ta, din față. Rămâne doar în telefon și intră în backup.</small></div></div>
+      <input type="file" id="fMe" accept="image/*" hidden>
     </div>
 
     <div class="panel sec" data-panel="look" data-title="Aspect" hidden>
@@ -2398,7 +2428,9 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
     </div>
 
     <div class="panel sec" data-panel="lock" data-title="Blocare" hidden><div id="stLockBox"></div></div>
+
     <div class="panel sec" data-panel="push" data-title="Notificări" hidden><div id="stPushBox"></div></div>
+
     <div class="panel sec" data-panel="data" data-title="Backup și restaurare" hidden>
       <div class="btns" style="margin-top:0">
         <button type="button" class="btn" id="stExport">⬇ Backup</button>

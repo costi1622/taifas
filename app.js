@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '12.7';
+const APP_VER = '12.8';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -13701,8 +13701,8 @@ function openSetPanel(p, push = true){
   const el = $(`#vSet .panel[data-panel="${p}"]`);
   $('#stTitle').textContent = el ? el.dataset.title : 'Setări';
   $('#stScroll').scrollTop = 0;
-  if(p === 'img'){ loadNeurons(); drawChatHint(); $('#stWkConn').open = !String(S.wkBase || '').trim(); }
-  if(p === 'ai'){ $('#stVaultDet').open = S.vault === 'on'; }
+  if(p === 'img'){ loadNeurons(); drawChatHint(); }
+  if(p === 'ai'){ $('#stVaultDet').open = S.vault === 'on'; const wc = $('#stWkConn'); if(wc) wc.open = !String(S.wkBase || '').trim(); const rk = $('#stRwKeyDet'); if(rk) rk.open = !!String(S.rwKey || '').trim(); }   // 12.8: cheile și Worker-ul stau aici
   if(p === 'me') drawMe();
   if(p === 'data') drawBk();
   if(p === 'lock') drawLock();
@@ -13725,9 +13725,12 @@ function renderSetSummary(){
   $('#stMeSub').innerHTML = aiReady() ? `<span style="color:var(--ok)">● conectat</span> · ${chars.length} ${chars.length === 1 ? 'personaj' : 'personaje'}` : '<span style="color:var(--err)">● lipsește cheia</span>';
   $('#sum_ai').innerHTML = hasKey('anthropic') ? `<span class="ok">✓</span> Claude · ${esc(S.model || DEF.model)}${vaultOn() ? ' · 🔐 seif' : ''}` : '<span class="bad">lipsește cheia</span>';
   $('#sum_me').textContent = nm ? nm + (S.userAbout.trim() ? ' · ' + S.userAbout.trim() : '') : 'Cum să-ți spună personajele';
-  const ip = {none:'Oprite', worker:'Worker Cloudflare · ' + (S.wkModel || 'eco') + (S.cfPlan === 'paid' ? ' · Paid' : '') + (S.rw === 'on' ? ' · ⚡ 9B pe Runware' : '')}[S.imgProv] || '';
+  const ip = S.imgProv !== 'worker' ? 'Oprite' : S.rw === 'on' ? '⚡ Runware' + (S.rwCap && S.rwCap !== 'none' ? ' · plafon $' + String(S.rwCap).replace('.', ',') + '/zi' : ' · fără plafon') + (S.cfFallback === 'free' ? ' · rezervă Cloudflare' : '') : '☁️ Cloudflare · ' + (S.wkModel || 'eco');   // 12.8
   $('#sum_img').textContent = ip;
-  $('#sum_chat').textContent = {scurt:'Răspunsuri scurte', mediu:'Răspunsuri medii', lung:'Răspunsuri lungi'}[S.len] + ' · voce ' + {off:'oprită', tap:'la 🔊', auto:'automată'}[S.voice] + ' · vocea telefonului';
+  $('#sum_chat').textContent = {scurt:'Scurte', mediu:'Medii', lung:'Lungi'}[S.len] + ' · ' + (S.chatMode === 'chat' ? 'chat pe telefon' : 'roleplay') + (S.typeReal === 'off' ? '' : ' · ritm real');   // 12.8
+  { const sc = $('#sum_calls'); if(sc) sc.textContent = (S.callClips === 'off' ? 'Fără clipuri' : S.callClips === 'profil' ? 'Clipuri doar pe avatar' : 'Mișcare reală') + (S.callReal === 'off' ? ' · răspunde mereu' : ' · ca un om') + (S.callAmb === 'off' ? '' : ' · sunetul locului'); }
+  { const sv = $('#sum_voice'); if(sv) sv.textContent = 'Citire ' + ({off:'oprită', tap:'la 🔊', auto:'automată'}[S.voice] || '') + ' · vocale ' + ({off:'niciodată', rar:'rar', des:'des'}[S.vmsg] || 'rar'); }
+  { const sl = $('#sum_life'); if(sl) sl.textContent = [S.pro === 'on' ? 'Îți scrie prima' : '', S.story === 'on' ? 'stories' : '', S.feed !== 'off' ? 'statusuri' : '', S.social !== 'off' ? 'se cunosc între ele' : ''].filter(Boolean).join(' · ') || 'Liniște'; }
   $('#sum_lock').textContent = S.lock === 'bio' ? 'Amprentă + PIN' : S.lock === 'pin' ? 'PIN' : 'Oprită';
   $('#sum_push').textContent = S.pushOn ? 'Pornite' : 'Oprite';
   $('#sum_look').textContent = {auto:'Temă automată', dark:'Temă întunecată', light:'Temă luminoasă'}[S.theme] + ' · text ' + {15:'mic', 16:'normal', 18:'mare'}[S.font];
@@ -13758,7 +13761,7 @@ function applyMode(k){
 function healthIssues(){
   const out = [];
   if(!hasKey('anthropic')) out.push({t:'🔑 Lipsește cheia Anthropic', p:'ai'});
-  if(S.imgProv === 'worker' && !String(S.wkBase || '').trim()) out.push({t:'🔗 Lipsește adresa Worker-ului', p:'img'});
+  if(S.imgProv === 'worker' && !String(S.wkBase || '').trim()) out.push({t:'🔗 Lipsește adresa Worker-ului', p:'ai'});
   if(S.imgProv === 'worker' && S.rw === 'on'){
     if(!rwReady()) out.push({t:'⚡ Runware n-are cheie (RUNWARE_KEY în Worker)', p:'img'});
     else if(rwPaused()) out.push({t:'⚡ Runware a dat erori: pozele merg 10 min pe Cloudflare', p:'img'});
