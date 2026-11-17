@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '12.9';
+const APP_VER = '13.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -8204,15 +8204,24 @@ function rvAuto(c){
 const rvVoiceOf = c => (c && c.rvVoice && RV_VOICES.find(v => v.id === c.rvVoice)) || rvAuto(c || {});
 const rvLang = c => String(langOf(c) || 'ro-RO').slice(0, 2).toLowerCase();
 const RV = {cache:new Map(), q:[], cur:null, amp:-1, ac:null, an:null, buf:null, raf:0, fail:0, failAt:0};
-// poate avea voce reală (cheia Runware în telefon, nu e personaj masculin, limba e suportată)
-function rvAvail(c){ return !!(c && S.voiceReal !== 'off' && String(S.rwKey || '').trim() && genderOf(c) !== 'm' && RV_LANGS.includes(rvLang(c)) && rwCapLeft() >= .01); }
-// o are acum: feminin sau voce aleasă de tine; nu după 3 eșecuri la rând (5 minute)
-function rvOn(c){
-  if(!rvAvail(c) || c.rvVoice === 'off') return false;
-  if(!c.rvVoice && genderOf(c) !== 'f') return false;
-  if(RV.fail >= 3 && Date.now() - RV.failAt < 5 * 60e3) return false;
-  return navigator.onLine !== false;
+/* 13.0: genul pentru voce doar din aspect (în poveste „el” ești de obicei tu, și personajul ieșea „bărbat”) */
+const rvGender = c => c && (c.gender === 'f' || c.gender === 'm') ? c.gender : genderOfText((c && c.look || '') + ' ' + (c && c.aspect || ''));
+// se poate alege (cheia Runware în telefon, vocea reală pornită, limba suportată)
+function rvAvail(c){ return !!(c && S.voiceReal !== 'off' && String(S.rwKey || '').trim() && RV_LANGS.includes(rvLang(c))); }
+// de ce nu vorbește acum cu vocea reală ('' = vorbește)
+function rvWhy(c){
+  if(!c) return 'niciun personaj';
+  if(S.voiceReal === 'off') return 'vocea reală e oprită (Setări → Voce)';
+  if(!String(S.rwKey || '').trim()) return 'lipsește cheia Runware din telefon (Setări → Claude și chei → 🔑 Cheie Runware)';
+  if(!RV_LANGS.includes(rvLang(c))) return 'limba personajului nu e suportată';
+  if(c.rvVoice === 'off') return 'ai ales „doar vocea telefonului”';
+  if(!c.rvVoice && rvGender(c) === 'm') return 'personaj masculin: alege o voce de mai jos ca s-o pornești';
+  if(rwCapLeft() < .01) return `plafonul zilnic Runware e atins (${usd(rwDay().usd)} azi): mărește-l din Setări → Poze sau revino mâine`;
+  if(RV.fail >= 3 && Date.now() - RV.failAt < 5 * 60e3) return 'Runware n-a răspuns de 3 ori la rând; reîncearcă singură în câteva minute' + (RV.lastErr ? ` (${RV.lastErr})` : '');
+  if(navigator.onLine === false) return 'fără internet';
+  return '';
 }
+const rvOn = c => !!c && rvWhy(c) === '';
 function rvFetch(c, text, o = {}){
   const v = rvVoiceOf(c), t = String(text || '').trim().slice(0, 4900), ex = o.ex ?? .9, key = v.id + '|' + ex + '|' + t;
   if(RV.cache.has(key)) return RV.cache.get(key);
@@ -8243,7 +8252,7 @@ function rvFetch(c, text, o = {}){
     return blob;
   })();
   RV.cache.set(key, p);
-  p.catch(e => { RV.cache.delete(key); RV.fail++; RV.failAt = Date.now(); console.warn(e && e.message); });
+  p.catch(e => { RV.cache.delete(key); RV.fail++; RV.failAt = Date.now(); RV.lastErr = String(e && e.message || '').replace(/^Vocea Runware: /, '').slice(0, 120); console.warn(e && e.message); });
   while(RV.cache.size > 90) RV.cache.delete(RV.cache.keys().next().value);
   return p;
 }
@@ -8329,23 +8338,47 @@ async function rvWarm(c){
   for(let i = 0; i < all.length; i += 2){ if(call !== c) return; await Promise.allSettled(all.slice(i, i + 2).map(t => rvFetch(cc, t, {tag:'apel'}))); }
 }
 const rvLabel = c => { const v = rvVoiceOf(c); return v.n + ' · ' + v.d; };
-function rvSample(c, id){ const k = c.rvVoice; c.rvVoice = id; stopAllVoice(); speakPhone(c, SAMPLE(c)); if(k === undefined) delete c.rvVoice; else c.rvVoice = k; }
+function rvSample(c, id){
+  const w = rvWhy({...c, rvVoice:id}); if(w){ toast('🎙️ Nu pot reda vocea reală: ' + w + '.', 4500); return; }
+  const k = c.rvVoice; c.rvVoice = id; stopAllVoice(); speakPhone(c, SAMPLE(c)); if(k === undefined) delete c.rvVoice; else c.rvVoice = k;
+}
+// 13.0: Setări → Voce: toate personajele cu vocea lor; atingi unul → foaia lui 🎙️ Vocea
+function rvCharsSheet(){
+  const L = chars.filter(c => !c.dead);
+  openSheet(`<h4>🎙️ Vocea fiecărui personaj</h4><div class="pad">${L.length ? L.map(c => `<button type="button" class="opt" data-rvc="${esc(String(c.id))}"><i>${rvOn(c) ? '🎙️' : '📱'}</i>${esc(c.name)} <small>${esc(voiceLabel(c))}</small></button>`).join('') : '<p class="hint">Niciun personaj încă.</p>'}
+    <div class="btns"><button class="btn pri" data-close>Gata</button></div></div>`);
+  $$('.sheet [data-rvc]').forEach(b => b.onclick = () => { const c = charById(b.dataset.rvc); if(!c) return; closeSheet(); pickVoice(c, () => {}); });
+}
+// 13.0: o cerere reală la Runware, cu rezultatul în clar
+async function rvTest(btn){
+  const out = $('#rvHint'), c = chars.find(x => !x.dead && rvOn(x)) || chars[0] || {id:'test', name:'Taifas', look:'woman'};
+  const w = rvWhy({...c, rvVoice:c.rvVoice && c.rvVoice !== 'off' ? c.rvVoice : rvAuto(c).id});
+  if(w){ if(out) out.textContent = '⚠️ ' + w[0].toUpperCase() + w.slice(1) + '.'; return; }
+  if(btn) btn.disabled = true; if(out) out.textContent = '⏳ Cer o propoziție la Runware…';
+  const t0 = performance.now();
+  try{ const b = await rvFetch({...c, rvVoice:c.rvVoice && c.rvVoice !== 'off' ? c.rvVoice : rvAuto(c).id}, `Bună! Sunt ${c.name}. Așa sună vocea mea reală.`, {tag:'voce'});
+    if(out) out.textContent = `✅ Merge: ${rvVoiceOf({...c, rvVoice:c.rvVoice && c.rvVoice !== 'off' ? c.rvVoice : rvAuto(c).id}).n}, răspuns în ${((performance.now() - t0) / 1000).toFixed(1).replace('.', ',')} s.`;
+    stopAllVoice(); const a = vAudio = new Audio(URL.createObjectURL(b)); a.onended = () => URL.revokeObjectURL(a.src); a.play().catch(() => {}); }
+  catch(e){ if(out) out.textContent = '❌ Runware a răspuns: ' + String(e.message || e).replace(/^Vocea Runware: /, ''); }
+  finally{ if(btn) btn.disabled = false; }
+}
 // foaia 🎙️ Vocea: vocile reale sus (▶ ascultă, alege), apoi vocile telefonului (rezerva)
 function rvPickHTML(c){
-  if(!rvAvail(c)) return S.voiceReal !== 'off' && !String(S.rwKey || '').trim() ? '<p class="hint">🎙️ Vocea reală (HeyGen) merge cu cheia Runware pusă în telefon: Setări → Claude și chei → 🔑 Cheie Runware.</p>' : '';
-  const on = rvOn(c), curV = on ? rvVoiceOf(c) : null, auto = rvAuto(c);
+  if(!rvAvail(c)) return `<p class="hint">🎙️ Vocea reală (HeyGen): ${esc(rvWhy(c))}.</p>`;
+  const on = rvOn(c), why = rvWhy(c), curV = c.rvVoice && c.rvVoice !== 'off' ? rvVoiceOf(c) : null, auto = rvAuto(c);
   const row = v => `<div class="vrow${curV && c.rvVoice === v.id ? ' on' : ''}"><button type="button" class="opt" data-rvn="${v.id}"><i>🎙️</i>${esc(v.n)} <small>${esc(v.d)}</small>${curV && c.rvVoice === v.id ? ' ✓' : ''}</button><button type="button" class="btn sm" data-rvt="${v.id}" aria-label="Ascultă">▶</button></div>`;
   return `<p style="margin:2px 0 6px"><b>Voce reală</b> <small class="hint">(HeyGen prin Runware, ~$0,004 la 1.000 de caractere)</small></p>
-    <button type="button" class="opt" data-rvauto><i>✨</i>Automat, după fire <small>(${esc(auto.n)} · ${esc(auto.d)})</small>${on && !c.rvVoice ? ' ✓' : ''}</button>
+    <p class="hint" id="rvWhy">${on ? '✅ Vorbește acum cu ' + esc(rvVoiceOf(c).n) + '.' : '⚠️ Acum vorbește vocea telefonului: ' + esc(why) + '.'}</p>
+    <button type="button" class="opt" data-rvauto><i>✨</i>Automat, după fire <small>(${esc(auto.n)} · ${esc(auto.d)})</small>${!c.rvVoice && rvGender(c) !== 'm' ? ' ✓' : ''}</button>
     ${RV_VOICES.map(row).join('')}
-    <button type="button" class="opt" data-rvoff><i>📱</i>Doar vocea telefonului${c.rvVoice === 'off' || (!on && !c.rvVoice) ? ' ✓' : ''}</button>
+    <button type="button" class="opt" data-rvoff><i>📱</i>Doar vocea telefonului${c.rvVoice === 'off' || (!c.rvVoice && rvGender(c) === 'm') ? ' ✓' : ''}</button>
     <p style="margin:12px 0 4px"><b>Vocea telefonului</b> <small class="hint">(rezerva, când Runware nu răspunde)</small></p>`;
 }
 function rvPickBind(c, done){
   const save = async id => { if(id === undefined) delete c.rvVoice; else c.rvVoice = id; await saveChars(); closeSheet(); done && done(); if(id !== 'off') voiceSample(c); };
   $$('.sheet [data-rvt]').forEach(b => b.onclick = () => rvSample(c, b.dataset.rvt));
   $$('.sheet [data-rvn]').forEach(b => b.onclick = () => save(b.dataset.rvn));
-  const a = $('.sheet [data-rvauto]'); if(a) a.onclick = () => save(genderOf(c) === 'f' ? undefined : rvAuto(c).id);
+  const a = $('.sheet [data-rvauto]'); if(a) a.onclick = () => save(rvGender(c) !== 'm' ? undefined : rvAuto(c).id);
   const o = $('.sheet [data-rvoff]'); if(o) o.onclick = () => save('off');
 }
 
@@ -14345,6 +14378,7 @@ function bind(){
   $('#stFind').addEventListener('input', e => runFind(e.target.value));
   $('#stFindRes').addEventListener('click', e => { const b = e.target.closest('[data-fi]'); if(b) goFind(+b.dataset.fi); });
   $('#stTtsTest').onclick = () => voiceSample(chars[0] || {id:'test', name:'Taifas', look:'woman'}, $('#stTtsTest'));
+  { const b1 = $('#stRvChars'), b2 = $('#stRvTest'); if(b1) b1.onclick = () => rvCharsSheet(); if(b2) b2.onclick = () => rvTest(b2); }   // 13.0
   // lista de conversații: glisare spre stânga = Fixează / Golește
   let rx = 0, ry = 0, rEl = null, rLock = null, rOpen = null;
   const closeRow = () => { if(rOpen){ rOpen.querySelector('.cfront').style.transform = ''; rOpen = null; } };
