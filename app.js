@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '13.0';
+const APP_VER = '13.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2695,7 +2695,8 @@ function kitEnsure(c, o = {}){
   const st = kitState(c), fresh = st.fresh && (!o.gen || (c.kit && c.kit.gen));
   if(fresh && st.ok && !o.force) return;
   if(!o.force){ const r = kitRan.get(c.id), k = kitKey(c) + '|' + (o.gen ? 1 : 0); if(r && r.k === k && Date.now() - r.at < 30 * 60e3) return; kitRan.set(c.id, {k, at:Date.now()}); }   // 10.7: fără bucle
-  setTimeout(() => kitBuild(charById(c.id) || c, o).catch(() => {}), o.delay ?? 1500);
+  const go = () => { const w = o.force ? 0 : rwPauseLeft(); if(w > 0){ setTimeout(go, Math.min(w, 5 * 60e3) + 500); return; } kitBuild(charById(c.id) || c, o).catch(() => {}); };   // 13.1
+  setTimeout(go, o.delay ?? 1500);
 }
 // (3) garanția + finisarea, după orice generare cu personajul
 async function finishPerson(c, r, shot, signal, opt = {}){
@@ -4201,16 +4202,19 @@ const RW_TRANSIENT = /temporarily unavailable|high demand|overload|try again|tim
    Acum: cel mult 2 cereri Runware în același timp; ce rulează în fundal (fișe, poza întreagă automată, cadre pentru apel)
    așteaptă cât timp faci o poză tu; la „aglomerat” se așteaptă cât cere Runware (+ decalaj), de cel mult 4 ori. */
 const RW_MAX = 2; let rwActive = 0, rwFg = 0, rwBg = 0; const rwWait = [];
-/* 12.9 (3): lucrul din fundal (fișe, unghiuri, poza întreagă, cadrul de apel dinainte) așteaptă și 20 s după ultima poză a ta, tot apelul
-   și 15 min după un „aglomerat” de la Runware; ce se face pentru apelul în curs are `RW_CALL_SIG` și trece. Clipurile (rwVideo) nu sunt atinse. */
+/* 12.9 (3), refăcut în 13.1: cererile Runware se comportă ca în 12.8 (cele fără „signal” așteaptă doar cât rulează o poză de-a ta).
+   Pauza (20 s după ultima ta poză, tot apelul, 15 min după un „aglomerat”) se aplică doar lucrului pornit AUTOMAT, la intrare:
+   trusa/fișele din fundal (`kitEnsure`) și cadrul de apel dinainte (`callFramePre`). Ce se face pentru apelul în curs are `RW_CALL_SIG`. */
 const RW_CALL_SIG = new AbortController().signal, RW_BUSY_PAUSE = 15 * 60e3; let rwFgEnd = 0;
-function rwBgHold(){
-  if(rwFg > 0) return true;
-  if(window.__rwHoldOff) return false;   // testele vechi: ca înainte
-  if(Date.now() - rwFgEnd < 20e3) return true;
-  try{ if(call) return true; }catch(e){}
-  return !!(S.rwBusyAt && Date.now() - S.rwBusyAt < RW_BUSY_PAUSE);
+// cât mai trebuie să aștepte lucrul automat (ms; 0 = poate porni)
+function rwPauseLeft(){
+  if(window.__rwHoldOff) return 0;
+  let ms = rwFg > 0 ? 20e3 : Math.max(0, 20e3 - (Date.now() - rwFgEnd));
+  try{ if(call) ms = Math.max(ms, 60e3); }catch(e){}
+  if(S.rwBusyAt) ms = Math.max(ms, RW_BUSY_PAUSE - (Date.now() - S.rwBusyAt));
+  return Math.max(0, ms);
 }
+const rwBgHold = () => rwFg > 0;   // ca în 12.8
 const rwSlot = async fg => {
   while(rwActive >= (fg ? RW_MAX + (rwBg > 0 ? 1 : 0) : RW_MAX) || (!fg && rwBgHold())) await new Promise(r => { rwWait.push(r); setTimeout(r, 1500); });
   rwActive++; if(!fg) rwBg++;
@@ -12289,7 +12293,7 @@ async function callFrameMake(cc, ch, env, signal = null){
    pe imaginea de acum, iar cadrul rămâne pentru apelul următor (nu se mai schimbă imaginea în mijlocul apelului). */
 const CALL_FRAME_WAIT = 20000, CF_PRE = {};
 async function callFramePre(id){
-  const cc = charById(id); if(!cc || !cc.photo || !callFrameCan() || S.callClips === 'off' || CF_PRE.job) return;
+  const cc = charById(id); if(!cc || !cc.photo || !callFrameCan() || S.callClips === 'off' || CF_PRE.job || rwPauseLeft() > 0) return;   // 13.1: nu cât Runware e aglomerat / faci o poză
   try{ if(call) return; }catch(e){}
   let ch = null; try{ ch = await DB.get(chatKey(cc.id, cc.thread)); }catch(e){}
   if(!(ch && ch.lastCall && ch.lastCall.video) && !cc.callFrames) return;
