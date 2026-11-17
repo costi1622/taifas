@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '12.6';
+const APP_VER = '12.7';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -10440,7 +10440,7 @@ function startCall(opts = {}){
   if(!aiReady()){ toast('Pune întâi cheia în Setări.'); return; }
   if(busy){ toast('Așteaptă să termine răspunsul.'); return; }
   stopAllVoice();
-  const pics = ccPlacePics(cur, chat, callPics(cur, chat)), video = !!opts.video && pics.length > 0;
+  const pics = callPicsNow(cur, chat), video = !!opts.video && pics.length > 0;
   call = {c:cur, ch:chat, t0:0, muted:false, rec:null, alive:true, tick:null, video, see:S.callSee !== 'off', facing:'user', reacts:[], pics, pi:0, barge:S.callBarge !== 'off', incoming:!!opts.incoming};
   // 9.23: contextul audio pornește acum (din atingere), ca sunetul camerei ei și respirațiile să poată suna mai târziu
   try{ const pre = window.__acPre; window.__acPre = null; call.ac = pre && pre.state !== 'closed' ? pre : new (window.AudioContext || window.webkitAudioContext)(); if(call.ac.resume) call.ac.resume().catch(() => {}); }catch(e){ call.ac = null; }
@@ -10508,6 +10508,7 @@ function startCall(opts = {}){
   // 8.16: expresiile ei (generate o dată pentru imaginea de bază)
   c.expr0 = pics[0]; if(exprSetOf(c.c, c.expr0)) exprInject(c);
   if(pics.length) vfStart(c);   // 9.5: fața care vorbește
+  if(video) callFrameEnsure(c);   // 12.7: întâi cadrul de apel (dacă lipsește pentru locul ăsta)
   if(video) setTimeout(() => ccEnsure(c), 50);   // 12.5: clipurile încep să se facă încă de când sună
   // 9.81: gura și clipitul din cadre reale, pregătite o dată pentru imaginea de bază (în fundal; apelul merge între timp)
   if(pics.length && video && S.callSprites !== 'off' && S.imgProv !== 'none') setTimeout(() => { if(call !== c) return; const k0 = pics[0]; if(c.c.vfs && c.c.vfs[k0]) return;
@@ -11995,6 +11996,80 @@ function afterCall(ch, opts){
   if(dt >= 3 * 36e5 && dt < 48 * 36e5 && !lc.ask){ lc.ask = true; if(Math.random() < .5) return ` (dacă se potrivește firesc, poți întreba o dată cum a ieșit ceva din ce ți-a povestit în apelul de acum ${gapText(dt)}; fără insistență)`; }
   return '';
 }
+/* ═════════ 📹 12.7: imaginea din apel ═════════
+   (1) Cadrul de apel (`callFrameMake`): o singură imagine, prin același motor ca avatarele (fața din profil, fișa, verificarea
+       feței, cel mult 3 încercări): selfie de apel video, telefonul ținut în mână, față și umeri, cu locul, hainele și lumina de
+       acum (din chat). Se păstrează pe loc (`c.callFrames[loc]`, 3 zile) și se refolosește, cu clipurile lui. Când lipsește, apelul
+       pornește pe imaginea de trecere, cadrul se face în fundal și apelul trece pe el (ca un telefon mutat), apoi vin clipurile.
+   (2) Fără motorul de poze: varianta avatarului viu a momentului (dimineață, seară, noapte, la masă…). (3) Altfel, poza de profil.
+   Pozele din chat nu mai intră direct în apel (erau poze făcute de altcineva, cu tot corpul): doar locul și hainele lor. */
+const CC_PLACE = {casa:'at home in the living room', pat:'in bed at home, leaning on the pillows', bucatarie:'in the kitchen at home', strada:'outside on the street',
+  parc:'outdoors in a park', cafenea:'sitting in a cafe', masina:'sitting in a parked car', birou:'at the office desk', plaja:'at the beach'};
+const CALL_FRAME_DAYS = 3;
+const callHarness = () => !!(window.__said && !window.__callFrameTest);   // rularea automată a testelor vechi: ca înainte
+function callFrameOf(cc, env){ const f = cc && cc.callFrames && cc.callFrames[env]; return f && f.k && Date.now() - (f.at || 0) < CALL_FRAME_DAYS * 864e5 ? f.k : null; }
+function callPicsNow(cc, ch){
+  if(callHarness()) return ccPlacePics(cc, ch, callPics(cc, ch));
+  if(!cc.photo) return [];
+  let env = 'casa'; try{ env = ambEnv({c:cc, ch}); }catch(e){}
+  const fk = callFrameOf(cc, env); if(fk) return [fk];                          // (1) cadrul de apel al locului
+  const av = cc.avs && (cc.avs[avKeyNow(cc)] || cc.avs.zi); if(av) return [av]; // (2) avatarul viu al momentului
+  return [cc.photo];                                                            // (3) poza de profil
+}
+function callFrameCan(){ return S.imgProv !== 'none' && aiReady(); }
+async function callFrameMake(cc, ch, env){
+  const w = ch && ch.where && Date.now() - (ch.where.ts || 0) < 6 * 36e5 ? ch.where : {};
+  const out = w.outfit && !/(nud|naked|topless|lingerie|underwear|\bbra\b|panties|gol[ăa]|dezbr|lenjerie|chilo|sutien|bikini)/i.test(w.outfit) ? w.outfit : '';
+  const place = [w.place, w.room].filter(Boolean).join(', ').slice(0, 160) || CC_PLACE[env] || CC_PLACE.casa;
+  const shot = `front camera selfie during a video call, the phone held at arm's length, head and shoulders in frame, the face large, sharp and well lit, looking straight into the camera, ${place}${out ? ', wearing ' + out : ''}${w.light ? ', ' + w.light : ''}, natural real moment, ordinary phone front camera photo`;
+  let bl = null, bd = 9;
+  for(let t = 0; t < 3; t++){
+    const r = await scenePhoto(cc, shot, null, t ? 'keep exactly the face of the reference: same face shape, eyes, nose, lips, skin and age' : '', {why:'apel'});
+    addUsage(cc.id, imgPrice(), 'img', null, 'apel');
+    const d = (await localFace(r.blob, cc)).d;
+    if(d == null){ if(!bl) bl = r.blob; break; }
+    if(d < bd){ bl = r.blob; bd = d; }
+    if(d < .42) break;
+  }
+  if(!bl) throw new Error('cadrul n-a ieșit');
+  try{ const R = await finishPerson(cc, {blob:bl, fd:bd < 9 ? bd : null}, shot, null, {kind:'avatar', tag:'apel'}); bl = R.blob; }catch(e){}
+  try{ if(bl.type === 'image/png') bl = await toJpeg(bl, 1024, .9); }catch(e){}
+  const k = await saveImg(bl);
+  const old = cc.callFrames && cc.callFrames[env];
+  cc.callFrames = {...(cc.callFrames || {}), [env]:{k, at:Date.now(), d:bd < 9 ? Math.round(bd * 100) / 100 : null}};
+  if(old && old.k && old.k !== k){ const set = cc.callClips && cc.callClips[old.k]; if(set){ for(const r of Object.values(set.v || {})) if(r && r.k && !r.reuse) delImg(r.k).catch(() => {}); delete cc.callClips[old.k]; } delImg(old.k).catch(() => {}); }
+  await saveChars();
+  return k;
+}
+async function callFrameEnsure(c){
+  if(callHarness() && !window.__callFrameTest) return;
+  const cc = c.c; let env = 'casa'; try{ env = ambEnv(c); }catch(e){}
+  if(!c.video || !cc.photo || callFrameOf(cc, env) || !callFrameCan() || c.frameBusy) return;
+  c.framePending = true; c.frameBusy = true;
+  setTimeout(() => { if(call === c && c.framePending) ccChip(c, '📹 Pregătesc imaginea de apel pentru locul ăsta…'); }, 2500);
+  let k = null; try{ k = await callFrameMake(cc, c.ch, env); }catch(e){ k = null; }
+  c.frameBusy = false; c.framePending = false;
+  if(call !== c){ return; }
+  if(!k){ ccChip(c, ''); c.ccOn = false; ccEnsure(c); return; }   // n-a mers: rămâne imaginea de acum
+  ccChip(c, '', 0); callFrameSwitch(c, k);
+}
+function callFrameSwitch(c, k){   // trece pe cadrul nou ca un telefon mutat și potrivit din nou
+  const cvd = $('.callv .cvid'); if(!cvd) return;
+  if(c.cl){ for(const v of Object.values(c.cl.els)) if(v && v !== 1 && v.remove) v.remove(); c.cl = null; }
+  clearInterval(c.ccT); c.ccT = null; c.ccOn = false;
+  const im = document.createElement('img'); im.dataset.k = k; im.dataset.ik = k; im.alt = '';
+  cvd.insertBefore(im, cvd.querySelector('.cgrain')); hydrate(cvd);
+  const go = () => {
+    if(call !== c) return;
+    if(fxOn()){ cvd.classList.add('intro'); setTimeout(() => cvd.classList.remove('intro'), 1700); }
+    if(c.amb) ambEvent(c, 'rustle');
+    cvd.querySelectorAll('img').forEach(i => i.classList.toggle('on', i === im));
+    c.pics = [k, ...c.pics.filter(x => x !== k)]; c.pi = 0;
+    if(c.vf) vfSwitch(c, im);
+    ccEnsure(c);
+  };
+  if(im.complete && im.naturalWidth) go(); else { im.addEventListener('load', go, {once:true}); setTimeout(() => { if(!im.classList.contains('on')) go(); }, 4000); }
+}
 const ccSet = c => c && c.c && c.c.callClips && c.pics && c.pics[0] ? c.c.callClips[c.pics[0]] : null;
 function ccPrune(cc){   // păstrează seturile ultimelor 3 imagini
   const all = Object.entries(cc.callClips || {}).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
@@ -12013,7 +12088,7 @@ function ccWhyNot(cc){
   return '';
 }
 async function ccEnsure(c){
-  if(call !== c || !c.video || S.callClips === 'off' || c.ccOn) return;
+  if(call !== c || !c.video || S.callClips === 'off' || c.ccOn || c.framePending) return;
   c.ccOn = 1;
   const cc = c.c, k0 = c.pics && c.pics[0]; if(!k0) return;
   cc.callClips = cc.callClips || {};
