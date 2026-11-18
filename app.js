@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '13.3';
+const APP_VER = '13.4';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -376,7 +376,22 @@ function anthUrl(u){ try{ const x = new URL(u); if(x.host !== 'api.anthropic.com
 // ajungea ca „\ud83d” singur, iar Anthropic refuza toată cererea („400: … unexpected end of hex escape”). Orice jumătate rămasă devine „�”.
 const wellFormed = t => typeof t.toWellFormed === 'function' ? t.toWellFormed() : t.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD');
 const safeJSON = o => JSON.stringify(o, (k, v) => typeof v === 'string' ? wellFormed(v) : v);
+/* 13.4: o cerere fără text afișat pe loc (pașaportul, trăsăturile, verificările), căzută pentru că telefonul a pus aplicația pe pauză,
+   se reia singură când revii (de cel mult 2 ori) */
+let bgEpoch = 0; document.addEventListener('visibilitychange', () => { if(document.hidden) bgEpoch++; });
+const untilVisible = () => !document.hidden ? Promise.resolve() : new Promise(r => { const f = () => { if(!document.hidden){ document.removeEventListener('visibilitychange', f); r(); } }; document.addEventListener('visibilitychange', f); });
 async function stream(sys, msgs, opts = {}){
+  const ep = bgEpoch;
+  for(let k = 0; ; k++){
+    try{ return await stream0(sys, msgs, opts); }
+    catch(e){
+      const net = e && e.name !== 'AbortError' && /Failed to fetch|NetworkError|network|Load failed|terminated|ERR_/i.test(String(e.message || e));
+      if(k < 2 && net && !opts.onText && !(opts.signal && opts.signal.aborted) && (bgEpoch !== ep || document.hidden)){ await untilVisible(); await sleep(800); continue; }
+      throw e;
+    }
+  }
+}
+async function stream0(sys, msgs, opts = {}){
   try{ return await streamOnce(sys, msgs, opts); }
   catch(e){
     // dacă modelul mic nu e disponibil pe cont, revenim o dată la modelul principal
@@ -2655,7 +2670,22 @@ function kitState(c){
 }
 const kitBusy = new Set();
 // construiește ce lipsește; gen = și ce costă (poza întreagă, fișele), nu doar măsurătorile gratuite din telefon
-async function kitBuild(c, o = {}){
+/* 13.4: treburile lungi: la revenire „▶️ Continui …”, la final „✅ Gata cât ai lipsit: …” */
+const JOBS = new Map(), JOBS_DONE = []; let jobSeq = 0, hidAt = 0;
+async function jobRun(label, fn){
+  const id = ++jobSeq, j = {label, hid:false, away:false}; JOBS.set(id, j);
+  try{ return await fn(); }
+  finally{ JOBS.delete(id); if(j.hid && document.hidden) JOBS_DONE.push(label); else if(j.away) toast(`✅ Gata cât ai lipsit: ${label}.`, 4500); }
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden){ hidAt = Date.now(); for(const j of JOBS.values()) j.hid = true; return; }
+  const away = hidAt ? Date.now() - hidAt : 0; hidAt = 0;
+  const run = []; for(const j of JOBS.values()) if(j.hid){ j.hid = false; if(away >= 15e3){ j.away = true; run.push(j.label); } }
+  const done = JOBS_DONE.splice(0);
+  if(done.length || run.length) toast([done.length ? '✅ Gata cât ai lipsit: ' + done.join(', ') : '', run.length ? '▶️ Continui: ' + run.join(', ') + (rwDirect() ? ' (Runware a lucrat mai departe)' : '') : ''].filter(Boolean).join(' · '), 5500);
+});
+async function kitBuild(c, o = {}){ return o.gen && c && c.photo && !kitBusy.has(c.id) ? jobRun(`pachetul de identitate al lui ${c.name}`, () => kitBuild0(c, o)) : kitBuild0(c, o); }
+async function kitBuild0(c, o = {}){
   if(!c || !c.photo || kitBusy.has(c.id) || S.imgProv === 'none') return false;
   if(typeof call !== 'undefined' && call && !o.force){ setTimeout(() => kitEnsure(c, o), 60e3); return false; }   // nu în timpul unui apel: telefonul are nevoie de el
   kitBusy.add(c.id); const k0 = kitKey(c), step = o.onStep || (() => {}); if(o.gen) keepAwake(true);   // 11.1 (V4)
@@ -4239,6 +4269,37 @@ async function rwRun(...a){
   } finally { if(fg){ rwFg = Math.max(0, rwFg - 1); rwFgEnd = Date.now(); } }
 }
 const rwStats = {busy:0}; let rwLastMdl = '', rwCallN = 0; const rwCalls = [];
+/* 13.4: rezultatul unei cereri „async”: întreabă Runware (getResponse) până e gata. Timpul în care telefonul a ținut aplicația
+   pe pauză nu se numără (cel mult 5 s pe pas); o întrerupere a rețelei doar amână întrebarea, nu retrimite (și nu replătește) poza. */
+const RW_POLL_MAX = 240e3;
+async function rwPoll(task, signal){
+  const want = task.numberResults || 1, hdr = {'content-type':'application/json', authorization:'Bearer ' + String(S.rwKey).trim()};
+  let wait = Math.max(800, Math.min(4000, ((S.rwLast && S.rwLast.ms) || 3000) * .55)), active = 0, last = performance.now(), net = 0;
+  const stop = () => { if(signal && signal.aborted) throw new DOMException('Oprit', 'AbortError'); };
+  for(;;){
+    await naps(wait, signal); stop(); wait = document.hidden ? 1500 : 700;
+    const now = performance.now(); active += Math.min(now - last, 5000); last = now;
+    if(active > RW_POLL_MAX) throw new Error('Runware nu răspunde (timp depășit).');
+    let d = null;
+    try{
+      const tac = new AbortController(), tt = setTimeout(() => tac.abort(), 20000), on = () => tac.abort();
+      if(signal) signal.addEventListener('abort', on, {once:true});
+      try{ const r = await fetch(RW_URL, {method:'POST', signal:tac.signal, headers:hdr, body:JSON.stringify([{taskType:'getResponse', taskUUID:task.taskUUID}])}); d = await r.json().catch(() => null); }
+      finally{ clearTimeout(tt); if(signal) signal.removeEventListener('abort', on); }
+    }catch(e){ stop(); if(++net > 60) throw new Error('Runware nu răspunde (rețea).'); wait = 2000; continue; }
+    net = 0;
+    const errs = d && (d.errors || (d.error ? [d.error] : null));
+    if(errs && errs.length){ const e0 = errs[0], m = typeof e0 === 'string' ? e0 : (e0 && (e0.message || e0.code)) || 'eroare'; const er = new Error('Runware: ' + String(m).slice(0, 200) + '.'); er.code = e0 && e0.code || ''; throw er; }
+    const L = (d && Array.isArray(d.data) ? d.data : []).filter(x => x && (!x.taskUUID || x.taskUUID === task.taskUUID));
+    const bad = L.find(x => x.status === 'error'); if(bad) throw new Error('Runware: ' + String(bad.message || bad.error || 'poza n-a ieșit').slice(0, 200) + '.');
+    const ok = L.filter(x => x.imageBase64Data || x.imageDataURI || x.imageURL);
+    if(!ok.length && L.length && L.every(x => x.status && x.status !== 'processing')) throw new Error('Runware n-a întors imagine.');
+    if(ok.length >= want || (ok.length && !L.some(x => x.status === 'processing'))){
+      for(const x of ok) if(!x.imageBase64Data && !x.imageDataURI) x.__blob = await (await fetch(x.imageURL)).blob();
+      return ok;
+    }
+  }
+}
 async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
   const f3 = mdl === RW_F3;
   const task = f3 ? {taskType:'imageInference', taskUUID:crypto.randomUUID(), model:RW_F3, positivePrompt:String(prompt).slice(0, 30000),
@@ -4246,6 +4307,7 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
     : {taskType:'imageInference', taskUUID:crypto.randomUUID(), model:mdl, positivePrompt:String(prompt).slice(0, 10000),
     width:w, height:h, numberResults:Math.max(1, Math.min(4, n || 1)), outputType:'base64Data', outputFormat:'JPG', outputQuality:94, includeCost:true, acceleration:'none',
     seed:Math.floor(Math.random() * 4294967295)};   // 9.86: JPG (de ~5 ori mai puțin de descărcat); n rezultate într-o singură cerere
+  if(rwDirect() && !window.__rwSync) task.deliveryMethod = 'async';   // 13.4: Runware o face mai departe și când telefonul pune aplicația pe pauză
   if(refs.length) task.inputs = {referenceImages: await Promise.all(refs.slice(0, f3 ? 10 : 4).map(async b => 'data:image/jpeg;base64,' + await b64C(b)))};
   const direct = rwDirect(), url = direct ? RW_URL : wkUrl() + '/proxy/runware/v1';
   const t0 = performance.now();
@@ -4270,7 +4332,9 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
     if(mdl === RW_KV && [400, 404, 422].includes(r.status) && /\bmodel\b|\bAIR\b|air ?id|unsupported model|not (found|available)/i.test(String(m))){ S.kvBad = Date.now(); S.kvBadWhy = String(m).slice(0, 90); saveSettings(); return await rwRun1(prompt, refs, w, h, signal, RW_KL, n); }   // 11.6 (K1): KV refuzat → klein 9B
     er.code = e0 && typeof e0 === 'object' ? e0.code || '' : ''; er.status = r.status; throw er;
   }
-  const its = d.data.filter(x => x && (x.imageBase64Data || x.imageDataURI)), it = its[0];
+  let its = d.data.filter(x => x && (x.imageBase64Data || x.imageDataURI));
+  if(!its.length && task.deliveryMethod === 'async') its = await rwPoll(task, signal);   // 13.4: confirmarea a venit; poza se ia când e gata
+  const it = its[0];
   if(!it) throw new Error('Runware n-a întors imagine.');
   const cost = its.reduce((a, x) => a + (+x.cost || 0), 0) / its.length;   // pe imagine
   if(cost >= 0 && cost < 1){
@@ -4281,7 +4345,7 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
   }
   rwFails = 0; rwLastMdl = mdl;   // 13.3: fiecare cerere, cu timpul ei
   rwCalls.push({i:++rwCallN, ms:Math.round(performance.now() - t0), mdl, w, h, n:its.length, refs:refs.length}); if(rwCalls.length > 60) rwCalls.shift();
-  const blobs = its.map(x => b64ToBlob(x.imageBase64Data || String(x.imageDataURI).split(',')[1], 'image/jpeg'));
+  const blobs = its.map(x => x.__blob || b64ToBlob(x.imageBase64Data || String(x.imageDataURI).split(',')[1], 'image/jpeg'));
   return n > 1 ? blobs : blobs[0];
 }
 /* 13.3: ce rămâne din total după pașii numiți (salvare, pregătirea reperelor, raportul pozei) */
@@ -7097,7 +7161,8 @@ function drawAv(c){
   const cg = $('#avClipGo'); if(cg) cg.onclick = () => avClipsGen(c, nClip >= nCan);
   const cq = $('#avClipQ'); if(cq) cq.onchange = () => { S.avClipQ = cq.value; saveSettings(); drawAv(c); };
 }
-async function genAvatars(c, all = true){
+async function genAvatars(c, all = true){ return jobRun(`avatarele vii ale lui ${c.name}`, () => genAvatars0(c, all)); }   // 13.4
+async function genAvatars0(c, all = true){
   if(busy){ toast('Așteaptă să termine răspunsul.'); return; }
   const todo = AV_V.filter(v => all || !(c.avs && c.avs[v[0]])), tot = todo.length;   // 12.3: doar cele noi, dacă le ai pe celelalte
   const b = $('#avGen'); if(b){ b.disabled = true; b.innerHTML = `<span class="spin"></span> 0/${tot}`; }
@@ -7455,7 +7520,8 @@ function drawStk(c){
   box.onclick = e => { const v = e.target.closest('[data-view]'); if(v) viewImg(v.dataset.view, c.stickers.map(x => x.k)); };
   const g = $('#stkGen'); if(g) g.onclick = () => genStickers(c);
 }
-async function genStickers(c){
+async function genStickers(c){ return jobRun(`stickerele lui ${c.name}`, () => genStickers0(c)); }   // 13.4
+async function genStickers0(c){
   if(busy){ toast('Așteaptă să termine răspunsul.'); return; }
   const b = $('#stkGen'); if(b){ b.disabled = true; b.innerHTML = '<span class="spin"></span> 0/8'; }
   const ref = await DB.get(c.photo); if(!ref){ toast('Nu găsesc poza de profil.'); return; }
@@ -9946,7 +10012,8 @@ function profScroll(){
 }
 
 // target = mesajul-poză de refăcut; mode: 'same' (aceeași scenă, altă variantă) sau 'new' (altă scenă)
-async function askPhoto(spont, target, mode, opt = {}){
+async function askPhoto(spont, target, mode, opt = {}){ return jobRun(`poza de la ${(cur && cur.name) || 'ea'}`, () => askPhoto0(spont, target, mode, opt)); }   // 13.4
+async function askPhoto0(spont, target, mode, opt = {}){
   if(busy){ if(!spont) toast('Așteaptă să termine ' + (live ? live.c.name : '') + '.'); return; }
   if(spont && !rwFor(S.wkChat || S.wkModel) && capLeft() < (neurPerPhoto(S.imgProv === 'worker' ? (S.wkChat || S.wkModel) : undefined) || 5000)) return;   // limita zilnică atinsă: fără poze spontane
   if(S.imgProv === 'none'){ toast('Pornește pozele din Setări.'); return; }
