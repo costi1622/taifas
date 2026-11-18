@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '13.5';
+const APP_VER = '13.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1673,7 +1673,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     try{ const as = await angleRefsFor(c, shot, room, clothedBody ? 1 : 2); if(as[0]){ angRef = as[0].img; angName = as[0].name; angTxt = as[0].txt; angLbl = as[0].lbl; } if(as[1]) ang2 = as[1]; }catch(e){} }
   let ratioTxt = ''; if(clothedBody){ try{ ratioTxt = bodyRatioText(await refBodySig(c)); }catch(e){} }   // 9.89 (a)
   const faceInstruction = clothedBody
-    ? `Image 1 is a close-up of ${c.name}'s face: keep exactly this face and identity (${HEAD_KEEP}). Image 2 shows ${c.name}'s whole body: reproduce exactly the same body, with the same build, weight, height impression and proportions of shoulders, chest, waist, hips, arms and legs; do NOT copy its clothing, pose, framing, background or light, which come only from this text.${clothedBody.full2 ? ` Image ${angRef ? 4 : 3} is the same person's whole body standing, front view: the same body, for its exact proportions.` : ''}${ratioTxt ? ' ' + ratioTxt : ''}${angRef ? ` Image 3 is ${angTxt}` : ''}`
+    ? `Image 1 is a close-up of ${c.name}'s face: keep exactly this face and identity (${HEAD_KEEP}). Image 2 shows ${c.name}'s whole body (its head is blurred on purpose: take ONLY the body from it, never the face or the hair): reproduce exactly the same body, with the same build, weight, height impression and proportions of shoulders, chest, waist, hips, arms and legs; do NOT copy its clothing, pose, framing, background or light, which come only from this text.${clothedBody.full2 ? ` Image ${angRef ? 4 : 3} is the same person's whole body standing, front view (head blurred on purpose): the same body, for its exact proportions.` : ''}${ratioTxt ? ' ' + ratioTxt : ''}${angRef ? ` Image 3 is ${angTxt}` : ''}`
     : angRef
     ? `Image 1 is a close-up of this person's face only: keep exactly this face and identity (${HEAD_KEEP}). Image 2 is ${angTxt}${ang2 ? ' Image 3 is ' + ang2.txt : ''} Everything else comes from this text, not from the references.`
     : bodyRef
@@ -1689,7 +1689,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const prompt = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
   if(useF3()){   // 9.43/9.53: FLUX 3 folosește fața + reperul de corp și prioritizează proporțiile bustului la cereri topless/nud
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
-    const body = bodyRef || (fb ? await fullBodyRef(fb, c.fullBox) : null);
+    const body = bodyRef || (fb ? await headHide(await fullBodyRef(fb, c.fullBox), 'hx:' + c.photoFull) : null);   // 13.6: capul estompat
     const face2 = await headRefOf(c, full, id);   // 10.3
     const p3 = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair and glasses exactly as shown (the same color, length, curls, volume, parting and frames).${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
@@ -2169,6 +2169,17 @@ function drawCons(c, box){
     if('IntersectionObserver' in window){ const io = new IntersectionObserver(es => { if(es.some(x => x.isIntersecting)){ io.disconnect(); go(); } }); io.observe(el); } else go(); }
 }
 // (R3) unghiurile din fișă ieșite din grup: scoase și refăcute (o dată pe set de repere)
+/* 13.6 (3): unghiurile ⚠️ (sub prag) nu intră în poze, dar rămâneau așa; acum se refac singure, cel mult 4 o dată, fiecare cel mult
+   o dată pe săptămână (dacă iese tot slab, rămâne ⚠️ și se reîncearcă peste o săptămână) */
+async function weakFix(c){
+  const now = Date.now(), tr = c.weakTry && c.weakTry.k === c.photo ? c.weakTry.a || {} : {};
+  const v = sheetOf(c), bad = [...new Set(v.filter(x => x.weak && !(tr[x.ang] && now - tr[x.ang] < 7 * 864e5)).map(x => x.ang))].slice(0, 4); if(!bad.length) return 0;
+  for(const a of bad) tr[a] = now; c.weakTry = {k:c.photo, a:tr};
+  const rm = v.filter(x => bad.includes(x.ang)); c.sheet.v = v.filter(x => !rm.includes(x)); await saveChars();
+  for(const x of rm) sheetDel(x);
+  await sheetGen(c, false, null, {only:bad}).catch(() => false);
+  return bad.length;
+}
 async function consFix(c){
   const rs = await refSet(c).catch(() => null); if(!rs) return 0;
   const now = Date.now(), tr = c.consTry && c.consTry.k === c.photo ? c.consTry.a || {} : {};
@@ -2274,12 +2285,35 @@ function bodyPoseOf(shot){
   if(/\b(three-quarter|mirror)\b/.test(t)) return '34';
   return 'full';
 }
+/* 13.6 (1): în reperele de corp capul e estompat (MoveNet găsește nasul, ochii, urechile), ca generatorul să nu ia fața de acolo:
+   poza întreagă poate avea altă față decât portretul (la Sharon: 70%), iar amestecul se vedea în pozele de corp. */
+const HH_CACHE = new Map();
+async function headHide(blob, key){
+  if(!blob) return blob; if(key && HH_CACHE.has(key)) return HH_CACHE.get(key);
+  let out = blob; const u = URL.createObjectURL(blob);
+  try{
+    const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight, kp = await crPose(im);
+    const ok = i => kp && kp[i] && kp[i][2] >= .25, hs = [0, 1, 2, 3, 4].filter(ok);
+    if(hs.length >= 2){
+      const cx = hs.reduce((a, i) => a + kp[i][0], 0) / hs.length, cy = hs.reduce((a, i) => a + kp[i][1], 0) / hs.length;
+      let r = 0; for(const i of hs) for(const j of hs) r = Math.max(r, Math.hypot(kp[i][0] - kp[j][0], kp[i][1] - kp[j][1]));
+      const sh = ok(5) && ok(6) ? Math.hypot(kp[5][0] - kp[6][0], kp[5][1] - kp[6][1]) : 0;
+      r = Math.max(r, sh * .4, Math.min(W, H) * .035);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d'); g.drawImage(im, 0, 0);
+      g.save(); g.beginPath(); g.ellipse(cx, cy - r * .3, r * 1.2, r * 1.6, 0, 0, Math.PI * 2); g.clip();
+      g.filter = `blur(${Math.max(8, Math.round(r * .55))}px)`; g.drawImage(im, 0, 0); g.drawImage(cv, 0, 0); g.restore(); g.filter = 'none';
+      out = await new Promise(res => cv.toBlob(res, 'image/jpeg', .92)) || blob;
+    }
+  }catch(e){ out = blob; } finally { URL.revokeObjectURL(u); }
+  if(key){ HH_CACHE.set(key, out); if(HH_CACHE.size > 40) HH_CACHE.delete(HH_CACHE.keys().next().value); }
+  return out;
+}
 async function bodyRefFor(c, shot){
   if(!c.photoFull || looksYoung(c)) return null;   // 9.94 (D)
   const want = bodyPoseOf(shot), pick = want === 'full' ? null : bsheetOf(c).find(x => x.pose === want && !x.weak);
   const k = pick ? pick.k : c.photoFull, b = await DB.get(k).catch(() => null); if(!b) return null;
   let full2 = null; if(pick){ const fb = await DB.get(c.photoFull).catch(() => null); if(fb) full2 = (await personCrop(fb, c.photoFull)) || await wholeRef(fb); }   // 9.89 (b): și poza întreagă, pentru proporții
-  return {blob:(await personCrop(b, k)) || await wholeRef(b), pose:pick ? pick.pose : 'full', full2};   // 9.86: decupat pe siluetă
+  return {blob:await headHide((await personCrop(b, k)) || await wholeRef(b), 'hb:' + k), pose:pick ? pick.pose : 'full', full2:full2 ? await headHide(full2, 'hf:' + c.photoFull) : null};   // 9.86: decupat pe siluetă; 13.6: capul estompat
 }
 const BODY_SHEET_OK = .12, BODY_SHEET_LOOSE = .16;   // 10.9: rezerva, doar când poziția ar lipsi
 // distanța siluetelor (9.85): se compară doar ce e comparabil; null = nu se poate spune
@@ -2638,6 +2672,7 @@ async function pfBodySheet(c){
        reparare / refacere (în motor); ce rămâne sub prag primește „⚠️ seamănă X%”. */
 const KIT_V = 2;   // 9.99: unghiurile noi + pașaportul verificat pe toate pozele
 const kitKey = c => [c.photo || '', c.photoFull || ''].join('|');
+const bodyTextOk = c => !!(c && c.bodyFull && c.photoFull && c.bodyFull.k === c.photoFull && c.bodyFull.t);   // 13.6 (2)
 function kitState(c){
   if(!c || !c.photo) return {ok:false, items:[], miss:['portretul']};
   const photo = (c.stil || 'photo') === 'photo', fb = c.faceBox && c.faceBox.k === c.photo, items = [], miss = [];
@@ -2646,6 +2681,7 @@ function kitState(c){
   add('pasaport', '🪪 Trăsăturile citite (față, păr, corp, semne)', !!(fb && c.faceBox.phys !== undefined), fb ? 'citite' : 'se citesc la prima poză');
   add('amprenta', '🧬 Amprenta feței', !!(c.faceEmb && c.faceEmb.d && c.faceEmb.d.length), c.faceEmb && c.faceEmb.d && c.faceEmb.d.length ? c.faceEmb.d.length + ' fețe de referință' + (c.refSet && c.refSet.e ? ' + ' + c.refSet.e.filter(x => (x.kind === 'unghi' || x.kind === 'aproape') && x.d && !x.out).length + ' pe unghiuri' : '') : 'se măsoară în telefon');
   if(photo){
+    if(c.photoFull && !looksYoung(c)) add('corptext', '📝 Corpul descris din poza întreagă', bodyTextOk(c), bodyTextOk(c) ? 'descris (intră în fiecare poză)' : 'se citește');   // 13.6 (2)
     add('intreaga', '🧍 Poza întreagă (modelul de corp)', !!c.photoFull, c.photoFull ? (c.fullOwn ? 'poza ta (exactă)' : 'generată din portret') : 'lipsește: corpul ar fi aproximativ');
     const sv = sheetOf(c).length, bv = bsheetOf(c).length, kf = c.photoFull || '';
     const sTried = !sv && c.sheetTry && c.sheetTry.k === c.photo, bTried = !bv && c.bsheetTry && c.bsheetTry.k === kf;
@@ -2693,6 +2729,7 @@ async function kitBuild0(c, o = {}){
   kitBusy.add(c.id); const k0 = kitKey(c), step = o.onStep || (() => {}); if(o.gen) keepAwake(true);   // 11.1 (V4)
   try{
     if(aiReady()){ step('pasaport'); try{ await identityOf(c); }catch(e){} }
+    if(aiReady() && c.photoFull && !bodyTextOk(c) && !looksYoung(c)){ step('corptext'); try{ const k = c.photoFull, b = await DB.get(k).catch(() => null), t = b ? await crBodyRead(b, c.id) : ''; if(t && c.photoFull === k){ c.bodyFull = {k, t}; await saveChars(); } }catch(e){} }   // 13.6 (2)
     step('amprenta'); try{ await refDescs(c); }catch(e){}
     try{ await ageLook(c); }catch(e){}   // 9.94 (D)
     step('verificare'); try{ await refMigrate(c); }catch(e){}   // 11.0 (C4)
@@ -2709,6 +2746,7 @@ async function kitBuild0(c, o = {}){
         step('fisaCorp'); const s2 = await bsheetGen(c, !!o.force && !bsheetOf(c).length, () => step('fisaCorp')).catch(() => false); if(s2 && o.toast) toast(`🧍 ${c.name}: fișa corpului e gata.`, 2500);
         for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
         step('consens'); try{ const n3 = await consFix(c); if(n3 && o.toast) toast(`🤝 ${c.name}: ${n3} ${n3 === 1 ? 'unghi refăcut' : 'unghiuri refăcute'} (ieșiseră din grup).`, 3000); }catch(e){}   // 10.5 (R3)
+        step('slabe'); try{ const n4 = await weakFix(c); if(n4 && o.toast) toast(`🧩 ${c.name}: ${n4} ${n4 === 1 ? 'unghi slab refăcut' : 'unghiuri slabe refăcute'}.`, 3000); }catch(e){}   // 13.6 (3)
         if(aiReady()){ step('pasaport2'); try{ await passportMulti(c); }catch(e){} }   // 9.99 (4)
       }
       if(!o.gen){ step('detalii'); try{ await detailGen(c); }catch(e){} }   // 11.0 (A2): fără cost
@@ -2758,6 +2796,12 @@ async function finishPerson(c, r, shot, signal, opt = {}){
   if(photo && !opt.noChar && !opt.together && S.imgProv === 'worker'){ const sk = await skinLock(c, r.blob).catch(() => null); if(sk){ r.blob = sk; r.skin = true; if(r.gen) r.gen.skin = true; } }   // 9.94 (C): tenul din portret
   if(photo && S.imgProv === 'worker' && lookOn(c, opt)){ const tL = performance.now();   // 10.0: culorile, proporțiile feței, vârsta aparentă și părul, pe poza finală
     try{ r.lk = await lookOf(c, r.blob, shot, opt); }catch(e){} if(tm && tm.s) tm.s.masurare = (tm.s.masurare || 0) + performance.now() - tL;
+    // 13.6 (5): vârsta aparentă la ±8 ani de portret → un retuș pe vârsta din portret; păstrat doar dacă e mai aproape și fața nu pierde
+    if(r.lk && r.lk.age != null && Math.abs(r.lk.age) >= 8 && !r.ageTried && rwReady() && fixBudget()){ r.ageTried = true;
+      try{ const y = await facePass(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus', null, 'face', 'The face must have exactly the same apparent age as the person in image 2: the same skin smoothness, the same fine lines and no more, the same firmness of the cheeks, jaw and neck.');
+        if(y){ const lk2 = await lookOf(c, y, shot, opt), fd2 = (await localFace(y, c)).d;
+          if(lk2 && lk2.age != null && Math.abs(lk2.age) <= Math.abs(r.lk.age) - 3 && (fd2 == null || r.fd == null || fd2 <= r.fd + .02)){ r.blob = y; r.lk = lk2; if(fd2 != null) r.fd = fd2; r.ageFix = true; addUsage(c.id, imgPrice(), 'img', null, 'retus'); } } }
+      catch(e){ if(e.name === 'AbortError') throw e; } }
     const lb = lookBadOf(r.lk); r.lookWarn = lb ? lb.map(k => LOOK_RO[k]) : null; }
   if(photo && S.photoFinish !== 'off' && !opt.noFinish){ const tF = performance.now(); const f2 = await photoFinish(r.blob); if(f2 && f2 !== r.blob){ r.blob = f2; r.fin = true; } if(tm && tm.s) tm.s.finisare = (tm.s.finisare || 0) + performance.now() - tF; }
   if(photo && !opt.noChar && S.imgProv === 'worker' && opt.kind !== 'edit'){   // 10.1 (S8): poziția, și când n-au fost schițe
@@ -3583,7 +3627,7 @@ async function yawRefs(c, face, n = 2){
   }
   return out;
 }
-async function facePass(c, blob, signal, model = 'eco', shot = '', why = 'retus', src = null, area = 'face'){   // 9.83 (5): area = 'hair' → doar părul   // 9.35: `src` = altă poză de bază (editor: varianta aleasă)
+async function facePass(c, blob, signal, model = 'eco', shot = '', why = 'retus', src = null, area = 'face', extra0 = ''){   // 13.6: extra0 = o cerință în plus (vârsta)   // 9.83 (5): area = 'hair' → doar părul   // 9.35: `src` = altă poză de bază (editor: varianta aleasă)
   const u = URL.createObjectURL(blob); let im;
   try{ im = await loadImgEl(u); } finally { URL.revokeObjectURL(u); }
   const faces = await faceDescs(blob); if(!faces.length) return null;          // fața nu se vede (de spate, prea mică): poza rămâne așa
@@ -3609,7 +3653,7 @@ async function facePass(c, blob, signal, model = 'eco', shot = '', why = 'retus'
   const xTxt = xk.length && xk.some(k => k !== 'hair') ? ' (' + xk.map((k, i) => `image ${i + 3} ${k === 'ang' ? 'shows the same face from another angle' : k === 'eyes' ? 'is a close-up of the same eyes and eyebrows' : 'is a close-up of the same mouth and lips'}`).join('; ') + ')' : '';
   const faceMarks = id && id.marks ? id.marks.filter(m => /face|cheek|lip|nose|eye|brow|forehead|chin|jaw|temple|ear|mole|freckle|dimple/i.test(m)) : [];
   const hairT = String(id && id.phys || '').match(/(?:^|; )hair: ([^;]+)/);
-  const prompt = hair ? `Edit image 1. Change ONLY the hair of the person in image 1 so that it matches the hair of the person in image 2 exactly${hairT ? ': ' + hairT[1].trim() : ': the same color, length, texture, volume, parting and hairline'}.${xk.includes('hair') ? ' Image 3 is a close-up of the same hair: match its texture, curl pattern and color exactly.' : ''} Keep the face, facial features, expression, head position and angle, skin, clothing, background, light and photo grain of image 1 exactly as they are. One seamless, photorealistic, unretouched phone photo.` : `Edit image 1. Replace ONLY the face of the person in image 1 with the exact face of the person in image 2${xTxt}: the same individual, with identical facial geometry, eye shape and spacing, eye color, eyebrows, nose, lips, jaw and chin, skin tone and skin texture${faceMarks.length ? ', and these marks in exactly the same place: ' + faceMarks.join('; ') : ''}${id && id.glasses ? ', wearing ' + id.glasses : ''}. Keep everything else from image 1 exactly as it is: head position and angle, gaze direction, facial expression, the light direction and color on the face, hair, background, framing${small ? '' : ', sharpness'} and photo grain.${small ? ' Image 1 is an enlarged low-resolution crop: render the face crisp and detailed, with natural photo sharpness, taking the fine facial details from image 2.' : ''} One seamless, photorealistic, unretouched phone photo.`;
+  const prompt = hair ? `Edit image 1. Change ONLY the hair of the person in image 1 so that it matches the hair of the person in image 2 exactly${hairT ? ': ' + hairT[1].trim() : ': the same color, length, texture, volume, parting and hairline'}.${xk.includes('hair') ? ' Image 3 is a close-up of the same hair: match its texture, curl pattern and color exactly.' : ''} Keep the face, facial features, expression, head position and angle, skin, clothing, background, light and photo grain of image 1 exactly as they are. One seamless, photorealistic, unretouched phone photo.` : `Edit image 1. Replace ONLY the face of the person in image 1 with the exact face of the person in image 2${xTxt}: the same individual, with identical facial geometry, eye shape and spacing, eye color, eyebrows, nose, lips, jaw and chin, skin tone and skin texture${faceMarks.length ? ', and these marks in exactly the same place: ' + faceMarks.join('; ') : ''}${id && id.glasses ? ', wearing ' + id.glasses : ''}. ${extra0 ? extra0 + ' ' : ''}Keep everything else from image 1 exactly as it is: head position and angle, gaze direction, facial expression, the light direction and color on the face, hair, background, framing${small ? '' : ', sharpness'} and photo grain.${small ? ' Image 1 is an enlarged low-resolution crop: render the face crisp and detailed, with natural photo sharpness, taking the fine facial details from image 2.' : ''} One seamless, photorealistic, unretouched phone photo.`;
   const ed = await genImage(prompt, crop, signal, pface, {model, force:{two:true}, size:K + 'x' + K, extra, quiet:true, why});
   const ue = URL.createObjectURL(ed); let ei;
   try{ ei = await loadImgEl(ue); } finally { URL.revokeObjectURL(ue); }
@@ -3699,20 +3743,39 @@ async function fixFace(v, src, signal, onStep){
   v.chk = await crCheck(v); v.sameD = bd;
   return true;
 }
+/* 13.6 (4): persoana decupată după punctele sigure, mărită (cel puțin 512 px) și rotită cu trunchiul vertical (umeri sus, șolduri jos):
+   așa se poate măsura și când e mică în poză, aplecată sau întinsă. Se folosește doar când măsurarea obișnuită n-a mers. */
+async function bodyNormBlob(im, kp){
+  try{
+    const ok = i => kp && kp[i] && kp[i][2] >= .3; if(![5, 6, 11, 12].every(ok)) return null;
+    const sx = (kp[5][0] + kp[6][0]) / 2, sy = (kp[5][1] + kp[6][1]) / 2, hx = (kp[11][0] + kp[12][0]) / 2, hy = (kp[11][1] + kp[12][1]) / 2;
+    const ang = Math.atan2(hx - sx, hy - sy), pts = kp.filter(q => q[2] >= .3);
+    let x0 = Math.min(...pts.map(q => q[0])), x1 = Math.max(...pts.map(q => q[0])), y0 = Math.min(...pts.map(q => q[1])), y1 = Math.max(...pts.map(q => q[1]));
+    const pad = Math.max(x1 - x0, y1 - y0) * .3; x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+    const D = Math.hypot(x1 - x0, y1 - y0); if(D < 20) return null;
+    const K = Math.round(Math.min(1024, Math.max(512, D * 1.5))), sc = K / D;
+    const cv = document.createElement('canvas'); cv.width = cv.height = K; const g = cv.getContext('2d');
+    g.translate(K / 2, K / 2); g.rotate(ang);
+    g.save(); g.filter = 'blur(24px)'; g.scale(sc * 1.6, sc * 1.6); g.drawImage(im, -(x0 + x1) / 2, -(y0 + y1) / 2); g.restore(); g.filter = 'none';   // fundalul: aceeași cameră, estompată (nu negru)
+    g.scale(sc, sc); g.drawImage(im, -(x0 + x1) / 2, -(y0 + y1) / 2);
+    return await new Promise(r => cv.toBlob(r, 'image/jpeg', .92));
+  }catch(e){ return null; }
+}
 /* ───────── 9.36: identitatea pe tot: corp, păr, semne ─────────
    (2) Silueta măsurată în telefon (gratuit): umerii și șoldurile din detectorul de poziție (MoveNet) + conturul persoanei
        (segmentarea MediaPipe), lățimea la piept, talie și șolduri raportată la umeri; se compară cu poza întreagă. */
-async function bodySig(blob0){
-  const blob = (await personCrop(blob0).catch(() => null)) || blob0;   // 9.94 (A): pe persoana decupată (umerii, șoldurile, genunchii se găsesc mai sigur)
+async function bodySig(blob0, nn = false){
+  const blob = (await personCrop(blob0).catch(() => null)) || blob0;   // 9.94 (A); 13.6 (4): nn = deja îndreptată (nu se mai îndreaptă o dată): pe persoana decupată (umerii, șoldurile, genunchii se găsesc mai sigur)
   const u = URL.createObjectURL(blob);
   try{
     const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight;
     const kp = await crPose(im); if(!kp){ bodySigWhy = 'nu am găsit persoana în poză'; return null; }
     const ok = i => kp[i] && kp[i][2] >= .3;
-    if(![5, 6, 11, 12].every(ok)){ bodySigWhy = 'umerii sau șoldurile nu se văd clar'; return null; }   // fără umeri și șolduri vizibile nu se poate măsura
-    const S2 = Math.hypot(kp[5][0] - kp[6][0], kp[5][1] - kp[6][1]); if(S2 < W * .04){ bodySigWhy = 'persoana e prea mică în poză'; return null; }
+    if(![5, 6, 11, 12].every(ok)){ bodySigWhy = 'umerii sau șoldurile nu se văd clar'; return null; }
+    if(!nn && Math.abs(Math.atan2((kp[11][0] + kp[12][0] - kp[5][0] - kp[6][0]) / 2, (kp[11][1] + kp[12][1] - kp[5][1] - kp[6][1]) / 2)) > .3){ const b2 = await bodyNormBlob(im, kp); if(b2) return await bodySig(b2, true); }   // 13.6 (4): trunchiul înclinat peste ~17° → îndreptat   // fără umeri și șolduri vizibile nu se poate măsura
+    const S2 = Math.hypot(kp[5][0] - kp[6][0], kp[5][1] - kp[6][1]); if(S2 < W * .04){ if(!nn){ const b2 = await bodyNormBlob(im, kp); if(b2) return await bodySig(b2, true); } bodySigWhy = 'persoana e prea mică în poză'; return null; }
     const mask = await segMask(im), at = (x, y) => { const mx = Math.max(0, Math.min(255, Math.round(x / W * 255))), my = Math.max(0, Math.min(255, Math.round(y / H * 255))); return mask[my * 256 + mx]; };
-    const shY = (kp[5][1] + kp[6][1]) / 2, hpY = (kp[11][1] + kp[12][1]) / 2, len = hpY - shY; if(len < H * .05){ bodySigWhy = 'persoana e prea mică în poză'; return null; }
+    const shY = (kp[5][1] + kp[6][1]) / 2, hpY = (kp[11][1] + kp[12][1]) / 2, len = hpY - shY; if(len < H * .05){ if(!nn){ const b2 = await bodyNormBlob(im, kp); if(b2) return await bodySig(b2, true); } bodySigWhy = 'persoana e prea mică sau prea înclinată în poză'; return null; }
     const cxAt = t => ((kp[5][0] + kp[6][0]) / 2) * (1 - t) + ((kp[11][0] + kp[12][0]) / 2) * t;
     const width = t => { const y = shY + len * t, cx = cxAt(t), step = Math.max(1, W / 256); let l = cx, r = cx;
       if(at(cx, y) < .5) return 0;
