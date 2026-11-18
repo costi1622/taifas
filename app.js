@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '13.4';
+const APP_VER = '13.5';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -38,7 +38,7 @@ const DEF = {
   userName:'', userAbout:'', len:'mediu', font:16,
   imgProv:'none',
   wkBase:'', wkTok:'', wkModel:'eco', wkSize:'768x1024',
-  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
+  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
   vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
 };
 let S = {...DEF};
@@ -79,7 +79,7 @@ async function loadChat(c, tid){
   const ch = await DB.get(chatKey(c.id, tid)) || newChat(); ch.tid = tid;
   // dacă aplicația s-a închis în timpul unui răspuns, mesajul rămânea „scrie…” pentru totdeauna
   if(!(live && live.c === c && live.ch && (live.ch.tid || 'main') === tid))
-    for(const m of ch.msgs){ if(m.pending || m.pendingImg){ delete m.pending; delete m.pendingImg; delete m.hold; delete m.rec; if(!m.text && !m.img) m.err = 'Oprit.'; } }
+    for(const m of ch.msgs){ if(m.vidPending){ delete m.vidPending; m.vidErr = 'Oprit (aplicația s-a închis).'; } if(m.pending || m.pendingImg){ delete m.pending; delete m.pendingImg; delete m.hold; delete m.rec; if(!m.text && !m.img) m.err = 'Oprit.'; } }
   delete ch._sumBusy;
   return ch;
 }
@@ -164,6 +164,7 @@ async function purgeMsg(m, c){
   const keep = c && c.photo;
   for(const k of new Set([m.img, ...(m.imgAlts || [])])) if(k && k !== keep) await delImg(k).catch(() => {});
   for(let a = 0; a < Math.max(1, (m.alts || []).length); a++) DB.del('aud:' + m.id + ':' + a).catch(() => {});
+  if(m.vid && !/^u:/.test(m.vid)) await delImg(m.vid).catch(() => {});   // 13.5
 }
 // o poză veche de profil se șterge doar dacă nu mai apare în nicio conversație
 async function delPhotoIfUnused(c, k){
@@ -191,6 +192,7 @@ async function hydrate(root = document){
     el.style.backgroundImage = u ? `url("${u}")` : ''; el.removeAttribute('data-bgk');
   });
   if(root.querySelector && root.querySelector('video.avclip')) avVideos(root);   // 12.3
+  if(root.querySelector && root.querySelector('video.pvid[data-vk]')) vidHydrate(root);   // 13.5
 }
 function loadImgEl(src){ return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
 async function toJpeg(file, max = 1280, q = .9){
@@ -7246,15 +7248,99 @@ async function rwVideo(task, signal){
     return d || {};
   };
   await post([task]);
-  const t0 = Date.now();
+  let act = 0, lastT = performance.now(), netE = 0;   // 13.5: timpul cât telefonul ține aplicația pe pauză nu se numără
   for(let i = 0; ; i++){
     await naps(i ? 4000 : 8000, signal); if(signal && signal.aborted) throw new DOMException('oprit', 'AbortError');
-    const d = await post([{taskType:'getResponse', taskUUID:task.taskUUID}]);
+    { const nt = performance.now(); act += Math.min(nt - lastT, 10e3); lastT = nt; }
+    let d;
+    try{ d = await post([{taskType:'getResponse', taskUUID:task.taskUUID}]); netE = 0; }
+    catch(e){ if(e.name === 'AbortError' || !/rețea/.test(e.message) || ++netE > 40) throw e; continue; }
     const x = (d.data || []).find(y => y && y.taskUUID === task.taskUUID) || (d.data || [])[0];
     if(x && (x.status === 'success' || x.videoURL)) return x;
     if(x && x.status === 'error') throw new Error('Runware: clipul n-a putut fi făcut.');
-    if(Date.now() - t0 > 300e3) throw new Error('Runware: clipul durează prea mult (peste 5 minute).');
+    if(act > 300e3) throw new Error('Runware: clipul durează prea mult (peste 5 minute).');
   }
+}
+/* ═════════ 🎬 13.5: video de la personaje ═════════
+   Poza se face prin aceeași cale ca pozele din chat (fișa, fidelitatea), apoi devine clip pe Runware (P-Video, din prima imagine).
+   Mișcarea: ce scrie ea în [video: cadru | mișcare] (sau o mișcare de zi cu zi, dacă nu scrie), plus mișcarea vie de fond: respiră,
+   clipește, expresia se schimbă, părul și hainele se mișcă, mici gesturi, telefonul ținut în mână. Cost: ciornă $0,005/s, clar $0,02/s. */
+const VID_Q = {clar:{draft:false, usd:.02}, rapid:{draft:true, usd:.005}};
+const vidSec = () => Math.min(6, Math.max(4, +S.vidS || 5));
+const vidCost = () => (VID_Q[S.vidQ] || VID_Q.rapid).usd * vidSec();
+const vidReady = () => S.vid !== 'off' && S.imgProv === 'worker' && S.rw === 'on' && rwDirect();
+const VID_ASK = /(?<!\p{L})(video(clip)?(ul|uri)?|filmule[țt]\p{L}*|clip(ul|uleț)?|filmeaz[ăa](-?te)?|filmat|să\s+te\s+văd\s+mișc)(?!\p{L})/iu;
+const vidAsked = t => VID_ASK.test(String(t || '')) && !/\b(apel|sun[aăi]?|să\s+te\s+sun|pe\s+video|video\s*call)\b/i.test(String(t || ''));
+const VID_GENERIC = ['she looks into the camera, smiles warmly, tilts her head and brushes a strand of hair back with her hand',
+  'she laughs softly, glances away and back at the camera, then relaxes her shoulders and smiles',
+  'she waves at the camera with a playful smile, then rests her chin on her hand',
+  'she adjusts her position, runs a hand through her hair, looks at the camera and gives a small wink',
+  'she sways gently as if to music she hears, smiling and moving her head to the rhythm'];
+function vidRule(c, u){
+  if(!vidReady() || !canRequestPhoto(c)) return '';
+  return `- Poți trimite și un VIDEO scurt (${vidSec()} secunde, fără sunet, filmat cu telefonul) ${S.vid === 'on' ? `când ${u} îți cere unul sau când vrei tu să-i arăți ceva în mișcare (cum dansezi, cum îți bei cafeaua, cum te aranjezi, un salut)` : `doar când ${u} îți cere unul`}. Atunci încheie mesajul cu acțiunea *îți trimite un video* și, pe rândul următor, scrie în engleză: [video: cadrul de început descris ca o poză (framing, where you are, your position, what you wear, light) | ce faci în cele ${vidSec()} secunde, mișcări firești și continue, 2–3 acțiuni legate]. Nu trimite în același mesaj și poză, și video.\n`;
+}
+async function askVideo(spont){
+  const c = cur, ch = chat; if(!c || !ch) return;
+  if(!vidReady()){ toast('🎬 Video-urile se fac pe Runware, cu cheia în telefon (Setări → Claude și chei).', 4500); return askPhoto(spont); }
+  const nv = ch.nextVid || {}; delete ch.nextVid;
+  const n0 = ch.msgs.length;
+  await askPhoto(spont);
+  const m = ch.msgs.slice(Math.max(0, n0 - 1)).reverse().find(x => x.role === 'ai' && x.img && !x.err && !x.pendingImg);
+  if(m) await vidMake(c, ch, m, nv.motion || '');
+}
+async function vidMake(c, ch, m, motion){
+  if(!vidReady()){ toast('🎬 Video-urile se fac pe Runware, cu cheia în telefon (Setări → Claude și chei).', 4500); return; }
+  if(m.vidPending) return;
+  if(rwCapLeft() < vidCost()){ toast('Plafonul Runware de azi e atins: video-ul, mâine (sau mărește plafonul în Setări → Poze).', 5000); return; }
+  return jobRun(`video-ul de la ${c.name}`, async () => {
+    const b = await DB.get(m.img).catch(() => null); if(!b){ toast('Poza nu mai există.'); return; }
+    m.vidPending = Date.now(); delete m.vidErr; await saveChat(c, ch); if(chat === ch) renderMsgs();
+    try{
+      const q = VID_Q[S.vidQ] || VID_Q.rapid, sec = vidSec();
+      const mv = String(motion || '').trim().replace(/[.\s]+$/, '') || VID_GENERIC[Math.floor(Math.random() * VID_GENERIC.length)];
+      const prompt = `A real, candid phone video of the same person as in the image, ${sec} seconds of continuous natural motion from the first frame to the last: ${mv}. All the time she is alive and natural: she breathes, blinks, her expression changes softly, her hair and clothes move with her, small weight shifts and relaxed hand gestures; a slight handheld camera sway. Keep exactly the same face, body, clothes, place and light as the image; realistic skin and motion, one continuous shot, no cuts, no text, no other people.`;
+      const task = {taskType:'videoInference', taskUUID:crypto.randomUUID(), model:AV_CLIP_MDL, positivePrompt:prompt, duration:sec, fps:24, numberResults:1, outputType:'URL', outputFormat:'MP4', outputQuality:85,
+        includeCost:true, deliveryMethod:'async', inputs:{frameImages:['data:image/jpeg;base64,' + await b64C(await toJpeg(b, 1024, .9))]}, settings:{audio:false, draft:q.draft, promptUpsampling:false}};
+      const x = await rwVideo(task, null);
+      const u = x.videoURL || x.videoUrl || x.mediaURL || x.outputURL; if(!u) throw new Error('Runware n-a întors video-ul.');
+      const cost = +x.cost > 0 ? +x.cost : q.usd * sec;
+      if(cost < 5){ const day = rwDay(); day.usd = Math.round((day.usd + cost) * 1e6) / 1e6; day.n++; saveSettings(); addUsage(c.id, cost, 'img', null, 'video'); }
+      let v = null;
+      for(let k = 0; k < 4 && !v; k++){ try{ const r = await fetch(u); if(r.ok){ v = await r.blob(); if(v.size < 1000) v = null; } }catch(e){} if(!v) await sleep(2500); }
+      const old = m.vid;
+      if(v){ if(!/^video\//.test(v.type)) v = new Blob([v], {type:'video/mp4'}); m.vid = await saveImg(v); delete m.vidUrl; }
+      else { m.vid = 'u:' + u; m.vidUrl = u; }   // nu s-a putut păstra în telefon: se redă de la Runware (cât îl păstrează ei)
+      m.vidMv = mv; m.vidCost = cost; if(old && old !== m.vid && !/^u:/.test(old)) delImg(old).catch(() => {});
+    }catch(e){ m.vidErr = String(e && e.message || e).slice(0, 160); toast('🎬 Video-ul n-a mers: ' + m.vidErr, 5000); }
+    finally{ delete m.vidPending; await saveChat(c, ch); if(chat === ch) renderMsgs(); }
+  });
+}
+const vidUrls = new Map(); let vidIO = null;
+async function vidHydrate(root = document){
+  if(!vidIO && 'IntersectionObserver' in window) vidIO = new IntersectionObserver(es => { for(const e of es){ const v = e.target; if(e.isIntersecting && e.intersectionRatio >= .5) v.play().catch(() => {}); else v.pause(); } }, {threshold:[0, .5, 1]});
+  for(const v of root.querySelectorAll('video.pvid[data-vk]')){
+    const k = v.dataset.vk; v.removeAttribute('data-vk');
+    let u = vidUrls.get(k); if(!u){ if(/^u:/.test(k)) u = k.slice(2); else { const b = await DB.get(k).catch(() => null); if(!b) continue; u = URL.createObjectURL(b); } vidUrls.set(k, u); }
+    v.muted = true; v.src = u; v.dataset.v = k;
+    v.addEventListener('loadeddata', () => v.classList.add('on'), {once:true});
+    v.addEventListener('click', e => { e.stopPropagation(); vidFull(k); });
+    if(vidIO) vidIO.observe(v); else v.play().catch(() => {});
+  }
+}
+function vidFull(k){
+  const u = vidUrls.get(k); if(!u) return;
+  const o = document.createElement('div'); o.className = 'vfull';
+  o.innerHTML = `<video src="${u}" autoplay loop muted playsinline></video><button type="button" class="vfx" aria-label="Închide">✕</button><button type="button" class="vfs">💾 Salvează</button>`;
+  const close = () => { o.remove(); }; o.querySelector('.vfx').onclick = close; o.querySelector('video').onclick = close;
+  o.querySelector('.vfs').onclick = e => { e.stopPropagation(); vidSave(k); };
+  document.body.appendChild(o);
+}
+async function vidSave(k){
+  let b = /^u:/.test(k) ? await fetch(k.slice(2)).then(r => r.ok ? r.blob() : null).catch(() => null) : await DB.get(k).catch(() => null);
+  if(!b){ toast(/^u:/.test(k) ? 'Video-ul e doar la Runware și nu se poate descărca acum.' : 'Video-ul nu mai există.'); return; }
+  download(b, `Taifas-${String((cur && cur.name) || 'video').replace(/[^\p{L}\p{N}]+/gu, '-')}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.mp4`);
+  toast('Video-ul se salvează în Descărcări.');
 }
 async function avClipOne(c, k, signal){
   const src = c.avs && c.avs[k]; if(!src) return false;
@@ -7794,7 +7880,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
     cls += ' picm';
     const fresh = !devDone.has(m.img) && m.ts && Date.now() - m.ts < 3 * 60e3;   // poza abia sosită „se developează”
     const loc = whereIn(m.where);
-    inner = `<div class="picbox${fresh ? ' flash' : ''}"><img class="pic big${fresh ? ' dev' : ''}" data-k="${esc(m.img)}"${picAttr(m.img, false)} data-view="${esc(m.img)}" alt="">${loc ? `<span class="ploc">📍 ${esc(loc)}</span>` : ''}${tm}${reactHTML(m)}</div>${warnLine(m) ? `<div class="bwarn">${esc(warnLine(m))}</div>` : ''}${m.text ? `<div class="bub">${fmtMsg(m.text)}</div>` : ''}`;   // 9.85 (6)
+    inner = `<div class="picbox${fresh ? ' flash' : ''}"><img class="pic big${fresh ? ' dev' : ''}" data-k="${esc(m.img)}"${picAttr(m.img, false)} data-view="${esc(m.img)}" alt="">${m.vid ? `<video class="pvid" data-vk="${esc(m.vid)}" muted loop playsinline preload="metadata"></video><span class="vbadge">🎬 video</span>` : ''}${m.vidPending ? `<span class="vload"><span class="spin"></span> 🎬 ${esc(cur.name)} filmează…</span>` : ''}${loc ? `<span class="ploc">📍 ${esc(loc)}</span>` : ''}${tm}${reactHTML(m)}</div>${warnLine(m) ? `<div class="bwarn">${esc(warnLine(m))}</div>` : ''}${m.text ? `<div class="bub">${fmtMsg(m.text)}</div>` : ''}`;   // 9.85 (6)
     if(fresh) devDone.add(m.img);
   }
   else if(m.img) inner = `<div class="bub picwrap">${quoteHTML(m)}<img class="pic" data-k="${esc(m.img)}"${picAttr(m.img, true)} data-view="${esc(m.img)}" alt="">${m.text ? `<div class="cap">${fmtMsg(m.text)}</div>` : ''}${tm}${reactHTML(m)}</div>`;
@@ -7886,10 +7972,11 @@ const NEWS_ME_RE = /\s*\[vestea\s+mea:\s*([^\]\n]{3,200})\]/gi;     // 9.98: o v
 const NEWS_HIM_RE = /\s*\[vestea\s+lui:\s*([^\]\n]{3,200})\]/gi;    // 9.98: o veste mare de la tine → află și ceilalți (de la ea)
 const STK_RE = /\s*\[sticker:\s*([^\]\n]{2,40})\]/gi;
 const SHOW_RE = /\s*\[ar[ăa]t:\s*(\d{1,2})\s*\]/gi;   // 9.23: în apelul video îți arată o poză din telefonul ei
+const VID_RE = /\s*\[video:\s*([^\]]{8,2000})\]/gi;   // 13.5: [video: cadrul de start | ce face în cele câteva secunde]
 const SHOT_RE = /\s*\[poz[ăa]:\s*([^\]]{8,2000})\]/gi;
 const SHOT_OPEN = /\s*\[poz[ăa]:[^\]]*$/i;   // etichetă începută, încă neînchisă (în timpul scrierii) sau tăiată
 const CORR_RE_S = /\s*\[corectur[ăa]:\s*[^\]\n]{3,300}\]/gi;
-const stripMood0 = t => String(t || '').replace(FRAME_RE, '').replace(/\s*\[cadru:[^\]\n]*$/i, '').replace(/\s*\[fa[țt][ăa]:\s*[^\]\n]{1,20}\]\s*/gi, ' ').replace(MOOD_RE, '').replace(PLOT_RE, '').replace(VERD_RE, '').replace(/\s*\[acum:[^\]]*$/i, '').replace(SCHED_RE, '').replace(SUN_RE, '').replace(/\s*\[sun(:[^\]\n]*)?$/i, '').replace(SHOT_RE, '').replace(SHOT_OPEN, '').replace(STK_RE, '').replace(SHOW_RE, '').replace(CROSS_RE, '').replace(JOIN_RE, '').replace(NEWS_ME_RE, '').replace(NEWS_HIM_RE, '').replace(/\s*\[(?:(?:î|i)i\s+s|intr|vest)[^\]\n]*$/i, '').replace(/\s*\[ar([ăa](t(:[^\]\n]*)?)?)?$/i, '')
+const stripMood0 = t => String(t || '').replace(FRAME_RE, '').replace(/\s*\[cadru:[^\]\n]*$/i, '').replace(/\s*\[fa[țt][ăa]:\s*[^\]\n]{1,20}\]\s*/gi, ' ').replace(MOOD_RE, '').replace(PLOT_RE, '').replace(VERD_RE, '').replace(/\s*\[acum:[^\]]*$/i, '').replace(SCHED_RE, '').replace(SUN_RE, '').replace(/\s*\[sun(:[^\]\n]*)?$/i, '').replace(SHOT_RE, '').replace(SHOT_OPEN, '').replace(VID_RE, '').replace(/\s*\[v(i(d(e(o(:[^\]\n]*)?)?)?)?)?$/i, '').replace(STK_RE, '').replace(SHOW_RE, '').replace(CROSS_RE, '').replace(JOIN_RE, '').replace(NEWS_ME_RE, '').replace(NEWS_HIM_RE, '').replace(/\s*\[(?:(?:î|i)i\s+s|intr|vest)[^\]\n]*$/i, '').replace(/\s*\[ar([ăa](t(:[^\]\n]*)?)?)?$/i, '')
   .replace(CORR_RE_S, '').replace(/\s*\[c(o(r(e(c(t(u(r([aă](:[^\]\n]*)?)?)?)?)?)?)?)?)?$/i, '').replace(/\s*\[s(t(a(r(e(:[^\]\n]*)?)?)?)?)?$/i, '').replace(/\s*\[p(r(o(g(r(a(m(e(z(:[^\]\n]*)?)?)?)?)?)?)?)?)?$/i, '').replace(/\s*\[p(o(z([ăa](:[^\]\n]*)?)?)?)?$/i, '').replace(/\s*\[s(t(i(c(k(e(r(:[^\]\n]*)?)?)?)?)?)?)?$/i, '').trimEnd();
 const _smC = new Map();   // 11.7: toate etichetele încep cu „[”; rezultatele se țin minte (aceleași texte se desenează des)
 const stripMood = t => { const x = String(t || ''); if(x.indexOf('[') < 0) return x.trimEnd(); let v = _smC.get(x); if(v === undefined){ v = stripMood0(x); if(_smC.size > 4000) _smC.clear(); _smC.set(x, v); } return v; };
@@ -8894,7 +8981,7 @@ ${chatM ? `- Fiecare are ziua lui: povestești scurt ce faci tu acum, unde ești
 - Vorbește ca într-o discuție reală, nu ca într-un interviu: nu încheia fiecare mesaj cu o întrebare (cel mult unul din trei mesaje). Mai des povestește ceva de-al tău, comentează, glumește, reacționează sau vino cu o idee; lasă loc ca ${u} să continue singur.
 - Ții cont de momentul zilei și de pauzele dintre mesaje, notate între paranteze în mesajele lui ${u}; nu le menționa ca note.
 ${S.vmsg !== 'off' ? `- Uneori, când e firesc (cam o dată la ${S.vmsg === 'des' ? '4' : '10'} mesaje), sau oricând ${u} îți cere, poți trimite un mesaj vocal: începe răspunsul cu [vocal] și scrie exact ce spui cu voce tare, ca o persoană care vorbește liber la telefon: propoziții scurte, ezitări firești (păi, adică, mă rog, știi?), reluări, fără *acțiuni* și fără emoji. Unde e firesc, rar, poți pune [râde], [chicotește], [oftează], [șoptește] sau ... pentru o pauză scurtă. 1-4 propoziții.\n` : ''}${ch ? `- Dacă îi promiți lui ${u} că îi scrii tu la un anumit moment (de exemplu „îți scriu mâine la 7:25”, „te caut diseară la 9”), sau el îți cere asta și accepți, adaugă la final, pe un rând separat: [programez: ZIUA HH:MM | despre ce îi scrii], unde ZIUA e azi, mâine, poimâine sau AAAA-LL-ZZ. La ora aceea aplicația îți dă ocazia să-i scrii. Nu programa nimic fără o promisiune clară.\n` : ''}${ch && S.callIn !== 'off' && c.callIn !== false ? `- Dacă îi spui lui ${u} că îl suni chiar acum sau în câteva minute (sau el îți cere să-l suni și accepți), adaugă la final, pe un rând separat: [sun] pentru apel de voce sau [sun: video] pentru apel video. Aplicația îl sună atunci de-adevăratelea, în câteva secunde. Pentru o oră anume, mai târziu, folosește [programez:] cu „apel” sau „video” în text.\n` : ''}${ch ? `- Starea ta: DOAR când ți se schimbă față de cea notată la ultimul mesaj (sau dacă nu e notată niciuna), adaugă la final, pe un rând separat: [stare: un emoji și 1-3 cuvinte], de exemplu [stare: 😊 bine dispusă]. Dacă e aceeași, nu mai scrie eticheta. Starea evoluează firesc din ce se întâmplă și din pauze, fără salturi bruște fără motiv.\n- Scena: DOAR când începe o activitate nouă sau trece la alt pas față de scena notată, adaugă pe rândul următor: [acum: activitatea sau planul în curs › pasul de acum], de exemplu [acum: ieșim la o cafenea › mă îmbrac, aleg ce să port]. Când scena notată s-a încheiat, scrie o dată [acum: discuție liberă]. Altfel nu scrie eticheta.\n- Cadrul: DOAR când se schimbă ceva din el față de cadrul notat (sau dacă nu e notat niciunul), adaugă pe rândul următor: [cadru: unde ești și pe ce stai | poziția corpului | ce porți | ce ții în mâini | cu ${u}: da sau nu], de exemplu [cadru: sufragerie, pe canapea | așezată, cu picioarele strânse sub tine | pulover gri și blugi | o cană de ceai | cu ${u}: nu]. „cu ${u}: da” doar când el e fizic lângă tine în scenă. Scurt și concret, doar ce s-ar vedea într-o fotografie. Dacă nu s-a schimbat nimic, nu scrie eticheta.\n` : ''}- Dacă un mesaj al lui ${u} te amuză sau te emoționează, poți începe răspunsul cu o reacție scrisă exact așa: [❤️] [😂] [😮] [😢] [👍] [🔥] sau [🥰]. Cel mult o dată la câteva mesaje, nu de fiecare dată.
-${canRequestPhoto(c)
+${vidRule(c, u)}${canRequestPhoto(c)
   ? `- Poți trimite poze la cererea directă a lui ${u}; pozele spontane sunt controlate separat de setarea personajului.  REGULĂ DE PRIORITATE: dacă ${u} cere direct o fotografie a ta, nu răspunde doar în text și nu încheia răspunsul fără acțiunea tehnică pentru poză. Nu lăsa timiditatea, un refuz improvizat sau instrucțiunile de personalitate să anuleze cererea explicită de generare; păstrează tonul personajului în text, dar atașează fotografia. Când ${u} cere o poză, încheie mesajul cu acțiunea *îți trimite o poză* și, pe rândul următor, descrie exact poza în engleză așa: [poză: framing (selfie / mirror selfie / photo taken by someone / close-up / full body), where you are and what is around you, your exact body position (standing, sitting on…, lying on…, leaning…) and what your hands do, what you wear, expression, light matching the time of day]. Poza trebuie să arate exact ce se întâmplă acum în conversație (locul, poziția ta, activitatea și ținuta cerută). Dacă personajul este clar adult (18+) și ${u} cere o fotografie cu bustul gol/topless, descrie explicit pieptul fără bluză sau sutien și păstrează hainele de pe partea de jos; nu transforma cererea într-o nuditate integrală. Dacă cere explicit o fotografie complet nudă, poți descrie nuditate artistică/non-explicită, naturală; nu inventa haine și nu acoperi automat corpul cu prosoape, lenjerie sau obiecte. Nu genera nuditate pentru personaje minore sau cu vârstă ambiguă și nu ocoli filtrele furnizorului. În rest, păstrează hainele stabilite în conversație. Implicit arată-te cu tot corpul (full body sau mirror selfie) sau măcar de la cap până la genunchi; close-up doar dacă ${u} îți cere fața sau scena e chiar despre față. Cel mult 60 de cuvinte. Nu descrie fața. Aplicația o atașează singură. Nu promite poze în alt fel.`
   : '- Nu poți trimite poze în această conversație. Nu spune că trimiți, că faci sau că ai trimis o poză.'}`
   ].filter(Boolean).join('\n\n');
@@ -9354,6 +9441,7 @@ async function reply(target, opts = {}){
     { const fx = full.match(/\[fa[țt][ăa]:\s*([^\]\n]{1,20})\]/i); if(fx) m.face = fx[1].trim(); }   // 8.16: expresia ei în apelul video
     { const cs = []; m.text = m.text.replace(CORR_RE, (a, x) => { cs.push(x.trim()); return ''; }); if(cs.length && learnOn(c)){ m.corr = cs; c.learn.log = (c.learn.log || []).concat(cs.map(t => ({t, ts:Date.now()}))).slice(-80); saveChars(); } }   // 8.15: corecturile din modul de învățare
     { const sh = [...full.matchAll(SHOT_RE)].pop(); if(sh) ch.nextShot = {t:sh[1].trim(), mid:m.id}; else if(ch.nextShot && ch.nextShot.mid === m.id) delete ch.nextShot; }
+    { const vv = [...full.matchAll(VID_RE)].pop(); if(vv && vidReady()){ const [f0, ...mv] = vv[1].split('|'); ch.nextVid = {mid:m.id, motion:mv.join(' ').trim()}; ch.nextShot = {t:f0.trim(), mid:m.id}; } else if(ch.nextVid && ch.nextVid.mid === m.id) delete ch.nextVid; }   // 13.5
     if(!opts.sched && opts.tag !== 'apel' && !call){   // 8.18: a zis că te sună acum → te sună
       const sn = [...full.matchAll(SUN_RE)].pop(), said = stripMood(full);
       const promise = !sn && /\b(te\s+(sun|apelez|bag\s+pe\s+video)|ți\s+dau\s+(un\s+)?(telefon|apel|video)|te\s+caut\s+pe\s+(video|telefon))\b/i.test(said)
@@ -9441,7 +9529,13 @@ async function reply(target, opts = {}){
     // 9.39: cererile directe de fotografie din chat declanșează imaginea chiar dacă personajul a răspuns doar în text.
     // Nu depinde de faptul că personajul a promis explicit o poză în replică.
     const directPhotoRequest = canRequestPhoto(c) && !!photoAsk(ch, m);
-    if(directPhotoRequest){
+    const um = ch.msgs.slice(0, ch.msgs.indexOf(m)).reverse().find(x => x.role === 'user');
+    const vidReq = vidReady() && canRequestPhoto(c) && !!um && vidAsked(um.text);   // 13.5: „trimite-mi un video”
+    if(vidReq || (ch.nextVid && ch.nextVid.mid === m.id && (S.vid === 'on' || vidReq))){
+      ch.sinceImg = 0; if(!(ch.nextVid && ch.nextVid.mid === m.id)) ch.nextVid = {mid:m.id, motion:''};
+      setTimeout(() => { if(chat === ch && !busy) askVideo(!vidReq || !!(ch.nextShot && ch.nextShot.mid === m.id)); }, 900);
+    }
+    else if(directPhotoRequest){
       // Cererea explicită are prioritate și nu este clasificată ca fotografie spontană.
       ch.sinceImg = 0;
       setTimeout(() => { if(chat === ch && !busy) askPhoto(false); }, 900);
@@ -9668,6 +9762,7 @@ function plusMenu(){
   if(busy && live && live.ch === chat){ toast('Așteaptă răspunsul.'); return; }
   const o = [];
   if(S.imgProv !== 'none') o.push(['📷', `Cere o poză de la ${cur.name}`, () => askPhoto()]);
+  if(vidReady() && canRequestPhoto(cur)) o.push(['🎬', `Cere un video de la ${cur.name}`, () => { chat.nextVid = {mid:'', motion:''}; askVideo(false); }]);   // 13.5
   if(S.imgProv !== 'none' && cur.photo) o.push(['👫', S.userPhoto ? `Fă o poză împreună cu ${cur.name}` : 'Poză împreună (pune-ți întâi poza în Setări)', () => S.userPhoto ? askPhoto(false, null, null, {together:true}) : (openSettings(), openSetPanel('me'))]);
   o.push(['😺', 'Trimite un sticker', stickerSheet]);   // 12.3: și stickerele tale, oriunde
   o.push(['🎁', `Trimite-i un cadou lui ${cur.name}`, giftSheet]);
@@ -10180,6 +10275,8 @@ function msgSheet(i){
   if(m.img && !me && !busy && S.imgProv !== 'none') opts.push(['✏️', 'Modifică poza', () => setTimeout(() => editPhotoSheet(i), 50)]);   // 9.40
   if(m.img && !me && !busy && S.imgProv !== 'none'){ opts.push(['🎲', 'Altă variantă (aceeași scenă)…', () => setTimeout(() => rejectSheet(m), 60)]); opts.push(['🔄', 'Altă poză (altă scenă)', () => askPhoto(false, m, 'new')]); }
   if(m.img && m.scene && !me) opts.push(['📝', 'Ce scenă a ales', () => openSheet(`<h4>Scena pozei</h4><div class="pad">${m.where ? `<p class="wline">📍 ${esc([m.where.room && m.where.room !== 'other' ? (ROOM_RO[m.where.room] || m.where.room) : m.where.place, m.where.position].filter(Boolean).join(' · '))}${m.where.outfit ? '<br>👗 ' + esc(m.where.outfit) : ''}</p>` : ''}${m.asked && m.asked.length ? `<p class="wline">🙋 Ai cerut: ${esc(m.asked.join(' · '))}</p>` : ''}${m.people ? `<p class="wline">👥 În poză: ${esc(m.people.names.join(', '))}${m.people.self ? ' și ' + esc(cur.name) : ' (fără ' + esc(cur.name) + ')'}</p>` : ''}${(m.edits || []).length ? `<p class="wline">✏️ Modificări: ${esc(m.edits.map(x => x.t).join(' → '))}</p>` : ''}<p style="color:var(--tx2);line-height:1.5">${esc(m.scene)}</p>${m.check ? `<p class="hint">Verificare: ${m.check.d !== undefined ? '🧬 ' + (m.check.d != null ? idPct(m.check.d) + '% · ' + idLabel(m.check.d) : 'fața nu se vede') : 'seamănă ' + m.check.face + '/10'} · scena ${m.check.scene ?? '?'}/10 · încadrarea ${m.check.framing ?? '?'}/10${m.check.hair != null ? ' · părul ' + m.check.hair + '/10' : ''}${m.check.marks != null ? ' · semnele ' + m.check.marks + '/10' : ''}${m.check.body != null ? ' · corpul ' + m.check.body + '/10' : ''}${m.check.asked != null ? ' · ce ai cerut ' + m.check.asked + '/10' + (m.check.missing ? ' (lipsea: ' + esc(m.check.missing.join(', ')) + ')' : '') : ''}${m.check.expr != null ? ' · expresia ' + m.check.expr + '/10' : ''}${m.rwCost ? '<br>💵 Runware: ' + usd4(m.rwCost) + ' (' + m.rwGens + ' ' + (m.rwGens === 1 ? 'generare' : 'generări') + ')' : ''}${m.bd != null ? '<br>🧍 silueta (telefon): ' + Math.max(0, Math.round(100 - m.bd * 250)) + '% față de poza întreagă' : ''}${m.cands && m.cands.length > 1 ? '<br>🎯 aleasă din ' + m.cands.length + ': ' + m.cands.map(d => d == null ? '?' : idPct(d) + '%').join(' · ') : ''}</p>` : ''}${m.gen ? genDiagHTML(m) : ''}</div>`)]);
+  if(m.img && !me && !busy && vidReady() && !m.vidPending) opts.push(['🎬', m.vid ? 'Refă video-ul' : 'Animează (video scurt)', () => vidMake(cur, chat, m, m.vidMv || '')]);   // 13.5
+  if(m.vid) opts.push(['💾', 'Salvează video-ul în telefon', () => vidSave(m.vid)]);
   if(m.img) opts.push(['💾', 'Salvează poza în telefon', () => saveImage(m.img)]);
   if(m.img && canShareFiles()) opts.push(['↗️', 'Trimite poza în altă aplicație', () => shareImage(m.img)]);
   if(m.img && !me) opts.push(['🖼️', 'Fă-o poză de profil', async () => {
@@ -14053,6 +14150,7 @@ const FIELDS = {stKey:'key', stModel:'model', stUser:'userName', stAbout:'userAb
   stPin:'pIn', stPout:'pOut', stVkBase:'wkBase', stVkTok:'wkTok', stRwKey:'rwKey'};
 const SEGS = {stCallFill:'callFill', stCallClips:'callClips', stCallTalk:'callTalk', stCallReal:'callReal', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
 SEGS.stVoiceReal = 'voiceReal';   // 12.9
+SEGS.stVid = 'vid'; SEGS.stVidQ = 'vidQ'; SEGS.stVidS = 'vidS';   // 13.5
 let setPanel = null, setPanelPushed = false;
 /* 8.7: actualizare din aplicație. Codul vine oricum din rețea la pornire;
    asta prinde versiunile apărute cât aplicația a stat deschisă și forțează reîncărcarea curată. */
