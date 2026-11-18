@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '13.7';
+const APP_VER = '13.9';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -38,7 +38,7 @@ const DEF = {
   userName:'', userAbout:'', len:'mediu', font:16,
   imgProv:'none',
   wkBase:'', wkTok:'', wkModel:'eco', wkSize:'768x1024',
-  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
+  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', vidFid:'max', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
   vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
 };
 let S = {...DEF};
@@ -1894,7 +1894,7 @@ async function sheetGen(c, force, onStep, o = {}){
         }
       }
       async function take(b, refined){
-          addUsage(c.id, imgPrice(), 'img', null, 'profil');
+          addUsage(c.id, imgPrice(), 'img', null, 'fisa');
           try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
           gotAny = true; const fs = await faceDescs(b).catch(() => []);
           const best = fs.length ? fs.map(f => ({f, d:fdist(f.d, ref)})).sort((x, y) => x.d - y.d)[0] : null;
@@ -2068,7 +2068,7 @@ async function closeGen(c, force){
       let bs; try{ bs = await genMany(p, base, null, {model:mdl, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}, Math.min(2, CLOSE_TRIES - t)); }catch(e){ if(t) break; t++; continue; }
       t += Math.max(1, bs.length);
       for(let b of bs){
-        addUsage(c.id, imgPrice(), 'img', null, 'profil');
+        addUsage(c.id, imgPrice(), 'img', null, 'fisa');
         try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
         const fs = await faceDescs(b).catch(() => []); if(!fs.length) continue;
         const f = fs.map(x => ({x, d:fdist(x.d, ref)})).sort((a, z) => a.d - z.d)[0];
@@ -2248,7 +2248,7 @@ async function bsheetGen(c, force, onStep, o = {}){
         let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, o.redo ? Math.min(3, BT - t) : t === 0 ? 2 : 3 - t); }catch(e){ if(t) break; t++; continue; }
         t += Math.max(1, bs.length);
         for(let b of bs){
-          addUsage(c.id, imgPrice(), 'img', null, 'profil');
+          addUsage(c.id, imgPrice(), 'img', null, 'fisa');
           try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
           const fd = (await localFace(b, c).catch(() => ({d:null}))).d, sig = noBody ? null : await bodySig(b).catch(() => null);
           const bd = sig && ref ? bodyDist2(sig, ref) : null;
@@ -3845,7 +3845,7 @@ async function fixFace(v, src, signal, onStep){
     let y = null;
     try{ y = await facePass(src.c, best, signal, model, '', 'retus', src.prof ? src : null); }catch(e){ if(e.name === 'AbortError') throw e; break; }
     if(!y) break;
-    addUsage((src.c && src.c.id) || (ed && ed.id) || null, imgPrice(), 'img', null, 'profil');
+    addUsage((src.c && src.c.id) || (ed && ed.id) || null, imgPrice(), 'img', null, 'creare');
     const d = await dist(y);
     if(d < bd - .01){ best = y; bd = d; }
   }
@@ -3977,7 +3977,7 @@ async function fullVariants(c, base, signal, draw = () => {}, n = 2, o = {}){   
   await Promise.allSettled(vars.map(async v => {
     try{
       let b = await genImage(p, base, signal, null, {model, size:CR_FRAMES.full.size, force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'});
-      addUsage(c.id, imgPrice(), 'img', null, 'profil');
+      addUsage(c.id, imgPrice(), 'img', null, 'fisa');
       try{ if(b.type === 'image/png') b = await toJpeg(b, 2048, .92); }catch(e){}
       v.blob = b; v.url = URL.createObjectURL(b); v.st = 'ok'; draw(vars);
       v.chk = await crCheck(v); if(v.chk.d && ref) v.sameD = fdist(v.chk.d, ref); draw(vars);
@@ -7360,13 +7360,13 @@ async function genAvatars0(c, all = true){
       let bl = null, bd = 9;
       for(let t = 0; t < 3; t++){
         const r = await scenePhoto(c, shot, null, t ? 'keep exactly the face of the reference: same face shape, eyes, nose, lips, skin and age' : '', {why:'profil'});
-        addUsage(c.id, imgPrice(), 'img', null, 'profil');
+        addUsage(c.id, imgPrice(), 'img', null, 'avatar');
         const d = (await localFace(r.blob, c)).d;
         if(d == null){ if(!bl){ bl = r.blob; } break; }
         if(d < bd){ bl = r.blob; bd = d; }
         if(d < .42) break;
       }
-      try{ const R = await finishPerson(c, {blob:bl, fd:bd < 9 ? bd : null}, shot, null, {kind:'avatar', tag:'profil'}); bl = R.blob; }catch(e){}   // 9.92: garanția + finisarea
+      try{ const R = await finishPerson(c, {blob:bl, fd:bd < 9 ? bd : null}, shot, null, {kind:'avatar', tag:'avatar'}); bl = R.blob; }catch(e){}   // 9.92: garanția + finisarea
       try{ if(bl.type === 'image/png') bl = await toJpeg(bl, 1024, .9); }catch(e){}
       const old = avs[k]; avs[k] = await saveImg(bl); if(old) delImg(old).catch(() => {});
       if(c.avClips && c.avClips[k]){ const oc = c.avClips[k], cc = {...c.avClips}; delete cc[k]; c.avClips = cc; if(oc.k) delImg(oc.k).catch(() => {}); }   // 12.3: clipul era al pozei vechi
@@ -7446,8 +7446,80 @@ async function rwVideo(task, signal){
    Mișcarea: ce scrie ea în [video: cadru | mișcare] (sau o mișcare de zi cu zi, dacă nu scrie), plus mișcarea vie de fond: respiră,
    clipește, expresia se schimbă, părul și hainele se mișcă, mici gesturi, telefonul ținut în mână. Cost: ciornă $0,005/s, clar $0,02/s. */
 const VID_Q = {clar:{draft:false, usd:.02}, rapid:{draft:true, usd:.005}};
-const vidSec = () => Math.min(6, Math.max(4, +S.vidS || 5));
-const vidCost = () => (VID_Q[S.vidQ] || VID_Q.rapid).usd * vidSec();
+/* 13.8: Fidelitate 1:1 = P-Video-2 (prețurile Runware: 720p standard $0,025/s, ciornă $0,015/s), cu primul și ultimul cadru date;
+   Economic = P-Video ca până acum (doar primul cadru, 4–6 s). */
+const VID_P2 = 'prunaai:p-video@2', VID_P2Q = {clar:{draft:false, usd:.025}, rapid:{draft:true, usd:.015}};
+const vidFid = () => S.vidFid !== 'eco';
+const vidQ = (fid = vidFid()) => (fid ? VID_P2Q : VID_Q)[S.vidQ === 'clar' ? 'clar' : 'rapid'];
+const vidSec = (fid = vidFid()) => Math.min(fid ? 8 : 6, Math.max(4, +S.vidS || 5));
+const vidCost = () => vidQ().usd * vidSec();
+// sarcina video: o imagine = primul cadru; două = primul și ultimul (doar P-Video-2)
+async function vidTask(model, prompt, sec, frames, q){
+  const img = async b => 'data:image/jpeg;base64,' + await b64C(await toJpeg(b, 1024, .9));
+  const fi = model === VID_P2 ? await Promise.all(frames.map(async (b, i) => ({image:await img(b), frame:i ? 'last' : 'first'}))) : [await img(frames[0])];
+  const t = {taskType:'videoInference', taskUUID:crypto.randomUUID(), model, positivePrompt:String(prompt).slice(0, 2000), duration:sec, fps:24, numberResults:1, outputType:'URL', outputFormat:'MP4', outputQuality:85,
+    includeCost:true, deliveryMethod:'async', inputs:{frameImages:fi}, settings:{audio:false, draft:q.draft, promptUpsampling:false}};
+  if(model === VID_P2) t.resolution = '720p';
+  return t;
+}
+async function vidFetch(u){
+  for(let k = 0; k < 4; k++){ try{ const r = await fetch(u); if(r.ok){ let v = await r.blob(); if(v.size >= 1000) return /^video\//.test(v.type) ? v : new Blob([v], {type:'video/mp4'}); } }catch(e){} await sleep(2500); }
+  return null;
+}
+/* 13.8 (2): verificarea clipului. 8 cadre egal depărtate; pe fiecare, distanța feței față de portret (aceeași măsură ca la poze) și,
+   dacă există poza de corp și corpul se vede, silueta. Referința e chiar cadrul de start, măsurat la aceeași rezoluție ca video-ul.
+   Nu trece dacă: media feței scade cu peste 8 puncte față de start SAU al doilea cel mai slab cadru scade cu peste 18 puncte (un
+   singur cadru prins în mișcare nu contează) SAU corpul scade în medie cu peste 10 puncte. Sub 3 cadre cu fața văzută: nu se judecă. */
+const VCHK = {mean:8, min2:18, body:10, frames:8};
+async function vidFrames(blob, n = VCHK.frames){
+  const u = URL.createObjectURL(blob), v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = u;
+  try{
+    await new Promise((res, rej) => { v.addEventListener('loadeddata', res, {once:true}); v.addEventListener('error', () => rej(new Error('video')), {once:true}); setTimeout(() => rej(new Error('timeout')), 15000); });
+    const D = v.duration; if(!(D > 0) || !v.videoWidth) return [];
+    const cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight; const g = cv.getContext('2d'), out = [];
+    for(let i = 0; i < n; i++){
+      const t = Math.min(D - .04, D * (i + .5) / n);
+      await new Promise(res => { const tm = setTimeout(res, 4000); v.addEventListener('seeked', () => { clearTimeout(tm); res(); }, {once:true}); v.currentTime = t; });
+      g.drawImage(v, 0, 0, cv.width, cv.height); const b = await toBlob(cv, .92); if(b) out.push({t, blob:b});
+    }
+    return out;
+  } finally { URL.revokeObjectURL(u); try{ v.removeAttribute('src'); v.load(); }catch(e){} }
+}
+async function vidCheck(c, blob, start){
+  const fr = await vidFrames(blob).catch(() => []); if(fr.length < 4) return null;
+  const rbs = c.photoFull ? await refBodySigs(c).catch(() => []) : [];
+  const F = [], B = [];
+  for(const f of fr){ const d = (await localFace(f.blob, c)).d; if(d != null) F.push(idPct(d));
+    if(rbs.length){ const b = await bodyMatch(c, await bodySig(f.blob).catch(() => null), rbs).catch(() => null); if(b != null) B.push(bodyPct(b)); } }
+  let s0 = null, b0 = null;
+  if(start){ const sj = await toJpeg(start, 1280, .92); const d0 = (await localFace(sj, c)).d; s0 = d0 != null ? idPct(d0) : null;
+    if(rbs.length){ const x = await bodyMatch(c, await bodySig(sj).catch(() => null), rbs).catch(() => null); b0 = x != null ? bodyPct(x) : null; } }
+  const av = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null, so = [...F].sort((a, b) => a - b);
+  const r = {n:fr.length, seen:F.length, face:av(F), min:so.length ? so[0] : null, min2:so.length > 1 ? so[1] : so[0] ?? null, body:av(B), s0, b0};
+  if(F.length < 3){ r.ok = true; r.why = 'fața se vede în prea puține cadre'; return r; }
+  const why = [];
+  if(s0 != null && r.face < s0 - VCHK.mean) why.push(`fața ${r.face}% în medie (startul ${s0}%)`);
+  if(s0 != null && r.min2 < s0 - VCHK.min2) why.push(`un moment cu fața la ${r.min2}%`);
+  if(b0 != null && r.body != null && B.length >= 3 && r.body < b0 - VCHK.body) why.push(`corpul ${r.body}% (startul ${b0}%)`);
+  r.ok = !why.length; if(why.length) r.why = why.join(', ');
+  return r;
+}
+const vidChkScore = k => !k ? -1 : (k.face ?? 0) + (k.body ?? 0) * .3;
+/* 13.8 (1): cadrul de final. Din poza de start + fața ei (portretul de aproape, dacă există): aceeași scenă câteva secunde mai
+   târziu, la capătul mișcării. Fața se măsoară; peste prag trece prin retușul obișnuit. Dacă tot e mai departe de portret decât
+   startul (cu peste 0,05), nu se folosește: clipul pornește doar din primul cadru. */
+async function vidEndFrame(c, start, mv, signal){
+  const prof = await DB.get(c.photo).catch(() => null); if(!prof) return null;
+  const crs = closeOf(c), crb = crs && !refOut(c, crs.img) ? await DB.get(crs.img).catch(() => null) : null;
+  const pf = crb || await cropFace(prof, await profFaceBox(c, prof).catch(() => null));
+  const prompt = `Image 1 is a candid phone photo of a person. Create the photo of the same moment a few seconds later, at the end of this movement: ${mv}. Keep the same place, background, clothes, light, colors, camera position, framing and distance as image 1; only the pose, hands, head and expression change naturally as that movement ends. Image 2 is the same person's face: keep exactly this face (face shape, eyes, nose, lips, skin), the same hair and the same body. Realistic photo, no text, no other people.`;
+  const blob = await genImage(prompt, start, signal, pf, {model:'ancorat', force:{two:true}, size:await imgSize(start), quiet:true, why:'video'});
+  addUsage(c.id, imgPrice(), 'img', null, 'video');
+  const s0 = (await localFace(start, c)).d; let r = {blob, fd:(await localFace(blob, c)).d};
+  if(r.fd != null && r.fd > fRet()){ try{ r = await finishPerson(c, r, mv, signal, {noLog:true}); }catch(e){ if(e.name === 'AbortError') throw e; } }
+  if(r.fd != null && s0 != null && r.fd > Math.max(s0 + .05, fRet2())) return {blob:null, fd:r.fd, s0, why:'fața din cadrul de final iese mai departe de portret'};
+  return {blob:r.blob, fd:r.fd, s0};
+}
 const vidReady = () => S.vid !== 'off' && S.imgProv === 'worker' && S.rw === 'on' && rwDirect();
 const VID_ASK = /(?<!\p{L})(video(clip)?(ul|uri)?|filmule[țt]\p{L}*|clip(ul|uleț)?|filmeaz[ăa](-?te)?|filmat|să\s+te\s+văd\s+mișc)(?!\p{L})/iu;
 const vidAsked = t => VID_ASK.test(String(t || '')) && !/\b(apel|sun[aăi]?|să\s+te\s+sun|pe\s+video|video\s*call)\b/i.test(String(t || ''));
@@ -7460,12 +7532,12 @@ function vidRule(c, u){
   if(!vidReady() || !canRequestPhoto(c)) return '';
   return `- Poți trimite și un VIDEO scurt (${vidSec()} secunde, fără sunet, filmat cu telefonul) ${S.vid === 'on' ? `când ${u} îți cere unul sau când vrei tu să-i arăți ceva în mișcare (cum dansezi, cum îți bei cafeaua, cum te aranjezi, un salut)` : `doar când ${u} îți cere unul`}. Atunci încheie mesajul cu acțiunea *îți trimite un video* și, pe rândul următor, scrie în engleză: [video: cadrul de început descris ca o poză (framing, where you are, your position, what you wear, light) | ce faci în cele ${vidSec()} secunde, mișcări firești și continue, 2–3 acțiuni legate]. Nu trimite în același mesaj și poză, și video.\n`;
 }
-async function askVideo(spont){
+async function askVideo(spont, o = {}){
   const c = cur, ch = chat; if(!c || !ch) return;
   if(!vidReady()){ toast('🎬 Video-urile se fac pe Runware, cu cheia în telefon (Setări → Claude și chei).', 4500); return askPhoto(spont); }
   const nv = ch.nextVid || {}; delete ch.nextVid;
   const n0 = ch.msgs.length;
-  await askPhoto(spont);
+  await askPhoto(spont, undefined, undefined, o.useShot ? {useShot:true} : {});   // 13.8: scenariul ales
   const m = ch.msgs.slice(Math.max(0, n0 - 1)).reverse().find(x => x.role === 'ai' && x.img && !x.err && !x.pendingImg);
   if(m) await vidMake(c, ch, m, nv.motion || '');
 }
@@ -7473,11 +7545,12 @@ async function vidMake(c, ch, m, motion){
   if(!vidReady()){ toast('🎬 Video-urile se fac pe Runware, cu cheia în telefon (Setări → Claude și chei).', 4500); return; }
   if(m.vidPending) return;
   if(rwCapLeft() < vidCost()){ toast('Plafonul Runware de azi e atins: video-ul, mâine (sau mărește plafonul în Setări → Poze).', 5000); return; }
+  if(vidFid()) return vidMake2(c, ch, m, motion);   // 13.8: Fidelitate 1:1
   return jobRun(`video-ul de la ${c.name}`, async () => {
     const b = await DB.get(m.img).catch(() => null); if(!b){ toast('Poza nu mai există.'); return; }
     m.vidPending = Date.now(); delete m.vidErr; await saveChat(c, ch); if(chat === ch) renderMsgs();
     try{
-      const q = VID_Q[S.vidQ] || VID_Q.rapid, sec = vidSec();
+      const q = vidQ(false), sec = vidSec(false);
       const mv = String(motion || '').trim().replace(/[.\s]+$/, '') || VID_GENERIC[Math.floor(Math.random() * VID_GENERIC.length)];
       const prompt = `A real, candid phone video of the same person as in the image, ${sec} seconds of continuous natural motion from the first frame to the last: ${mv}. All the time she is alive and natural: she breathes, blinks, her expression changes softly, her hair and clothes move with her, small weight shifts and relaxed hand gestures; a slight handheld camera sway. Keep exactly the same face, body, clothes, place and light as the image; realistic skin and motion, one continuous shot, no cuts, no text, no other people.`;
       const task = {taskType:'videoInference', taskUUID:crypto.randomUUID(), model:AV_CLIP_MDL, positivePrompt:prompt, duration:sec, fps:24, numberResults:1, outputType:'URL', outputFormat:'MP4', outputQuality:85,
@@ -7492,9 +7565,106 @@ async function vidMake(c, ch, m, motion){
       if(v){ if(!/^video\//.test(v.type)) v = new Blob([v], {type:'video/mp4'}); m.vid = await saveImg(v); delete m.vidUrl; }
       else { m.vid = 'u:' + u; m.vidUrl = u; }   // nu s-a putut păstra în telefon: se redă de la Runware (cât îl păstrează ei)
       m.vidMv = mv; m.vidCost = cost; if(old && old !== m.vid && !/^u:/.test(old)) delImg(old).catch(() => {});
+      delete m.vidChk; if(v) try{ const k = await vidCheck(c, v, b); if(k) m.vidChk = {...k, fid:0}; }catch(e){}   // 13.8 (2): doar măsurat (Economic)
     }catch(e){ m.vidErr = String(e && e.message || e).slice(0, 160); toast('🎬 Video-ul n-a mers: ' + m.vidErr, 5000); }
     finally{ delete m.vidPending; await saveChat(c, ch); if(chat === ch) renderMsgs(); }
   });
+}
+// 13.8 (1)(2): Fidelitate 1:1 — cadrul de final, P-Video-2 cu primul și ultimul cadru, verificarea pe 8 cadre, o refacere
+async function vidMake2(c, ch, m, motion){
+  return jobRun(`video-ul de la ${c.name}`, async () => {
+    const b = await DB.get(m.img).catch(() => null); if(!b){ toast('Poza nu mai există.'); return; }
+    m.vidPending = Date.now(); m.vidStage = 'cadrul de final'; delete m.vidErr; await saveChat(c, ch); if(chat === ch) renderMsgs();
+    const ac = new AbortController(); let spent = 0;
+    try{
+      const q = vidQ(true), sec = vidSec(true);
+      const mv = String(motion || '').trim().replace(/[.\s]+$/, '') || VID_GENERIC[Math.floor(Math.random() * VID_GENERIC.length)];
+      const d0 = rwDay().usd;
+      let end = null; try{ end = await vidEndFrame(c, b, mv, ac.signal); }catch(e){ if(e.name === 'AbortError') throw e; end = {blob:null, why:String(e.message || e).slice(0, 120)}; }
+      spent += Math.max(0, rwDay().usd - d0);
+      const two = !!(end && end.blob);
+      const prompt = `A real, candid phone video of the same person as in the ${two ? 'first frame' : 'image'}, ${sec} seconds of continuous natural motion ${two ? 'from the given first frame to the given last frame' : 'from the first frame to the last'}: ${mv}. All the time the person is alive and natural: breathes, blinks, the expression changes softly, hair and clothes move with the body, small weight shifts and relaxed hand gestures; a slight handheld camera sway. The face stays exactly the same person's face in every frame, also when the head turns; keep the same body, clothes, place and light; realistic skin and motion, one continuous shot, no cuts, no text, no other people.`;
+      const one = async () => {
+        m.vidStage = 'clipul'; if(chat === ch) renderMsgs();
+        const x = await rwVideo(await vidTask(VID_P2, prompt, sec, two ? [b, end.blob] : [b], q), null);
+        const u = x.videoURL || x.videoUrl || x.mediaURL || x.outputURL; if(!u) throw new Error('Runware n-a întors video-ul.');
+        const cost = +x.cost > 0 ? +x.cost : q.usd * sec;
+        if(cost < 5){ const day = rwDay(); day.usd = Math.round((day.usd + cost) * 1e6) / 1e6; day.n++; saveSettings(); addUsage(c.id, cost, 'img', null, 'video'); spent += cost; }
+        const v = await vidFetch(u);
+        m.vidStage = 'verificarea'; if(chat === ch) renderMsgs();
+        const k = v ? await vidCheck(c, v, b).catch(() => null) : null;
+        return {u, v, k};
+      };
+      let r = await one(), redo = 0;
+      if(r.k && !r.k.ok && rwCapLeft() >= q.usd * sec){
+        m.vidStage = 'refacerea (fața a alunecat)'; if(chat === ch) renderMsgs();
+        try{ const r2 = await one(); redo = 1; if(vidChkScore(r2.k) > vidChkScore(r.k)) r = r2; }catch(e){ redo = 1; }
+      }
+      const old = m.vid;
+      if(r.v){ m.vid = await saveImg(r.v); delete m.vidUrl; } else { m.vid = 'u:' + r.u; m.vidUrl = r.u; }
+      m.vidMv = mv; m.vidCost = Math.round(spent * 1e5) / 1e5; if(old && old !== m.vid && !/^u:/.test(old)) delImg(old).catch(() => {});
+      m.vidChk = r.k ? {...r.k, fid:1, end:two, redo} : {fid:1, end:two, redo, none:1};
+      if(!two && end && end.why) m.vidChk.endWhy = end.why;
+    }catch(e){ m.vidErr = String(e && e.message || e).slice(0, 160); toast('🎬 Video-ul n-a mers: ' + m.vidErr, 5000); }
+    finally{ delete m.vidPending; delete m.vidStage; await saveChat(c, ch); if(chat === ch) renderMsgs(); }
+  });
+}
+// 13.8 (2): ce arată video-ul pe el: fața (și corpul), cu ⚠️ dacă n-a trecut nici după refacere
+function vidBadge(m){
+  const k = m.vidChk; if(!k || k.face == null) return '🎬 video';
+  return `🎬 ${k.ok === false ? '⚠️ ' : ''}👤${k.face}%${k.body != null ? ' 🧍' + k.body + '%' : ''}`;
+}
+function vidInfo(m){
+  const k = m.vidChk; if(!k) return '';
+  const L = [k.fid ? `🎯 Fidelitate 1:1: ${k.end ? 'cadrul de start și cel de final, din motorul de identitate' : 'doar cadrul de start' + (k.endWhy ? ' (' + k.endWhy + ')' : '')}` : '💰 Economic: doar cadrul de start'];
+  if(k.face != null) L.push(`👤 Fața: ${k.face}% în medie, cel mai slab moment ${k.min}%${k.s0 != null ? `; poza de start ${k.s0}%` : ''} (${k.seen} din ${k.n} cadre cu fața văzută)`);
+  if(k.body != null) L.push(`🧍 Corpul: ${k.body}%${k.b0 != null ? `; poza de start ${k.b0}%` : ''}`);
+  if(k.none) L.push('Verificarea n-a putut rula (clipul n-a putut fi descărcat în telefon).');
+  else if(k.why) L.push((k.ok === false ? '⚠️ ' : 'ℹ️ ') + k.why[0].toUpperCase() + k.why.slice(1));
+  if(k.redo) L.push('🔁 Refăcut automat o dată; a rămas varianta mai apropiată.');
+  if(m.vidCost) L.push(`💲 ${usd4(m.vidCost)}`);
+  return L.join('\n');
+}
+/* 13.8 (3): 🎬 scenarii de zi cu zi. Cadrul (poza de start) + mișcarea; hainele și restul le pune motorul de identitate. */
+const VID_SCN = [
+  ['💃', 'Dans', 'full-body shot in her living room, standing, casual clothes, warm daylight', 'dancing casually to music she hears, moving her shoulders and arms to the rhythm, turning around once and smiling at the camera'],
+  ['☕', 'Cafea', 'waist-up shot, sitting at a cafe table by the window, holding a cup of coffee', 'taking a sip of coffee, putting the cup down, smiling and saying something to the camera'],
+  ['🍳', 'Gătit', 'medium shot in her kitchen, standing at the counter while cooking', 'stirring a pot, tasting from a wooden spoon, nodding happily and looking at the camera'],
+  ['🪞', 'Oglindă', 'mirror selfie in her bedroom, full body, phone in hand, casual outfit', 'fixing her hair in the mirror, turning slightly to check her outfit, smiling at the phone'],
+  ['🌳', 'Parc', 'medium shot walking on a path in a green park on a sunny day', 'walking along the path, looking around at the trees, turning to the camera and waving'],
+  ['🏖️', 'Plajă', "standing at the water's edge on a beach, summer dress, sunny day", 'the breeze moving her hair, walking slowly along the shore, laughing and looking at the camera'],
+  ['🏋️', 'Sală', 'medium shot at the gym, athletic wear, holding a pair of dumbbells', 'finishing a set with the dumbbells, putting them down, catching her breath and smiling at the camera'],
+  ['🌃', 'Ieșire în oraș', 'medium shot on a city street in the evening, dressed up, warm street lights', 'walking towards the camera under the city lights, turning around once and laughing'],
+  ['💼', 'Birou', 'waist-up at her desk in a bright office, laptop open', 'typing on the laptop, stretching her arms, looking at the camera and smiling tiredly'],
+  ['📖', 'Carte', 'curled up on the couch at home with a book, cozy sweater, soft lamp light', 'turning a page, looking up from the book at the camera and smiling'],
+  ['🌧️', 'Fereastră, ploaie', 'by the window on a rainy day, holding a mug, cozy sweater', 'watching the rain, drawing on the foggy glass with a finger, turning to the camera and smiling'],
+  ['🚗', 'Mașină', "sitting in the driver's seat of a parked car, daytime, seatbelt on", 'adjusting the mirror, putting on sunglasses, looking at the camera and laughing']];
+function vidSheet(){
+  const c = cur; if(!c || !chat) return;
+  const est = `${vidFid() ? '🎯 1:1' : '💰 Economic'} · ${vidSec()} s · ~${usd(vidCost())}${vidFid() ? ' + cadrul de final' : ''}`;
+  openSheet(`<h4>🎬 Video de la ${esc(c.name)}<small style="display:block;font-weight:400;opacity:.75">${esc(est)}</small></h4>
+    <div class="vscn">${VID_SCN.map((x, i) => `<button class="opt" data-i="${i}"><i>${x[0]}</i>${esc(x[1])}</button>`).join('')}</div>
+    <button class="opt" id="vsOwn"><i>✍️</i>Scrie tu scenariul</button><button class="opt" id="vsFree"><i>✨</i>Las-o pe ea să aleagă</button>`);
+  $$('.sheet .vscn .opt').forEach(b => b.onclick = () => { closeSheet(); const x = VID_SCN[+b.dataset.i]; vidGo(x[2], x[3]); });
+  $('#vsFree').onclick = () => { closeSheet(); chat.nextVid = {mid:'', motion:''}; askVideo(false); };
+  $('#vsOwn').onclick = () => { closeSheet(); vidOwn(); };
+}
+function vidGo(frame, motion){ if(!chat) return; chat.nextShot = {t:frame, mid:''}; chat.nextVid = {mid:'', motion}; askVideo(false, {useShot:true}); }
+function vidOwn(){
+  openSheet(`<h4>✍️ Scenariul tău</h4><div class="pad"><textarea id="vsTxt" rows="3" maxlength="400" placeholder="Unde e, ce face în cele câteva secunde: ex. în bucătărie, face o cafea, se întoarce spre tine și râde"></textarea>
+    <div class="btns"><button class="btn" data-close>Renunță</button><button class="btn pri" id="vsOk">🎬 Filmează</button></div></div>`);
+  $('#vsOk').onclick = async () => { const ro = $('#vsTxt').value.trim(); if(ro.length < 4){ toast('Scrie pe scurt ce face.'); return; } closeSheet(); toast('🎬 Pregătesc scenariul…'); const p = await vidPlan(cur, ro); vidGo(p.frame, p.motion); };
+}
+// scenariul scris de tine → cadrul de start și mișcarea, în engleză, mișcări de zi cu zi
+async function vidPlan(c, ro){
+  if(aiReady()) try{
+    const j = await crAskJSON('You turn short Romanian video ideas into English for a video generator. Everyday, natural, non-explicit motion only. Answer with JSON only.',
+`Idea (Romanian): "${ro}"
+Return JSON: {"frame":"the first frame described as a photo: framing (selfie / waist-up / full body), where she is, her position, what she wears, light; 25-50 words","motion":"what she does in the few seconds, 2-3 connected natural actions, 15-35 words"}`, 500);
+    const f = String(j.frame || '').trim(), mv = String(j.motion || '').trim();
+    if(f && mv) return {frame:f.slice(0, 600), motion:mv.slice(0, 400)};
+  }catch(e){}
+  return {frame:ro, motion:ro};
 }
 const vidUrls = new Map(); let vidIO = null;
 async function vidHydrate(root = document){
@@ -7532,7 +7702,7 @@ async function avClipOne(c, k, signal){
   const x = await rwVideo(task, signal);
   const u = x.videoURL || x.videoUrl || x.mediaURL || x.outputURL; if(!u) throw new Error('Runware n-a întors clipul.');
   const cost = +x.cost > 0 ? +x.cost : q.usd * AV_CLIP_S;
-  if(cost < 5){ const day = rwDay(); day.usd = Math.round((day.usd + cost) * 1e6) / 1e6; day.n++; saveSettings(); addUsage(c.id, cost, 'img', null, 'profil'); }
+  if(cost < 5){ const day = rwDay(); day.usd = Math.round((day.usd + cost) * 1e6) / 1e6; day.n++; saveSettings(); addUsage(c.id, cost, 'img', null, 'avatar'); }
   let clip = {src, url:u, at:Date.now()};
   try{ const r = await fetch(u); if(r.ok){ let v = await r.blob(); if(v.size > 1000){ if(!/^video\//.test(v.type)) v = new Blob([v], {type:'video/mp4'}); clip = {src, k:await saveImg(v), at:Date.now()}; } } }catch(e){}   // în telefon (merge și fără rețea); altfel rămâne adresa
   if(c.avs[k] !== src){ if(clip.k) delImg(clip.k).catch(() => {}); return false; }   // varianta s-a refăcut între timp
@@ -7798,7 +7968,7 @@ async function genStickers0(c){
       let bl = await genImage(prompt, ref, null, null, {why:'profil'});
       try{ bl = await toJpeg(bl, 512, .88); }catch(e){}
       out.push({l, k:await saveImg(bl)}); ok++;
-      addUsage(c.id, imgPrice(), 'img', null, 'profil');
+      addUsage(c.id, imgPrice(), 'img', null, 'stickere');
       if(b && document.body.contains(b)) b.innerHTML = `<span class="spin"></span> ${ok}/8`;
     }catch(e){ toast('Un sticker n-a mers: ' + e.message, 3500); if(e.cap) break; }
   }
@@ -8060,7 +8230,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
     cls += ' picm';
     const fresh = !devDone.has(m.img) && m.ts && Date.now() - m.ts < 3 * 60e3;   // poza abia sosită „se developează”
     const loc = whereIn(m.where);
-    inner = `<div class="picbox${fresh ? ' flash' : ''}"><img class="pic big${fresh ? ' dev' : ''}" data-k="${esc(m.img)}"${picAttr(m.img, false)} data-view="${esc(m.img)}" alt="">${m.vid ? `<video class="pvid" data-vk="${esc(m.vid)}" muted loop playsinline preload="metadata"></video><span class="vbadge">🎬 video</span>` : ''}${m.vidPending ? `<span class="vload"><span class="spin"></span> 🎬 ${esc(cur.name)} filmează…</span>` : ''}${loc ? `<span class="ploc">📍 ${esc(loc)}</span>` : ''}${tm}${reactHTML(m)}</div>${warnLine(m) ? `<div class="bwarn">${esc(warnLine(m))}</div>` : ''}${m.text ? `<div class="bub">${fmtMsg(m.text)}</div>` : ''}`;   // 9.85 (6)
+    inner = `<div class="picbox${fresh ? ' flash' : ''}"><img class="pic big${fresh ? ' dev' : ''}" data-k="${esc(m.img)}"${picAttr(m.img, false)} data-view="${esc(m.img)}" alt="">${m.vid ? `<video class="pvid" data-vk="${esc(m.vid)}" muted loop playsinline preload="metadata"></video><span class="vbadge${m.vidChk && m.vidChk.ok === false ? ' warn' : ''}">${esc(vidBadge(m))}</span>` : ''}${m.vidPending ? `<span class="vload"><span class="spin"></span> 🎬 ${esc(cur.name)} filmează…${m.vidStage ? ' · ' + esc(m.vidStage) : ''}</span>` : ''}${loc ? `<span class="ploc">📍 ${esc(loc)}</span>` : ''}${tm}${reactHTML(m)}</div>${warnLine(m) ? `<div class="bwarn">${esc(warnLine(m))}</div>` : ''}${m.text ? `<div class="bub">${fmtMsg(m.text)}</div>` : ''}`;   // 9.85 (6)
     if(fresh) devDone.add(m.img);
   }
   else if(m.img) inner = `<div class="bub picwrap">${quoteHTML(m)}<img class="pic" data-k="${esc(m.img)}"${picAttr(m.img, true)} data-view="${esc(m.img)}" alt="">${m.text ? `<div class="cap">${fmtMsg(m.text)}</div>` : ''}${tm}${reactHTML(m)}</div>`;
@@ -9522,8 +9692,12 @@ async function reply(target, opts = {}){
     //           în rezumat și rămân doar ultimele 12: rescrierea și fiecare citire de după costă cam jumătate
     // 9.96: mesajul trimis de ea singură intră în cache când e probabil să-i răspunzi în ora următoare (conversația e deschisă
     //       sau de obicei răspunzi). Atunci istoricul se compactează ca la orice pauză, ca răspunsul tău să citească exact același prefix.
-    const proCache = !!(opts.pro || opts.sched) && opts.tag !== 'apel' && !call && !opts.liveImg && proLikely(c, ch);
-    if((proCache || (!opts.pro && !opts.sched)) && S.ctxCompact !== 'off' && (!ch.cAt || Date.now() - ch.cAt > (ch.cTtl === '5m' ? 4.5 * 60e3 : 58 * 60e3))) await compactAfterPause(c, ch, idx).catch(() => false);
+    // 13.9 (1): în apel ești sigur acolo: replica spusă de ea singură (salutul, revenirea după o întrerupere) scrie cache-ul, iar replica
+    //           ta de după îl citește (5%). Fără compactare înainte (salutul nu așteaptă un rezumat); replica ta găsește cache-ul cald,
+    //           deci nici ea nu mai compactează și citește exact același prefix.
+    const callPro = !!(opts.pro || opts.sched) && opts.tag === 'apel' && !!call && !opts.liveImg && S.callCache !== 'off';
+    const proCache = callPro || (!!(opts.pro || opts.sched) && opts.tag !== 'apel' && !call && !opts.liveImg && proLikely(c, ch));
+    if(((proCache && !callPro) || (!opts.pro && !opts.sched)) && S.ctxCompact !== 'off' && (!ch.cAt || Date.now() - ch.cAt > (ch.cTtl === '5m' ? 4.5 * 60e3 : 58 * 60e3))) await compactAfterPause(c, ch, idx).catch(() => false);
     if(!opts.pro && !opts.sched && um) proReplied(ch, idx, um);   // 9.96
     const ctx = await attachUserImages(contextUpTo(idx, ch));
     // 12.1: mesajul trimis de ea singură când lipsești nu folosește cache-ul (s-ar plăti scrierea degeaba): pleacă doar cu rezumatul
@@ -9595,7 +9769,7 @@ async function reply(target, opts = {}){
       full = outs[pick];
       meta = metas[[first, ...rest].map(x => String(x || '').trim()).indexOf(full)] || {};
       m._others = outs.filter((x, k) => k !== pick && !(keepIdx >= 0 && k === 0));
-    } else full = await stream(sysFor(c, ch), ctx, {max:LEN[S.len].max, signal:busy.signal, cid:c.id, meta, tag:opts.tag, conv:!solo, eco, hist, uc:proCache ? 'singurC' : '',
+    } else full = await stream(sysFor(c, ch), ctx, {max:LEN[S.len].max, signal:busy.signal, cid:c.id, meta, tag:opts.tag, conv:!solo, eco, hist, uc:proCache ? 'singurC' : '',   // 13.9: și salutul din apel
       onText: t => { m.text = t;
         // mesaj vocal: textul nu apare pe ecran cât timp „înregistrează”
         if(!m.rec && S.vmsg !== 'off' && /^\s*(?:\[[^\]v][^\]]*\]\s*)?\[v/i.test(t)){ m.rec = m.hold = true; if(live){ live.rec = true; if(chat === ch) setBusyUI(true); } if(chat === ch) renderMsgs(); }
@@ -9906,7 +10080,42 @@ function recordTokens(cid, usage, model, tag, mult = 1, turn, uc = ''){
   addUsage(cid, usd, 'txt', {inp, cw, cr, out, saved: cr * pin * (1 - rd) / 1e6 * mult, main: model === modelFor(false) || !!turn, eco: !!turn && model !== modelFor(false), uc}, tag);   // 9.95: uc = de unde vine intrarea fără cache
 }
 const usd = v => '$' + (v < 10 ? v.toFixed(3) : v.toFixed(2));
+/* ═════════ 📊 13.9 statistica: fidelitate + cost real, pe personaj ═════════
+   Poze: jurnalul de fidelitate (ultimele 80 de poze cu ea, fără cele de test); fața = același procent ca peste tot, corpul la fel.
+   Video-uri: verificarea pe cadre (13.8), din toate conversațiile ei. Apeluri: clipurile verificate din seturile păstrate (13.8).
+   Costul real: poza din chat (media măsurată pe Runware), video-ul (costul păstrat pe fiecare), setul de apel (suma clipurilor). */
+async function statOf(c){
+  const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const F = (c.fid || []).filter(e => e.k !== 'etalon' && !e.rej), fp = F.filter(e => e.fd != null).map(e => idPct(e.fd)), bp = F.filter(e => e.bd != null).map(e => bodyPct(e.bd));
+  const last = fp.slice(-10), prev = fp.slice(-20, -10);
+  const ph = {n:F.length, face:avg(fp), min:fp.length ? Math.min(...fp) : null, body:avg(bp), trend:last.length >= 5 && prev.length >= 5 ? avg(last) - avg(prev) : null};
+  const V = [];
+  try{ for(const t of threadsOf(c)){ const ch = await DB.get(chatKey(c.id, t.id)).catch(() => null); if(!ch || !Array.isArray(ch.msgs)) continue; for(const m of ch.msgs) if(m && m.vid && !m.err) V.push(m); } }catch(e){}
+  const vk = V.filter(m => m.vidChk && m.vidChk.face != null);
+  const vd = {n:V.length, face:avg(vk.map(m => m.vidChk.face)), body:avg(vk.filter(m => m.vidChk.body != null).map(m => m.vidChk.body)), redo:V.filter(m => m.vidChk && m.vidChk.redo).length,
+    warn:vk.filter(m => m.vidChk.ok === false).length, fid:V.filter(m => m.vidChk && m.vidChk.fid).length, cost:avg(V.filter(m => m.vidCost > 0).map(m => m.vidCost))};
+  const sets = Object.values(c.callClips || {}), cl = sets.flatMap(x => Object.values(x.v || {}).filter(r => r && !r.reuse));
+  const ck = cl.filter(r => r.chk && r.chk.face != null), full = sets.filter(x => Object.values(x.v || {}).filter(r => r && r.cost > 0).length >= 4);
+  const ca = {sets:sets.length, n:cl.length, chk:ck.length, face:avg(ck.map(r => r.chk.face)), bad:cl.filter(r => r.bad).length, redo:cl.filter(r => r.redo).length,
+    setCost:avg(full.map(x => Object.values(x.v || {}).reduce((a, r) => a + (r && r.cost > 0 && !r.reuse ? r.cost : 0), 0)))};
+  return {ph, vd, ca};
+}
+async function statDraw(){
+  const el = $('#stStat'); if(!el) return;
+  const pc = v => v == null ? '—' : Math.round(v) + '%', P = S.rwPhoto;
+  const rows = [];
+  for(const c of chars){ if(c.stil && c.stil !== 'photo') continue; const st = await statOf(c); if(!st.ph.n && !st.vd.n && !st.ca.n) continue; rows.push([c, st]); }
+  const all = rows.map(r => r[1]), vc = all.filter(x => x.vd.cost != null), sc = all.filter(x => x.ca.setCost != null);
+  const head = `💵 Cost real: poza din chat ${P && P.n ? usd4(P.avg) + ` (media pe ${P.n})` : '—'} · video ${vc.length ? usd4(vc.reduce((a, x) => a + x.vd.cost, 0) / vc.length) : '—'} · set de apel ${sc.length ? usd(sc.reduce((a, x) => a + x.ca.setCost, 0) / sc.length) : '— (doar seturile din 13.9)'}`;
+  el.innerHTML = `<h3 class="sh" style="margin-top:14px">📊 Statistică: fidelitate și cost real</h3><p class="hint">${head}</p>` + (rows.length ? rows.map(([c, s]) => `<div class="statc">
+    <b>${esc(c.name)}</b>
+    ${s.ph.n ? `<small>📷 Poze (${s.ph.n}): 👤 ${pc(s.ph.face)} medie · cea mai slabă ${pc(s.ph.min)}${s.ph.body != null ? ' · 🧍 ' + pc(s.ph.body) : ''}${s.ph.trend != null ? ` · ultimele 10: ${s.ph.trend >= 0 ? '+' : '−'}${Math.abs(Math.round(s.ph.trend))} puncte` : ''}</small>` : ''}
+    ${s.vd.n ? `<small>🎬 Video (${s.vd.n}${s.vd.fid ? ', ' + s.vd.fid + ' pe 1:1' : ''}): 👤 ${pc(s.vd.face)}${s.vd.body != null ? ' · 🧍 ' + pc(s.vd.body) : ''} · ${s.vd.redo} ${s.vd.redo === 1 ? 'refăcut' : 'refăcute'} · ${s.vd.warn} cu ⚠️${s.vd.cost != null ? ' · ' + usd4(s.vd.cost) + ' / video' : ''}</small>` : ''}
+    ${s.ca.n ? `<small>📞 Apeluri (${s.ca.sets} ${s.ca.sets === 1 ? 'loc' : 'locuri'}, ${s.ca.n} clipuri): ${s.ca.chk ? `👤 ${pc(s.ca.face)} pe ${s.ca.chk} verificate · ${s.ca.redo} ${s.ca.redo === 1 ? 'refăcut' : 'refăcute'} · ${s.ca.bad} ${s.ca.bad === 1 ? 'nefolosit' : 'nefolosite'}` : 'clipuri de dinainte de 13.8, neverificate'}${s.ca.setCost != null ? ' · ' + usd(s.ca.setCost) + ' / loc' : ''}</small>` : ''}
+  </div>`).join('') : '<p class="hint">Încă nu sunt poze, video-uri sau clipuri de apel măsurate.</p>');
+}
 async function renderCost(){
+  statDraw().catch(() => {});   // 13.9
   const u = await DB.get('usage') || {months:{}, chars:{}};
   const mo = new Date().toISOString().slice(0, 7);
   const n0 = new Date(), d = new Date(Date.UTC(n0.getUTCFullYear(), n0.getUTCMonth() - 1, 1));
@@ -9921,7 +10130,7 @@ async function renderCost(){
     ${(() => { const by = Object.entries(M.by || {}).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]); if(!by.length) return '';
       { const rest = tot(M) - by.reduce((a, x) => a + x[1], 0); if(rest > .05) by.push(['_rest', rest]); }   // 9.49: ce s-a cheltuit înainte de împărțirea pe categorii
       const mx = Math.max(...by.map(x => x[1]));
-      const L = {chat:['💬', 'Conversații'], apel:['📞', 'Apeluri'], poze:['📷', 'Poze în chat'], stories:['📸', 'Stories'], statusuri:['📱', 'Statusuri'], voce:['🎙️', 'Voce'], fundal:['⚙️', 'Fundal (memorie, relație, planuri)'], jurnal:['📔', 'Jurnal'], profil:['🖼️', 'Portrete, avatar, stickere'], pozeai:['🧠', 'Poze: plan și verificare (AI)'], grup:['👥', 'Grupuri'], _rest:['•', 'Neîmpărțit (versiuni vechi, înainte de categorii)'], oameni:['👤', 'Oamenii din viața lor'], retus:['🪄', 'Retușuri']};
+      const L = {chat:['💬', 'Conversații'], apel:['📞', 'Apeluri'], poze:['📷', 'Poze în chat'], stories:['📸', 'Stories'], statusuri:['📱', 'Statusuri'], voce:['🎙️', 'Voce'], fundal:['⚙️', 'Fundal (memorie, relație, planuri)'], jurnal:['📔', 'Jurnal'], profil:['🖼️', 'Portrete (verificări AI; și tot ce era aici înainte de 13.9)'], fisa:['🪪', 'Fișa de identitate'], avatar:['🎭', 'Avatar viu'], stickere:['😺', 'Stickere'], creare:['✏️', 'Creare și editare personaj'], look:['👗', 'Schimbare de look'], pozeai:['🧠', 'Poze: plan și verificare (AI)'], grup:['👥', 'Grupuri'], _rest:['•', 'Neîmpărțit (versiuni vechi, înainte de categorii)'], oameni:['👤', 'Oamenii din viața lor'], retus:['🪄', 'Retușuri']};
       const tk = M.tk || {}, kf = n => n >= 1000 ? (n / 1000).toFixed(n >= 1e4 ? 0 : 1).replace('.', ',') + 'k' : String(Math.round(n));
       const cp = k => { const T = tk[k]; if(!T || !T.n) return ''; const all = T.inp + T.cw + T.cr;
         const rw = k === 'chat' && M.rw ? Object.entries(M.rw).sort((a, b) => b[1] - a[1]) : [];
@@ -9942,7 +10151,7 @@ function plusMenu(){
   if(busy && live && live.ch === chat){ toast('Așteaptă răspunsul.'); return; }
   const o = [];
   if(S.imgProv !== 'none') o.push(['📷', `Cere o poză de la ${cur.name}`, () => askPhoto()]);
-  if(vidReady() && canRequestPhoto(cur)) o.push(['🎬', `Cere un video de la ${cur.name}`, () => { chat.nextVid = {mid:'', motion:''}; askVideo(false); }]);   // 13.5
+  if(vidReady() && canRequestPhoto(cur)) o.push(['🎬', `Cere un video de la ${cur.name}`, vidSheet]);   // 13.5; 13.8: scenariile
   if(S.imgProv !== 'none' && cur.photo) o.push(['👫', S.userPhoto ? `Fă o poză împreună cu ${cur.name}` : 'Poză împreună (pune-ți întâi poza în Setări)', () => S.userPhoto ? askPhoto(false, null, null, {together:true}) : (openSettings(), openSetPanel('me'))]);
   o.push(['😺', 'Trimite un sticker', stickerSheet]);   // 12.3: și stickerele tale, oriunde
   o.push(['🎁', `Trimite-i un cadou lui ${cur.name}`, giftSheet]);
@@ -10306,7 +10515,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
   const rw0 = rwDay().usd, rwN0 = rwDay().n, rwC0 = rwCallN;   // 13.3: cererile Runware ale pozei   // 9.37: cât a costat poza asta pe Runware (toate generările ei)
   const pT = setInterval(pTick, 120);
   try{
-    const promised = !target && spont && ch.nextShot ? ch.nextShot.t : '';      // descrierea scrisă chiar de personaj când a trimis poza
+    const promised = !target && (spont || opt.useShot) && ch.nextShot ? ch.nextShot.t : '';      // descrierea scrisă chiar de personaj când a trimis poza   // 13.8: sau scenariul video ales
     if(promised) delete ch.nextShot;
     let shot, where = null, asked = [], together = !!(opt.together || (target && target.together)) && !!S.userPhoto; let sceneOpt = {};   // 10.1
     const tm = {t0:performance.now(), s:{}};   // 9.86 (g): cronometrul pașilor
@@ -10456,6 +10665,7 @@ function msgSheet(i){
   if(m.img && !me && !busy && S.imgProv !== 'none'){ opts.push(['🎲', 'Altă variantă (aceeași scenă)…', () => setTimeout(() => rejectSheet(m), 60)]); opts.push(['🔄', 'Altă poză (altă scenă)', () => askPhoto(false, m, 'new')]); }
   if(m.img && m.scene && !me) opts.push(['📝', 'Ce scenă a ales', () => openSheet(`<h4>Scena pozei</h4><div class="pad">${m.where ? `<p class="wline">📍 ${esc([m.where.room && m.where.room !== 'other' ? (ROOM_RO[m.where.room] || m.where.room) : m.where.place, m.where.position].filter(Boolean).join(' · '))}${m.where.outfit ? '<br>👗 ' + esc(m.where.outfit) : ''}</p>` : ''}${m.asked && m.asked.length ? `<p class="wline">🙋 Ai cerut: ${esc(m.asked.join(' · '))}</p>` : ''}${m.people ? `<p class="wline">👥 În poză: ${esc(m.people.names.join(', '))}${m.people.self ? ' și ' + esc(cur.name) : ' (fără ' + esc(cur.name) + ')'}</p>` : ''}${(m.edits || []).length ? `<p class="wline">✏️ Modificări: ${esc(m.edits.map(x => x.t).join(' → '))}</p>` : ''}<p style="color:var(--tx2);line-height:1.5">${esc(m.scene)}</p>${m.check ? `<p class="hint">Verificare: ${m.check.d !== undefined ? '🧬 ' + (m.check.d != null ? idPct(m.check.d) + '% · ' + idLabel(m.check.d) : 'fața nu se vede') : 'seamănă ' + m.check.face + '/10'} · scena ${m.check.scene ?? '?'}/10 · încadrarea ${m.check.framing ?? '?'}/10${m.check.hair != null ? ' · părul ' + m.check.hair + '/10' : ''}${m.check.marks != null ? ' · semnele ' + m.check.marks + '/10' : ''}${m.check.body != null ? ' · corpul ' + m.check.body + '/10' : ''}${m.check.asked != null ? ' · ce ai cerut ' + m.check.asked + '/10' + (m.check.missing ? ' (lipsea: ' + esc(m.check.missing.join(', ')) + ')' : '') : ''}${m.check.expr != null ? ' · expresia ' + m.check.expr + '/10' : ''}${m.rwCost ? '<br>💵 Runware: ' + usd4(m.rwCost) + ' (' + m.rwGens + ' ' + (m.rwGens === 1 ? 'generare' : 'generări') + ')' : ''}${m.bd != null ? '<br>🧍 silueta (telefon): ' + Math.max(0, Math.round(100 - m.bd * 250)) + '% față de poza întreagă' : ''}${m.cands && m.cands.length > 1 ? '<br>🎯 aleasă din ' + m.cands.length + ': ' + m.cands.map(d => d == null ? '?' : idPct(d) + '%').join(' · ') : ''}</p>` : ''}${m.gen ? genDiagHTML(m) : ''}</div>`)]);
   if(m.img && !me && !busy && vidReady() && !m.vidPending) opts.push(['🎬', m.vid ? 'Refă video-ul' : 'Animează (video scurt)', () => vidMake(cur, chat, m, m.vidMv || '')]);   // 13.5
+  if(m.vid && m.vidChk) opts.push(['🔎', 'Cât de fidel e video-ul', () => openSheet(`<h4>🔎 Video-ul</h4><div class="pad"><p style="white-space:pre-line;margin:0">${esc(vidInfo(m))}</p></div>`)]);   // 13.8 (2)
   if(m.vid) opts.push(['💾', 'Salvează video-ul în telefon', () => vidSave(m.vid)]);
   if(m.img) opts.push(['💾', 'Salvează poza în telefon', () => saveImage(m.img)]);
   if(m.img && canShareFiles()) opts.push(['↗️', 'Trimite poza în altă aplicație', () => shareImage(m.img)]);
@@ -12525,11 +12735,47 @@ const CC_ENV = {casa:'relaxing at home, shifting slightly into a comfortable pos
   bucatarie:'in the kitchen, busy with something for a moment, then glancing back at the camera', strada:'walking outside, the phone moving slightly with the steps, glancing at the camera',
   parc:'outdoors, a light breeze moving the hair, glancing at the camera', cafenea:'sitting in a cafe, taking a small sip from a cup, then looking at the camera',
   masina:'sitting in a parked car, relaxed, glancing at the camera', birou:'at a desk, glancing at the screen, then back at the camera', plaja:'at the beach, a breeze moving the hair, squinting a little in the light, glancing at the camera'};
+// 13.8: prețurile exacte, după alegeri
+function vidHintDraw(){
+  const h = $('#stVidHint'); if(h){ const f = vidFid(), q = vidQ(), s0 = vidSec();
+    h.textContent = f ? `🎯 1:1, ${S.vidQ === 'clar' ? 'Standard' : 'Ciornă'}, ${s0} s: clipul ${usd4(q.usd * s0)} + cadrul de final (o poză${imgPrice() > 0 ? ', ~' + usd4(imgPrice()) : ''}); dacă fața alunecă, refăcut automat o dată (încă ${usd4(q.usd * s0)}).`
+      : `💰 Economic, ${S.vidQ === 'clar' ? 'Clar' : 'Ciornă'}, ${s0} s: ${usd4(q.usd * s0)}; doar primul cadru, fără refacere (fața se măsoară și se arată pe video).${+S.vidS > 6 ? ' Economic merge până la 6 s.' : ''}`; }
+  const g = $('#stCcHint'); if(g){ const all = ccCost(CC_KINDS);
+    g.textContent = vidFid() ? `🎯 1:1: 8 clipuri × ${AV_CLIP_S} s pe P-Video-2, fiecare începe și se termină pe imaginea de apel: ~${usd(all)} pe loc, o singură dată; un clip refăcut costă încă o dată cât el.`
+      : `💰 Economic: 8 clipuri × ${AV_CLIP_S} s pe P-Video, doar din primul cadru: ~${usd(all)} pe loc, o singură dată.`; }
+}
 const ccPrompt = (kind, env) => `A front-facing phone video call, handheld phone camera. The same person as in the image, ${kind === 'activ' ? (CC_ENV[env] || CC_ENV.casa) : CC_TXT[kind]}. Natural, subtle, realistic motion. Keep the face, hair, clothes, framing, light and background exactly the same. ${/^vorb/.test(kind) ? 'No text.' : 'No talking, no text.'}`;
 const CALL_DANGLE = /(?:^|\s)(și|si|că|ca|dar|iar|sau|adică|adica|deci|pentru|fiindcă|fiindca|când|cand|dacă|daca|cu|la|de|pe|în|in|din|un|o|mai|ce|care|cum|unde|să|sa|îmi|imi|mi|mă|ma|te|ne|nu|foarte|prea|al|ăla|aia|eu|tu|parcă|parca|gen|and|but|or|so|because|the|to|with|of)$/i;
 const callHold = t => { const x = String(t || '').trim(); return !!x && (CALL_DANGLE.test(x) || /[,:]$/.test(x)); };
 // un clip din imaginea `srcK` (în baza de date), salvat în telefon; costul intră la Runware
-async function rwClip(cc, srcK, prompt, signal, lite){
+/* 13.8 (5)(6): pe Fidelitate 1:1, clipul de apel e P-Video-2 cu aceeași imagine de apel ca prim și ultim cadru (bucla se închide pe
+   ea; „la revedere” doar cu primul cadru, fiindcă se termină altfel). Apoi verificarea pe 8 cadre; nu trece → refăcut o dată;
+   nici atunci → nu se folosește (rămâne fața din telefon), marcat ca să nu se mai plătească la fiecare apel. */
+const ccQ = lite => VID_P2Q[lite || S.avClipQ === 'rapid' ? 'rapid' : 'clar'];
+const ccPer = kind => vidFid() ? ccQ(CC_LITE.has(kind)).usd * AV_CLIP_S : (S.avClipQ === 'rapid' || CC_LITE.has(kind) ? AV_CLIP_Q.rapid.usd : AV_CLIP_Q.clar.usd) * AV_CLIP_S;
+async function rwClip2(cc, srcK, prompt, signal, lite, kind){
+  const b = await DB.get(srcK); if(!b) return null;
+  const q = ccQ(lite), loop = kind !== 'bye';
+  const pr = prompt + (loop ? ' The clip starts and ends on exactly the same frame (both given), so it loops seamlessly; the face stays exactly the same in every frame.' : ' The face stays exactly the same in every frame.');
+  let spent = 0;   // 13.9: costul clipului (cu refacerea), pentru 📊 Statistică
+  const one = async () => {
+    const x = await rwVideo(await vidTask(VID_P2, pr, AV_CLIP_S, loop ? [b, b] : [b], q), signal);
+    const u = x.videoURL || x.videoUrl || x.mediaURL || x.outputURL; if(!u) throw new Error('Runware n-a întors clipul.');
+    const cost = +x.cost > 0 ? +x.cost : q.usd * AV_CLIP_S;
+    if(cost < 5){ const day = rwDay(); day.usd = Math.round((day.usd + cost) * 1e6) / 1e6; day.n++; saveSettings(); addUsage(cc.id, cost, 'img', null, 'apel'); spent += cost; }
+    const v = await vidFetch(u), k = v ? await vidCheck(cc, v, b).catch(() => null) : null;
+    return {u, v, k};
+  };
+  let r = await one(), redo = 0;
+  if(r.k && !r.k.ok && rwCapLeft() >= q.usd * AV_CLIP_S){ try{ const r2 = await one(); redo = 1; if(vidChkScore(r2.k) > vidChkScore(r.k)) r = r2; }catch(e){ if(e.name === 'AbortError') throw e; redo = 1; } }
+  const chk = r.k ? {face:r.k.face, min2:r.k.min2, s0:r.k.s0, body:r.k.body, ok:r.k.ok, why:r.k.why || ''} : null;
+  const cost = Math.round(spent * 1e5) / 1e5;
+  if(chk && chk.ok === false) return {bad:1, at:Date.now(), chk, redo, p2:1, cost};
+  if(r.v) return {k:await saveImg(r.v), at:Date.now(), chk, redo, p2:1, cost};
+  return {url:r.u, at:Date.now(), chk, redo, p2:1, cost};
+}
+async function rwClip(cc, srcK, prompt, signal, lite, kind = ''){
+  if(vidFid()) return rwClip2(cc, srcK, prompt, signal, lite, kind);   // 13.8
   const b = await DB.get(srcK); if(!b) return null;
   const q0 = AV_CLIP_Q[S.avClipQ] || AV_CLIP_Q.clar, q = lite ? AV_CLIP_Q.rapid : q0;   // 12.6: „lite” = ciornă (clipurile scurte, puțin văzute)
   const task = {taskType:'videoInference', taskUUID:crypto.randomUUID(), model:AV_CLIP_MDL, positivePrompt:prompt, duration:AV_CLIP_S, fps:24, numberResults:1, outputType:'URL', outputFormat:'MP4', outputQuality:85,
@@ -12538,16 +12784,16 @@ async function rwClip(cc, srcK, prompt, signal, lite){
   const u = x.videoURL || x.videoUrl || x.mediaURL || x.outputURL; if(!u) throw new Error('Runware n-a întors clipul.');
   const cost = +x.cost > 0 ? +x.cost : q.usd * AV_CLIP_S;
   if(cost < 5){ const day = rwDay(); day.usd = Math.round((day.usd + cost) * 1e6) / 1e6; day.n++; saveSettings(); addUsage(cc.id, cost, 'img', null, 'apel'); }
-  try{ const r = await fetch(u); if(r.ok){ let v = await r.blob(); if(v.size > 1000){ if(!/^video\//.test(v.type)) v = new Blob([v], {type:'video/mp4'}); return {k:await saveImg(v), at:Date.now()}; } } }catch(e){}
-  return {url:u, at:Date.now()};
+  try{ const r = await fetch(u); if(r.ok){ let v = await r.blob(); if(v.size > 1000){ if(!/^video\//.test(v.type)) v = new Blob([v], {type:'video/mp4'}); return {k:await saveImg(v), at:Date.now(), cost}; } } }catch(e){}
+  return {url:u, at:Date.now(), cost};   // 13.9: costul, pentru 📊 Statistică
 }
 const CC_LITE = new Set(['gand', 'ras', 'priv', 'bye']);   // 12.6: se văd puțin: ciornă (~$0,02), restul la calitatea aleasă
-const ccCost = ks => ks.reduce((a, k) => a + (S.avClipQ === 'rapid' || CC_LITE.has(k) ? AV_CLIP_Q.rapid.usd : AV_CLIP_Q.clar.usd) * AV_CLIP_S, 0);
+const ccCost = ks => ks.reduce((a, k) => a + ccPer(k), 0);   // 13.8: după fidelitate
 // 12.6: clipurile sunt ale locului: dacă imaginea de acum n-are set, dar există unul din același loc (ultimele 7 zile), apelul pornește de pe el
 function ccPlacePics(ch, chat0, pics){
   if(!pics.length || S.callClips === 'off' || !ch.callClips || ch.callClips[pics[0]]) return pics;
   let env = ''; try{ env = ambEnv({c:ch, ch:chat0}); }catch(e){ return pics; }
-  const best = Object.entries(ch.callClips).filter(([, x]) => x && x.env === env && Date.now() - (x.at || 0) < 7 * 864e5 && Object.keys(x.v || {}).length >= 4).sort((a, b) => (b[1].at || 0) - (a[1].at || 0))[0];
+  const best = Object.entries(ch.callClips).filter(([, x]) => x && x.env === env && Date.now() - (x.at || 0) < 7 * 864e5 && Object.values(x.v || {}).filter(r => r && !r.bad).length >= 4).sort((a, b) => (b[1].at || 0) - (a[1].at || 0))[0];
   return best ? [best[0], ...pics.filter(k => k !== best[0])] : pics;
 }
 // 12.6: ritmul vorbirii: între propoziții clipul „vorbește” se oprește o clipă, apoi merge odată cu vocea
@@ -12754,20 +13000,20 @@ async function ccEnsure(c){
   const work = async () => {
     while(!stop && call === c && i < todo.length){
       const kind = todo[i++];
-      if(rwCapLeft() < avClipPer()){ if(!stop) toast('Plafonul Runware de azi e atins: restul mișcării, data viitoare.', 4500); stop = true; break; }
-      try{ const r = await rwClip(cc, k0, ccPrompt(kind, set.env), undefined, CC_LITE.has(kind)); if(r){ set.v[kind] = r; done++; await saveChars(); if(call === c){ ccAdd(c, kind, r); prog(); } } }
+      if(rwCapLeft() < ccPer(kind) * (vidFid() ? 2 : 1)){ if(!stop) toast('Plafonul Runware de azi e atins: restul mișcării, data viitoare.', 4500); stop = true; break; }   // 13.8: cu loc și pentru o refacere
+      try{ const r = await rwClip(cc, k0, ccPrompt(kind, set.env), undefined, CC_LITE.has(kind), kind); if(r){ set.v[kind] = r; done++; if(r.bad) c.ccBad = (c.ccBad || 0) + 1; await saveChars(); if(call === c){ ccAdd(c, kind, r); prog(); } } }
       catch(e){ if(e.wk){ cc.avClipWk = 1; saveChars(); if(!stop) toast('🎬 ' + e.message + ' Pune cheia Runware direct în telefon (Setări → Poze).', 6500); stop = true; }
         else if(/credit|balance/i.test(e.message)){ if(!stop) toast(e.message, 5000); stop = true; }
         c.ccErr = String(e && e.message || e).slice(0, 160); }   // 13.2
     }
   };
   await Promise.all([work(), work()]); c.ccMaking = false;
-  ccChip(c, done >= CC_KINDS.length ? '🎬 Mișcarea ei reală e gata' : '', 2500);
+  ccChip(c, done >= CC_KINDS.length ? '🎬 Mișcarea ei reală e gata' + (c.ccBad ? ` (${c.ccBad} ${c.ccBad === 1 ? 'clip n-a' : 'clipuri n-au'} trecut verificarea feței: acolo rămâne fața din telefon)` : '') : '', c.ccBad ? 6000 : 2500);
   ccPrune(cc); saveChars();
 }
 function ccLoad(c){ const set = ccSet(c); if(!set) return; for(const [k, r] of Object.entries(set.v || {})) ccAdd(c, k, r); }
 async function ccAdd(c, kind, r){
-  if(call !== c || !r) return;
+  if(call !== c || !r || r.bad) return;   // 13.8 (6): clipul care n-a trecut verificarea nu se folosește
   if(!c.cl) c.cl = {els:{}, cur:null, last:{}, lastAny:performance.now(), gap:0};
   if(c.cl.els[kind]) return;
   const cvd = $('.callv .cvid'); if(!cvd) return;
@@ -12839,7 +13085,7 @@ function callDiag(c){
   out.push(['🖼️ Imaginea', !c.video ? 'apel doar audio' : c.framePending ? `se pregătește imaginea de apel pentru „${env}”` : k0 && callFrameOf(cc, env) === k0 ? `imaginea de apel pentru „${env}”` : `poza de profil sau din chat${c.frameLate ? ' (imaginea de apel va fi gata data viitoare)' : ''}`]);
   const clipOn = !!(L && L.cur && L.cur !== 1 && L.cur.classList.contains('on'));
   out.push(['👄 Fața și gura', !c.video ? '—' : c.vfWhy || (!V ? 'nepornită încă' : V.ready ? `găsită (${V.how || 'detector'}) · ${V.spr ? 'gura din cadre reale' : 'gura desenată'} · acum se vede ${clipOn ? 'un clip' : 'fața care vorbește'}` : (V.why || 'caut fața…'))]);
-  const set = cc.callClips && k0 ? cc.callClips[k0] : null, n = set && set.v ? CC_KINDS.filter(k => set.v[k]).length : 0;
+  const set = cc.callClips && k0 ? cc.callClips[k0] : null, n = set && set.v ? CC_KINDS.filter(k => set.v[k] && !set.v[k].bad).length : 0, nb = set && set.v ? CC_KINDS.filter(k => set.v[k] && set.v[k].bad).length : 0;   // 13.8
   let cl = !c.video ? '—' : S.callClips === 'off' ? 'oprite (Setări → Apeluri)' : c.framePending ? 'așteaptă imaginea de apel' : c.ccWhy || `${n}/${CC_KINDS.length} gata${c.ccMaking ? ', se fac acum' : ''}`;
   if(clipOn) cl += ` · rulează „${L.cur.dataset.kind}”${L.cur.paused ? ' (pe pauză)' : ''}`;
   if(c.ccErr) cl += ` · ultima problemă: ${c.ccErr}`;
@@ -13342,7 +13588,7 @@ async function crMake(E, run, v, gen){
   try{
     let b = await gen();
     try{ if(b.type === 'image/png') b = await toJpeg(b, 2048, .92); }catch(e){}
-    addUsage(E.id, imgPrice(), 'img', null, 'profil');
+    addUsage(E.id, imgPrice(), 'img', null, 'creare');
     if(ed !== E) return;
     v.blob = b; v.url = URL.createObjectURL(b); v.st = 'ok'; crRender();
     v.chk = await crCheck(v); v.note = crNote(v); crRender();
@@ -13536,7 +13782,7 @@ async function crPortraitFrom(E, v){
   for(let k = 0; k < 2; k++){
     try{
       let b = await genImage(p, v.blob, signal, null, {model, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'});
-      addUsage(E.id, imgPrice(), 'img', null, 'profil');
+      addUsage(E.id, imgPrice(), 'img', null, 'creare');
       try{ if(b.type === 'image/png') b = await toJpeg(b, 2048, .92); }catch(e){}
       if(!v.chk || !v.chk.d) return {blob:b, how:'gen'};            // fără față măsurabilă în poza întreagă: nu avem cu ce compara
       const fs = await faceDescs(b);
@@ -13659,7 +13905,7 @@ function crAngles(){
       for(let t = 0; t < 2; t++){
         try{
           let b = await genImage(p, base, signal, null, {model, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'});
-          addUsage(E.id, imgPrice(), 'img', null, 'profil');
+          addUsage(E.id, imgPrice(), 'img', null, 'creare');
           try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
           if(!ref) return b;
           const fs = await faceDescs(b); if(!fs.length) return b;   // din profil fața nu se poate măsura: o păstrăm
@@ -13960,7 +14206,7 @@ async function lookApply(c, ch, B0){
       const p = `Edit this exact photo: the same person, with exactly the same face and identity, skin, age, pose, framing, background and light. Change only this: ${en}. Make the change clearly visible; keep everything else exactly the same. ${STIL_TAG.photo}`;
       const bs = await genMany(p, base, null, {model:mdl, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}, 2).catch(e => { throw e; });
       let best = null;
-      for(let b of bs){ addUsage(c.id, imgPrice(), 'img', null, 'profil'); try{ if(b.type === 'image/png') b = await toJpeg(b, 2048, .92); }catch(e){}
+      for(let b of bs){ addUsage(c.id, imgPrice(), 'img', null, 'look'); try{ if(b.type === 'image/png') b = await toJpeg(b, 2048, .92); }catch(e){}
         const fs = await faceDescs(b).catch(() => []), d = fs.length && ref ? Math.min(...fs.map(f => fdist(f.d, ref))) : null;
         if(d != null && d < .5 && (!best || d < best.d)) best = {b, d}; }
       if(!best) throw new Error('portretul nou n-a ieșit cu aceeași față. Încearcă din nou sau schimbă mai puțin deodată.');
@@ -14331,6 +14577,7 @@ const FIELDS = {stKey:'key', stModel:'model', stUser:'userName', stAbout:'userAb
 const SEGS = {stCallFill:'callFill', stCallClips:'callClips', stCallTalk:'callTalk', stCallReal:'callReal', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
 SEGS.stVoiceReal = 'voiceReal';   // 12.9
 SEGS.stVid = 'vid'; SEGS.stVidQ = 'vidQ'; SEGS.stVidS = 'vidS';   // 13.5
+SEGS.stVidFid = 'vidFid'; SEGS.stCcFid = 'vidFid';   // 13.8: o singură alegere, pentru video-uri și apeluri
 let setPanel = null, setPanelPushed = false;
 /* 8.7: actualizare din aplicație. Codul vine oricum din rețea la pornire;
    asta prinde versiunile apărute cât aplicația a stat deschisă și forțează reîncărcarea curată. */
@@ -14518,6 +14765,7 @@ function goFind(i){
 }
 function syncSegs(){
   for(const [id, k] of Object.entries(SEGS)) $$('#' + id + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === String(S[k])));
+  vidHintDraw();   // 13.8
   $('#stAnt').hidden = S.vault === 'on';
   $('#stVaultBox').hidden = S.vault !== 'on';
   $('#stVkWipeWrap').hidden = !(S.vault === 'on' && S.vaultHas && ['key', 'rwKey'].some(k => String(S[k] || '').trim()));

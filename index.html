@@ -564,7 +564,10 @@ img.avl{animation:avBreath 10s ease-in-out infinite alternate,avIn .7s ease-out 
 .picbox{position:relative;width:100%;max-width:440px}
 .picbox .pvid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;opacity:0;transition:opacity .35s}
 .picbox .pvid.on{opacity:1}
-.picbox .vbadge{position:absolute;top:10px;left:10px;padding:3px 9px;border-radius:999px;background:#0009;color:#fff;font-size:.72rem;pointer-events:none}
+.picbox .statc{display:block;padding:8px 0;border-top:1px solid var(--line)}.statc b{display:block;margin-bottom:2px}.statc small{display:block;opacity:.85;line-height:1.4;white-space:normal;overflow:visible;text-overflow:clip}
+.vbadge.warn{background:rgba(160,90,0,.85)}
+.vscn{display:grid;grid-template-columns:1fr 1fr;gap:0 6px}
+.vbadge{position:absolute;top:10px;left:10px;padding:3px 9px;border-radius:999px;background:#0009;color:#fff;font-size:.72rem;pointer-events:none}
 .picbox .vload{position:absolute;left:50%;bottom:52px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;padding:7px 13px;border-radius:999px;background:#000b;color:#fff;font-size:.8rem;white-space:nowrap}
 .vfull{position:fixed;inset:0;z-index:2000;background:#000;display:flex;align-items:center;justify-content:center}
 .vfull video{max-width:100%;max-height:100%}
@@ -2262,8 +2265,10 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
             <p class="hint" id="stKvSt" hidden></p>
             <label style="margin-top:10px">🎬 Video de la personaje<small class="lh">Un clip scurt, fără sunet, făcut din poza ei, cu mișcare naturală (cheia Runware în telefon). Îl trimite când spune ea sau când îi ceri; și pe orice poză: ține apăsat → „🎬 Animează”.</small></label>
             <div class="seg" id="stVid"><button data-v="off">Oprit</button><button data-v="cerere">La cerere</button><button data-v="on">Și când vrea ea</button></div>
-            <div class="seg" id="stVidQ" style="margin-top:6px"><button data-v="rapid">Ciornă · $0,005/s</button><button data-v="clar">Clar · $0,02/s</button></div>
-            <div class="seg" id="stVidS" style="margin-top:6px"><button data-v="4">4 s</button><button data-v="5">5 s</button><button data-v="6">6 s</button></div>
+            <div class="seg" id="stVidFid" style="margin-top:6px"><button data-v="max">🎯 Fidelitate 1:1</button><button data-v="eco">💰 Economic</button></div>
+            <div class="seg" id="stVidQ" style="margin-top:6px"><button data-v="rapid">Ciornă</button><button data-v="clar">Standard</button></div>
+            <div class="seg" id="stVidS" style="margin-top:6px"><button data-v="4">4 s</button><button data-v="5">5 s</button><button data-v="6">6 s</button><button data-v="7">7 s</button><button data-v="8">8 s</button></div>
+            <p class="hint" id="stVidHint"></p>
             <p class="hint">💎 FLUX 3 Image: model mare, făcut pentru editări („Modifică poza”) și pentru a păstra aceeași persoană din fața și corpul ei; o singură poză în loc de 3 variante + retușuri. Klein: de ~10 ori mai ieftin. Klein 9B KV e mai rapid cu repere, dar e încă în probă: dacă fețele ies mai puțin asemănătoare cu el, rămâi pe Klein 9B.</p>
             <label style="margin-top:10px">Ce merge pe Runware</label>
             <div class="seg" id="stImgRoute"><button data-v="rw">⚡ Totul</button><button data-v="mix">Doar pozele 9B</button></div>
@@ -2340,8 +2345,10 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <label>📵 Ca un om<small class="lh">Noaptea poate dormi (nu răspunde sau răspunde somnoroasă); la volan sau în ședință respinge și te sună ea după; uneori o întrerupe ceva.</small></label>
       <div class="seg" id="stCallReal"><button data-v="on">Pornit</button><button data-v="off">Răspunde mereu</button></div>
       <h3 class="sh">🎬 Imaginea</h3>
-      <label>🎬 Mișcare reală (clipuri Runware)<small class="lh">8 clipuri scurte o dată pe loc (dormitor, bucătărie, afară…), ~$0,40 la „Clare”. Cer cheia Runware în telefon.</small></label>
+      <label>🎬 Mișcare reală (clipuri Runware)<small class="lh">8 clipuri scurte o dată pe loc (dormitor, bucătărie, afară…). Cer cheia Runware în telefon.</small></label>
       <div class="seg" id="stCallClips"><button data-v="on">Pornit</button><button data-v="profil">Doar pe avatar</button><button data-v="off">Oprit</button></div>
+      <div class="seg" id="stCcFid" style="margin-top:6px"><button data-v="max">🎯 Fidelitate 1:1</button><button data-v="eco">💰 Economic</button></div>
+      <p class="hint" id="stCcHint"></p>
       <label>🗣️ Cât vorbește<small class="lh">Clip real: se mișcă natural, gura nu e potrivită pe cuvinte. Fața din telefon: gura pe cuvinte, restul nemișcat.</small></label>
       <div class="seg" id="stCallTalk"><button data-v="clip">Clip real</button><button data-v="face">Fața din telefon</button></div>
       <label>👄 Fața vorbește<small class="lh">Buze, clipit și mișcarea capului pe imaginea ei, în telefon.</small></label>
@@ -2439,6 +2446,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 
     <div class="panel sec" data-panel="cost" data-title="Consum" hidden>
       <div class="cost" id="stCost"></div>
+      <div id="stStat"></div>
       <details class="sadv"><summary>✏️ Preț personalizat <small>doar dacă vrei altul decât cel automat</small></summary>
         <label for="stPin">Preț $/1M tokeni: intrare · ieșire</label>
         <div style="display:flex;gap:8px"><input id="stPin" inputmode="decimal" placeholder="auto"><input id="stPout" inputmode="decimal" placeholder="auto"></div>
