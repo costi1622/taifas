@@ -564,7 +564,8 @@ img.avl{animation:avBreath 10s ease-in-out infinite alternate,avIn .7s ease-out 
 .picbox{position:relative;width:100%;max-width:440px}
 .picbox .pvid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;opacity:0;transition:opacity .35s}
 .picbox .pvid.on{opacity:1}
-.picbox .statc{display:block;padding:8px 0;border-top:1px solid var(--line)}.statc b{display:block;margin-bottom:2px}.statc small{display:block;opacity:.85;line-height:1.4;white-space:normal;overflow:visible;text-overflow:clip}
+.picbox .shgrid .shok{position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(20,120,60,.85);color:#fff;font-size:.8rem;line-height:24px;padding:0;cursor:pointer}
+.statc{display:block;padding:8px 0;border-top:1px solid var(--line)}.statc b{display:block;margin-bottom:2px}.statc small{display:block;opacity:.85;line-height:1.4;white-space:normal;overflow:visible;text-overflow:clip}
 .vbadge.warn{background:rgba(160,90,0,.85)}
 .vscn{display:grid;grid-template-columns:1fr 1fr;gap:0 6px}
 .vbadge{position:absolute;top:10px;left:10px;padding:3px 9px;border-radius:999px;background:#0009;color:#fff;font-size:.72rem;pointer-events:none}
@@ -2269,6 +2270,13 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
             <div class="seg" id="stVidQ" style="margin-top:6px"><button data-v="rapid">Ciornă</button><button data-v="clar">Standard</button></div>
             <div class="seg" id="stVidS" style="margin-top:6px"><button data-v="4">4 s</button><button data-v="5">5 s</button><button data-v="6">6 s</button><button data-v="7">7 s</button><button data-v="8">8 s</button></div>
             <p class="hint" id="stVidHint"></p>
+            <div class="seg" id="stVidRep" style="margin-top:6px"><button data-v="on">🧬 Corectura feței pe clip</button><button data-v="off">Fără corectură</button></div>
+            <p class="hint">Corectura (P-Video-Replace, ~$0,03/s) se face doar când fața a alunecat și după refacere: persoana din clip e înlocuită după repere, mișcarea rămâne.</p>
+            <label style="margin-top:10px">🆔 Judecătorul feței<small class="lh">Cu el se aleg schițele, se acceptă retușurile și se verifică fișa, video-urile și apelurile.</small></label>
+            <div class="seg" id="stArc"><button data-v="on">ArcFace (strict)</button><button data-v="off">Vechi (face-api)</button></div>
+            <p class="hint" id="stArcHint"></p>
+            <div class="seg" id="stFaceMarks" style="margin-top:6px"><button data-v="off">Pistruii doar din imagine</button><button data-v="on">Și din text</button></div>
+            <div class="seg" id="stBodyWeak" style="margin-top:6px"><button data-v="on">Corpul ⚠️ se folosește</button><button data-v="off">Doar corpul fără ⚠️</button></div>
             <p class="hint">💎 FLUX 3 Image: model mare, făcut pentru editări („Modifică poza”) și pentru a păstra aceeași persoană din fața și corpul ei; o singură poză în loc de 3 variante + retușuri. Klein: de ~10 ori mai ieftin. Klein 9B KV e mai rapid cu repere, dar e încă în probă: dacă fețele ies mai puțin asemănătoare cu el, rămâi pe Klein 9B.</p>
             <label style="margin-top:10px">Ce merge pe Runware</label>
             <div class="seg" id="stImgRoute"><button data-v="rw">⚡ Totul</button><button data-v="mix">Doar pozele 9B</button></div>
