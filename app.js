@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '13.6';
+const APP_VER = '13.7';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1437,7 +1437,15 @@ const ANG_TXT2 = {
   indoor:['indoors in daylight', "the same person's face indoors in even daylight: use it only for her identity (face, eyes, hair); not for clothes, pose or background."],
   close:['in a close-up', "a close-up of the same person's face: use it for the exact facial features; not for clothes, light or background."],
   tilt:['with the head slightly tilted', "the same person's face with the head slightly tilted: use it for how the face looks from that angle; not for clothes, light or background."]};
-async function angleRefsFor(c, shot, room, n = 1){
+/* 13.7 (4): ancora de identitate. Un loc de reper rămas liber (fără unghi cerut de scenă) primește mereu același unghi din fișă:
+   cel mai apropiat de portret (distanța măsurată la fișă), dintre cele din față / ¾, fără rezervele ⚠️ și fără cele scoase. */
+const ANCHOR_ANG = new Set(['l34', 'r34', 'smile', 'high', 'warm', 'sun', 'serious', 'l34s', 'r34s', 'close', 'indoor', 'window', 'tilt']);
+const ANCHOR_TXT = "another photo of the same person's face, a second identity reference: use it only to keep the exact facial features (face shape, eyes, nose, lips, skin); not for the expression, clothes, light or background.";
+function idAnchorOf(c, seen){
+  const v = sheetOf(c).filter(x => !x.weak && !refOut(c, x.k) && x.d != null && ANCHOR_ANG.has(x.ang) && !(seen && seen.has(x.ang)));
+  return v.sort((a, b) => a.d - b.d)[0] || null;
+}
+async function angleRefsFor(c, shot, room, n = 1, leg = false){
   if(S.refAng3 === 'off' || n <= 0) return [];
   const t = String(shot || ''), all = sheetPick(c, shot, 99), rs = c.refSet && c.refSet.e ? c.refSet.e : [];
   const q = k => { const x = rs.find(y => y.key === k); const dp = x && x.dp != null ? x.dp : null; return dp == null ? .5 : Math.max(0, Math.min(1, (.45 - dp) / .25)); };
@@ -1457,6 +1465,9 @@ async function angleRefsFor(c, shot, room, n = 1){
     const [nm, txt] = ANG_TXT[pick.ang] || ANG_TXT2[pick.ang] || ['', ''];
     out.push({img, ang:pick.ang, name:nm, txt, lbl:pick.ang === 'user' ? 'poza ta în plus' : 'unghi din fișă (' + (SHEET_RO[pick.ang] || pick.ang) + ')', strong:pick.strong}); seen.add(fam);
   }
+  if(!leg && room && out.length < n && S.idAnchor !== 'off'){ const a = idAnchorOf(c, seen);   // 13.7 (4)
+    if(a){ let box = a.box; if(box === undefined){ const b = await DB.get(a.k).catch(() => null); box = b ? await faceBoxOf(b) : null; }
+      const img = await refCropUp(a.k, box); if(img) out.push({img, ang:a.ang, name:'a second identity reference', txt:ANCHOR_TXT, lbl:'ancora (' + (SHEET_RO[a.ang] || a.ang) + ')', strong:false, anchor:true}); } }
   return out;
 }
 async function angleRefFor(c, shot, room){ return (await angleRefsFor(c, shot, room, 1))[0] || null; }
@@ -1670,7 +1681,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   // 9.83 (2): scena cere un unghi pe care portretul nu-l arată (profil, zâmbet larg) → și unghiul din fișa de identitate
   let angRef = null, angName = '', angTxt = '', angLbl = '', ang2 = null;   // 10.6 (B) + 11.0 (C2): după scor; fără corp în cadru, două
   if(!bodyRef && st === 'photo'){ const wantS = !!(opt.sref && sceneRefOn(c, opt)), room = clothedBody ? 2 + (clothedBody.full2 ? 1 : 0) + (wantS ? 1 : 0) < 4 : true;
-    try{ const as = await angleRefsFor(c, shot, room, clothedBody ? 1 : 2); if(as[0]){ angRef = as[0].img; angName = as[0].name; angTxt = as[0].txt; angLbl = as[0].lbl; } if(as[1]) ang2 = as[1]; }catch(e){} }
+    try{ const as = await angleRefsFor(c, shot, room, clothedBody ? 1 : 2, !!opt.idLeg); if(as[0]){ angRef = as[0].img; angName = as[0].name; angTxt = as[0].txt; angLbl = as[0].lbl; } if(as[1]) ang2 = as[1]; }catch(e){} }
   let ratioTxt = ''; if(clothedBody){ try{ ratioTxt = bodyRatioText(await refBodySig(c)); }catch(e){} }   // 9.89 (a)
   const faceInstruction = clothedBody
     ? `Image 1 is a close-up of ${c.name}'s face: keep exactly this face and identity (${HEAD_KEEP}). Image 2 shows ${c.name}'s whole body (its head is blurred on purpose: take ONLY the body from it, never the face or the hair): reproduce exactly the same body, with the same build, weight, height impression and proportions of shoulders, chest, waist, hips, arms and legs; do NOT copy its clothing, pose, framing, background or light, which come only from this text.${clothedBody.full2 ? ` Image ${angRef ? 4 : 3} is the same person's whole body standing, front view (head blurred on purpose): the same body, for its exact proportions.` : ''}${ratioTxt ? ' ' + ratioTxt : ''}${angRef ? ` Image 3 is ${angTxt}` : ''}`
@@ -2355,7 +2366,9 @@ const bodyPct = d => d == null ? null : Math.max(0, Math.round(100 - d * 250));
    nu trece, încă o tură de schițe cu corectura de corp, înainte de poza mare. */
 const tmOn = opt => opt && opt.tm && opt.tm.s;
 function tmAdd(opt, k, t0){ if(tmOn(opt)) opt.tm.s[k] = (opt.tm.s[k] || 0) + (performance.now() - t0); }   // ms
-const FACE_RET = .36, FACE_RET2 = .38;   // 10.9: a doua trecere de retuș (sub 0,38 ≈ 95%)   // retușul feței: doar peste pragul ăsta (9.94: 0,36, mai strict)
+const FACE_RET = .36, FACE_RET2 = .38;
+// 13.7 (3): retușul pornește mai devreme (0,33; a doua trecere 0,35). opt.idLeg = pragurile din 13.6, pentru 🧪 testul de identitate
+const fRet = (opt = {}) => opt.idLeg ? FACE_RET : .33, fRet2 = (opt = {}) => opt.idLeg ? FACE_RET2 : .35;   // 10.9: a doua trecere de retuș (sub 0,38 ≈ 95%)   // retușul feței: doar peste pragul ăsta (9.94: 0,36, mai strict)
 // reperul de corp: doar persoana (după segmentare), cu o margine mică, centrată pe pătrat; în memorie, pe poză
 const bodyCropCache = new Map();
 async function personCrop(blob, key){
@@ -2766,7 +2779,8 @@ function kitEnsure(c, o = {}){
   const st = kitState(c), fresh = st.fresh && (!o.gen || (c.kit && c.kit.gen));
   if(fresh && st.ok && !o.force) return;
   if(!o.force){ const r = kitRan.get(c.id), k = kitKey(c) + '|' + (o.gen ? 1 : 0); if(r && r.k === k && Date.now() - r.at < 30 * 60e3) return; kitRan.set(c.id, {k, at:Date.now()}); }   // 10.7: fără bucle
-  const go = () => { const w = o.force ? 0 : rwPauseLeft(); if(w > 0){ setTimeout(go, Math.min(w, 5 * 60e3) + 500); return; } kitBuild(charById(c.id) || c, o).catch(() => {}); };   // 13.1
+  const go = () => { if(idtJob && !o.force){ setTimeout(go, 60e3); return; }   // 13.7: nu în timpul testului de identitate (costul se măsoară pe total)
+    const w = o.force ? 0 : rwPauseLeft(); if(w > 0){ setTimeout(go, Math.min(w, 5 * 60e3) + 500); return; } kitBuild(charById(c.id) || c, o).catch(() => {}); };   // 13.1
   setTimeout(go, o.delay ?? 1500);
 }
 // (3) garanția + finisarea, după orice generare cu personajul
@@ -2776,14 +2790,14 @@ async function finishPerson(c, r, shot, signal, opt = {}){
   if(photo && !opt.noChar && S.imgProv === 'worker'){
     if(r.fd === undefined || opt.together){ try{ r.fd = (await localFace(r.blob, c)).d; }catch(e){} }   // împreună: fața ei, dintre cele două
     // fața prea departe → retuș cu același model, păstrat doar dacă telefonul măsoară că s-a apropiat
-    if(r.fd != null && r.fd > FACE_RET && !r.retouched && !r.retTried && fixBudget()){   // o singură dată: nu repetă un retuș deja încercat
+    if(r.fd != null && r.fd > fRet(opt) && !r.retouched && !r.retTried && fixBudget()){   // 13.7 (3)   // o singură dată: nu repetă un retuș deja încercat
 
       pstage(signal, '✨ Garanția: potrivește fața', 96);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
         if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; r.retouched = true; r.garRet = true; } } }catch(e){ if(e.name === 'AbortError') throw e; }
     }
     // 10.9: a doua trecere, o singură dată: fața tot peste prag după un retuș (al motorului sau al garanției)
-    if(r.fd != null && r.fd > FACE_RET2 && r.retouched && !r.ret2 && fixBudget()){
+    if(r.fd != null && r.fd > fRet2(opt) && (r.retouched || (r.retTried && !opt.idLeg)) && !r.ret2 && fixBudget()){   // 13.7 (3): și când primul retuș n-a apropiat fața
       r.ret2 = true; pstage(signal, '✨ Garanția: încă o trecere pe față', 97);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
         if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; } } }catch(e){ if(e.name === 'AbortError') throw e; }
@@ -3371,7 +3385,8 @@ async function etalonGo(c, onStep = () => {}){
 function etalonStop(){ if(etalonJob) etalonJob.ac.abort(); }
 async function etalonClear(c){ for(const r of etalonOf(c)) for(const x of r.rows || []) if(x.img) await delImg(x.img).catch(() => {}); delete c.etalon; await saveChars(); }
 // tot ce ține 10.0 pe personaj în poze proprii (la ștergerea personajului)
-function fidImgKeys(c){ const k = []; for(const r of etalonOf(c)) for(const x of r.rows || []) if(x.img) k.push(x.img); for(const m of (c.marksPos && c.marksPos.v) || []) if(m.crop) k.push(m.crop); return k; }
+function fidImgKeys(c){ const k = []; for(const r of idtOf(c)) for(const x of r.rows || []) if(x.img) k.push(x.img);   // 13.7
+  for(const r of etalonOf(c)) for(const x of r.rows || []) if(x.img) k.push(x.img); for(const m of (c.marksPos && c.marksPos.v) || []) if(m.crop) k.push(m.crop); return k; }
 
 /* ───── 10.0: profilul → Poze: descrierea față de poze, trăsături obligatorii, semne, măsurători, statistică, etalon ───── */
 function lab2css(L){
@@ -3504,6 +3519,103 @@ function drawEtalon(c, box){
     re(); fidRedraw(c, 'pfStats', drawStats);
   };
   const x = el.querySelector('#pfEtX'); if(x) x.onclick = () => confirmSheet('Ștergi toate rulările setului-etalon și pozele lor?', 'Șterge', async () => { await etalonClear(c); re(); });
+}
+/* ═════════ 🧪 13.7 testul de identitate ═════════
+   4 scene fixe, îmbrăcate, de zi cu zi (din setul-etalon: selfie, afară, corp întreg, așezată), cu hainele din poza ei. „Comparație”:
+   fiecare scenă de două ori, o dată ca în 13.6 (4 schițe, retuș de la 0,36, fără ancoră) și o dată cu 13.7; ordinea alternează.
+   Pe fiecare poză: fața (procent + distanța față de portret; procentul se oprește la 100%, distanța nu), corpul, timpul, costul
+   Runware (cât a crescut costul zilei în timpul pozei) și câte schițe / retușuri. Rămân ultimele 3 rulări. */
+const IDT = [['selfie', 'Selfie de aproape'], ['sun', 'Afară, ziua'], ['full', 'Corp întreg'], ['sit', 'Așezată']];
+const IDT_KEEP = 3, IDT_V = {old:'13.6', new:'13.7'};
+let idtJob = null;
+const idtOf = c => c && Array.isArray(c.idTest) ? c.idTest : [];
+function idtStats(run){
+  for(const v of ['old', 'new']){
+    const R = run.rows.filter(x => x.v === v && !x.err); if(!R.length){ delete run[v]; continue; }
+    const av = f => { const a = R.map(f).filter(x => x != null); return a.length ? a.reduce((s, x) => s + x, 0) / a.length : null; };
+    run[v] = {n:R.length, fd:av(x => x.fd), face:av(x => x.fd != null ? idPct(x.fd) : null), body:av(x => x.bd != null ? bodyPct(x.bd) : null), ms:av(x => x.ms), usd:av(x => x.usd)};
+  }
+}
+async function idtGo(c, ab, onStep = () => {}){
+  if(idtJob) throw new Error('Testul rulează deja.');
+  if(!c || !c.photo || S.imgProv !== 'worker') throw new Error('Testul are nevoie de poze pornite și de o poză de profil.');
+  if(busy) throw new Error('Așteaptă să se termine poza din conversație.');
+  if(typeof call !== 'undefined' && call) throw new Error('Nu în timpul unui apel.');
+  if(kitBusy.has(c.id) || sheetBusy) throw new Error('Pachetul de identitate se face acum: pornește testul după ce e gata.');
+  return await jobRun(`testul de identitate al lui ${c.name}`, () => idtGo0(c, ab, onStep));
+}
+async function idtGo0(c, ab, onStep){
+  const plan = []; IDT.forEach(([k], i) => { for(const v of ab ? (i % 2 ? ['new', 'old'] : ['old', 'new']) : ['new']) plan.push([k, v]); });
+  const ac = new AbortController(), run = {id:uid(), at:Date.now(), ver:APP_VER, ab:!!ab, mdl:rwKlein() === RW_KV ? 'Klein 9B KV' : 'Klein 9B', rows:[]};
+  idtJob = {cid:c.id, ac, i:0, n:plan.length}; keepAwake(true);
+  try{
+    try{ await lookRefOf(c); }catch(e){}
+    const outfit = await outfitOf(c);
+    for(let i = 0; i < plan.length; i++){
+      const [k, v] = plan[i], E = ETALON.find(x => x[0] === k), shot = etalonShot(E[2], outfit); idtJob.i = i; onStep(i, k, v);
+      const row = {k, v}, t0 = performance.now(), u0 = rwDay().usd;
+      try{
+        const r = await renderPerson(c, shot, ac.signal, {kind:'etalon', tag:'test', idLeg:v === 'old', tm:{t0, s:{}}});
+        addUsage(c.id, imgPrice(), 'img', null, 'test');
+        row.img = await saveImg(r.blob); row.fd = r.fd != null ? r3n(r.fd) : null; row.bd = r.bd != null ? r3n(r.bd) : null;
+        row.dr = r.drafts || 0; row.rt = [r.retTried || r.retouched || r.garRet, r.ret2].filter(Boolean).length; if(r.np > 0) row.np = r.np;
+      }catch(e){ if(e.name === 'AbortError'){ run.part = true; break; } row.err = String(e.message || e).slice(0, 160); }
+      row.ms = Math.round(performance.now() - t0); row.usd = Math.round(Math.max(0, rwDay().usd - u0) * 1e5) / 1e5; run.rows.push(row);
+    }
+    idtStats(run);
+    if(run.rows.some(x => x.img) && charById(c.id)){
+      const all = idtOf(c).concat(run), drop = all.slice(0, Math.max(0, all.length - IDT_KEEP));
+      c.idTest = all.slice(-IDT_KEEP); await saveChars();
+      for(const d of drop) for(const x of d.rows || []) if(x.img) delImg(x.img).catch(() => {});
+    } else for(const x of run.rows) if(x.img) delImg(x.img).catch(() => {});
+    return run;
+  } finally { idtJob = null; keepAwake(false); }
+}
+// toate comparațiile păstrate, pe perechi (aceeași scenă, aceeași rulare): cât se schimbă de la 13.6 la 13.7
+function idtPairs(c){
+  const P = [];
+  for(const r of idtOf(c).filter(r => r.ab)) for(const [k] of IDT){ const a = r.rows.find(x => x.k === k && x.v === 'old' && !x.err), b = r.rows.find(x => x.k === k && x.v === 'new' && !x.err); if(a && b) P.push({a, b}); }
+  if(!P.length) return null;
+  const av = f => { const v = P.map(f).filter(x => x != null && !isNaN(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+  return {n:P.length, fd:av(p => p.a.fd != null && p.b.fd != null ? p.b.fd - p.a.fd : null), body:av(p => p.a.bd != null && p.b.bd != null ? bodyPct(p.b.bd) - bodyPct(p.a.bd) : null),
+    ms:av(p => p.b.ms - p.a.ms), usd:av(p => p.b.usd - p.a.usd), win:P.filter(p => p.a.fd != null && p.b.fd != null && p.b.fd < p.a.fd).length, cmp:P.filter(p => p.a.fd != null && p.b.fd != null).length};
+}
+const idtS = ms => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
+const idtD = d => d == null ? '—' : d.toFixed(3).replace('.', ',');
+function drawIdTest(c, box){
+  if(S.imgProv !== 'worker') return;
+  const runs = idtOf(c), last = runs[runs.length - 1], me = idtJob && idtJob.cid === c.id, P = S.rwPhoto, pr = idtPairs(c);
+  const est = n => P && P.n >= 3 && P.avg > 0 ? ` · cam ${usd(P.avg * n)} la media ta de acum` : '';
+  const cell = x => !x ? '<td>—</td>' : x.err ? `<td>✕</td>` : `<td><b>👤${x.fd != null ? idPct(x.fd) + '%' : '—'}${x.bd != null ? ' 🧍' + bodyPct(x.bd) + '%' : ''}${x.np > 0 ? ' 👥' : ''}</b><small>dist. ${idtD(x.fd)}</small><small>${idtS(x.ms)} · ${usd4(x.usd)}</small><small>✏️${x.dr || 1}${x.rt ? ' ✨' + x.rt : ''}</small></td>`;
+  const tot = s => !s ? '<td>—</td>' : `<td><b>👤${Math.round(s.face)}%${s.body != null ? ' 🧍' + Math.round(s.body) + '%' : ''}</b><small>dist. ${idtD(s.fd)}</small><small>${idtS(s.ms)} · ${usd4(s.usd)}/poză</small></td>`;
+  const vs = last ? (last.ab ? ['old', 'new'] : ['new']) : [];
+  const sg = (v, f, u) => (v > 0 ? '+' : v < 0 ? '−' : '±') + f(Math.abs(v)) + (u || '');
+  box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfIdTest"><b>🧪 Test de identitate</b>
+    <small style="margin-top:2px">4 scene fixe, aceleași de fiecare dată (selfie, afară, corp întreg, așezată), cu hainele din poza ei. <b>Comparație</b>: fiecare scenă e făcută o dată ca în 13.6 (4 schițe, retuș de la 98%, fără ancoră) și o dată cu 13.7 (pe KV 6 schițe, retuș mai devreme, ancora de identitate). <b>Distanța</b> feței față de portret: mai mică = mai aproape (procentul se oprește la 100%, distanța nu). Costul e cel Runware al pozei. 4 perechi sunt puține: o concluzie sigură cere 2–3 rulări (se adună mai jos).</small>
+    ${last ? `<table class="ftab et"><tr><th>${esc(fmtD({day:'numeric', month:'short'}, new Date(last.at)))}<small>${esc(last.mdl || '')}${last.part ? ' · oprit' : ''}</small></th>${vs.map(v => `<th>${IDT_V[v]}</th>`).join('')}</tr>
+      ${IDT.map(([k, l]) => `<tr><td>${esc(l)}</td>${vs.map(v => cell(last.rows.find(x => x.k === k && x.v === v))).join('')}</tr>`).join('')}
+      <tr class="tot"><td>Media</td>${vs.map(v => tot(last[v])).join('')}</tr></table>
+      ${pr && pr.cmp ? `<small style="margin-top:6px">📈 <b>13.7 față de 13.6</b>, pe ${pr.n} ${pr.n === 1 ? 'pereche' : 'perechi'} din ${runs.filter(r => r.ab).length} ${runs.filter(r => r.ab).length === 1 ? 'rulare' : 'rulări'}: fața ${pr.fd != null ? sg(pr.fd, idtD) + ' distanță (' + (pr.fd < 0 ? 'mai aproape' : pr.fd > 0 ? 'mai departe' : 'la fel') + ')' : '—'} · mai aproape în ${pr.win} din ${pr.cmp}${pr.body != null ? ' · corpul ' + sg(Math.round(pr.body), x => x, ' puncte') : ''} · timp ${sg(pr.ms, idtS)} · cost ${sg(pr.usd, usd4)} pe poză</small>` : ''}
+      <div class="shgrid">${last.rows.filter(x => x.img).sort((a, b) => IDT.findIndex(y => y[0] === a.k) - IDT.findIndex(y => y[0] === b.k) || (a.v === 'old' ? -1 : 1)).map(x => `<figure><img data-k="${esc(x.img)}" data-fk="${esc(x.img)}" data-t="g" alt=""><figcaption>${esc(IDT_V[x.v])} · ${esc((IDT.find(y => y[0] === x.k) || [])[1] || x.k)}</figcaption></figure>`).join('')}</div>
+      ${last.rows.some(x => x.err) ? `<small>✕ = poza n-a ieșit: ${esc((last.rows.find(x => x.err) || {}).err || '')}</small>` : ''}` : ''}
+    <div class="btns"><button class="btn sm pri" id="pfIdtAb">${me ? '⏹ Oprește' : '⚖️ Comparație (8 poze)'}</button>${me ? '' : '<button class="btn sm" id="pfIdtNow">▶ Doar 13.7 (4 poze)</button>'}${runs.length && !me ? '<button class="btn sm" id="pfIdtX">🗑 Șterge</button>' : ''}</div>
+    ${!me && est(8) ? `<small style="margin-top:4px">💲 Comparația${est(8)}; doar 13.7${est(4)}.</small>` : ''}
+    <small id="pfIdtSt" style="margin-top:6px">${me ? `<span class="spin"></span> Poza ${idtJob.i + 1} din ${idtJob.n}…` : ''}</small></div>`);
+  const el = box.lastElementChild; hydrate(el);
+  const imgs = [...el.querySelectorAll(".shgrid img")].map(im => im.dataset.fk);
+  el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.fk, imgs); });
+  const re = () => fidRedraw(c, 'pfIdTest', drawIdTest);
+  const start = async ab => {
+    let p; try{ p = idtGo(c, ab, (i, k, v) => { const s = $('#pfIdtSt'); if(s && profId === c.id) s.innerHTML = `<span class="spin"></span> Poza ${i + 1} din ${ab ? 8 : 4}: ${esc((IDT.find(y => y[0] === k) || [])[1] || k)}${ab ? ' (' + IDT_V[v] + ')' : ''}…`; }); }catch(e){ toast(e.message, 3500); return; }
+    re();
+    try{ const r = await p; const n = r.new, o = r.old; toast(r.part ? 'Test oprit: am păstrat ce s-a făcut.' : `🧪 Gata: 13.7 👤${n ? Math.round(n.face) + '% (dist. ' + idtD(n.fd) + ')' : '—'}${o ? ' · 13.6 👤' + Math.round(o.face) + '% (dist. ' + idtD(o.fd) + ')' : ''}`, 6000); }
+    catch(e){ toast(e.message || 'Testul n-a mers.', 4000); }
+    re();
+  };
+  el.querySelector('#pfIdtAb').onclick = () => { if(idtJob){ if(idtJob.cid === c.id){ idtJob.ac.abort(); toast('Se oprește după poza în lucru…'); } else toast('Testul rulează pentru alt personaj.'); return; } start(true); };
+  const nw = el.querySelector('#pfIdtNow'); if(nw) nw.onclick = () => { if(idtJob){ toast('Testul rulează deja.'); return; } start(false); };
+  const x = el.querySelector('#pfIdtX'); if(x) x.onclick = () => confirmSheet('Ștergi toate rulările testului de identitate și pozele lor?', 'Șterge', async () => { for(const r of idtOf(c)) for(const y of r.rows || []) if(y.img) await delImg(y.img).catch(() => {}); delete c.idTest; await saveChars(); re(); });
+  if(me) setTimeout(() => { if($('#pfIdTest') && idtJob && idtJob.cid === c.id) re(); }, 4000);   // progresul, cât stai pe profil
 }
 /* ═════════ 🧬 8.21 identitate fixă ═════════
    1. PAȘAPORT: fața, părul, corpul, semnele (alunițe, tatuaje, piercinguri) și ochelarii, citite o dată din poza de profil.
@@ -3953,9 +4065,11 @@ function bestN(c, opt = {}){
   else while(n > 1 && capLeft() < per * n) n--;
   return n;
 }
+// 13.7 (2): pe Klein 9B KV schițele sunt ieftine și rapide: 6 în loc de 4 (dacă plafonul zilei ajunge pentru ~4 poze)
+const kvMore = (n, opt = {}) => !opt.idLeg && S.draftsKv !== 'off' && n >= 3 && rwKlein() === RW_KV && rwCapLeft() >= rwPer() * 4;
 async function bestScene(c, shot, signal, corr, opt = {}){
   let n = opt.n || bestN(c, opt);
-  const dr = n >= 2 && draftsOn(c, opt); if(dr) n = Math.min(4, n + 1);   // 9.83 (3): schițe mai mici, una în plus
+  const dr = n >= 2 && draftsOn(c, opt); if(dr) n = kvMore(n, opt) ? 6 : Math.min(4, n + 1);   // 13.7 (2): pe KV, 6   // 9.83 (3): schițe mai mici, una în plus
   if(n < 2) return await scenePhoto(c, shot, signal, corr, opt);
   const o2 = dr ? {...opt, size:draftSize()} : opt;
   if(dr) pstage(signal, `✏️ Face ${n} schițe`, 90);
@@ -3963,11 +4077,14 @@ async function bestScene(c, shot, signal, corr, opt = {}){
   const batch = async (cr, m) => {   // 9.86: toate schițele într-o singură cerere Runware; ce lipsește, în paralel, ca înainte
     let rs = null;
     if(dr && S.photoEngine !== 'id' && !opt.partner){
-      try{ const r0 = await scenePhoto(c, shot, signal, cr, {...o2, multi:m}); const arr = r0.blobs || [r0.blob];
-        rs = arr.slice(0, m).map(b => ({status:'fulfilled', value:{...r0, blob:b, blobs:undefined}}));
+      try{ const parts = m > 4 ? [4, m - 4] : [m];   // 13.7 (2): Runware dă cel mult 4 pe cerere: 6 = două cereri în paralel
+        const got = await Promise.allSettled(parts.map((q, j) => scenePhoto(c, shot, signal, cr, {...o2, multi:q, ...(j ? {why:'variante'} : {})})));
+        const abx = got.find(g => g.status === 'rejected' && g.reason && g.reason.name === 'AbortError'); if(abx) throw abx.reason;
+        const okp = got.filter(g => g.status === 'fulfilled').map(g => g.value); if(!okp.length) throw got[0].reason;
+        rs = okp.flatMap(r0 => (r0.blobs || [r0.blob]).map(b => ({status:'fulfilled', value:{...r0, blob:b, blobs:undefined}}))).slice(0, m);
         if(rs.length < m) rs = rs.concat(await Promise.allSettled(Array.from({length:m - rs.length}, () => scenePhoto(c, shot, signal, cr, {...o2, why:'variante'})))); }
       catch(e){ if(e.name === 'AbortError') throw e; rs = null; } }
-    return rs || await Promise.allSettled(Array.from({length:m}, (_, k) => scenePhoto(c, shot, signal, cr, k ? {...o2, why:'variante'} : o2)));
+    return rs || await Promise.allSettled(Array.from({length:Math.min(m, 4)}, (_, k) => scenePhoto(c, shot, signal, cr, k ? {...o2, why:'variante'} : o2)));
   };
   const rs = await batch(corr, n);
   tmAdd(opt, dr ? 'schite' : 'variante', tG);
@@ -4023,7 +4140,7 @@ async function idBoost(c, shot, signal, corr, opt = {}){
       if(b2.fd != null && b2.fd < best.fd) best = b2;
     }catch(e){ if(e.name === 'AbortError') throw e; }
   }
-  if(rwFor('ancorat') && rwCapLeft() >= rwPer() && (best.fd == null || best.fd > FACE_RET)){   // 9.86 (e): fața deja foarte apropiată → fără retuș
+  if(rwFor('ancorat') && rwCapLeft() >= rwPer() && (best.fd == null || best.fd > fRet(opt))){   // 13.7 (3)   // 9.86 (e): fața deja foarte apropiată → fără retuș
     pstage(signal, '✨ Potrivește fața după poza de profil', 95); const tR = performance.now(); best.retTried = true;
     try{
       const r = await retouchBest(c, best.blob, signal, 'ancorat', shot, 'retus');
@@ -7121,7 +7238,7 @@ function drawFidCard(c, box){
   if(c.photo && S.imgProv === 'worker'){ drawFaceRef(c, R); drawCloseRef(c, R); drawDetail(c, R); drawCons(c, R); }   // 10.5
   drawRefs(c, R);          // + pachetul de identitate și fișa (drawSheet)
   drawBodyNote(c, D);
-  if(c.photo && photo){ drawAudit(c, D); drawStats(c, Z); }   // 12.2: setul-etalon e scos   // 11.3 (E1): setul verifică fișa, deci stă lângă ea
+  if(c.photo && photo){ drawAudit(c, D); drawStats(c, Z); drawIdTest(c, Z); }   // 13.7: 🧪 testul de identitate   // 12.2: setul-etalon e scos   // 11.3 (E1): setul verifică fișa, deci stă lângă ea
   $$('#pfFidDesc .fidclamp').forEach(e => e.onclick = () => e.classList.toggle('all'));
   $$('#pfFid .fidt').forEach(b => b.onclick = () => { const s = b.parentNode; s.classList.toggle('open'); fidOpen[s.dataset.fs] = s.classList.contains('open'); });
   fidHead(c);
