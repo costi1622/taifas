@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.3';
+const APP_VER = '14.4';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2233,7 +2233,7 @@ function drawCloseRef(c, box){
     b.disabled = true; b.innerHTML = '<span class="spin"></span> Fac portretul…';
     for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
     const ok = await closeGen(c, true).catch(() => false);
-    if(profId === c.id) drawPics(c);
+    if(profIs(c)) drawPics(c);
     toast(ok ? '🔍 Portretul de aproape e gata și se folosește la toate pozele.' : '🔍 N-a ieșit destul de fidel; rămâne decupajul din portret.', 3500);
   });
 }
@@ -2729,7 +2729,7 @@ async function pfFullSheet(c){
   };
 }
 function pfAfterFull(c){
-  if(profId === c.id) charProfile(c.id, false);
+  if(profIs(c)) charProfile(profId, false);
   setTimeout(async () => { if(await bsheetGen(c, true).catch(() => false)) toast(`🧍 Fișa de corp a lui ${c.name} e refăcută.`, 3000); kitBuild(c, {gen:true}).catch(() => {}); }, 1500);   // 9.92: și restul pachetului
 }
 // „Refă cu alt corp”: editorul de corp → 2 variante noi din portret, cu corpul ales; corpul ales rămâne pentru personaj
@@ -2847,6 +2847,13 @@ async function kitBuild0(c, o = {}){
 }
 // dacă pachetul e vechi sau incomplet: se completează în fundal (Runware îl lasă după pozele tale)
 const kitRan = new Map();
+// 14.4: la duo, fiecare își are pachetul ei; partea cu fișele generate se cere o singură dată (ca la crearea unui personaj)
+function duoKits(c){
+  [0, 1].forEach(k => { const pc = duoChar(c, k); if(!pc || !pc.photo) return;
+    const gen = !(pc.kit && pc.kit.gen) && !pc.kitGenAsk && S.imgProv === 'worker';
+    if(gen){ pc.kitGenAsk = Date.now(); saveChars(); }
+    kitEnsure(pc, {delay:k * 9000, ...(gen ? {gen:true} : {})}); });
+}
 function kitEnsure(c, o = {}){
   if(!c || !c.photo || S.imgProv === 'none') return;
   const st = kitState(c), fresh = st.fresh && (!o.gen || (c.kit && c.kit.gen));
@@ -2912,7 +2919,7 @@ async function renderPerson(c, shot, signal, opt = {}){
   const r = await makeScenePhoto(c, shot, signal, opt);
   return await finishPerson(c, r, shot, signal, opt);
 }
-const warnLine = m => { const a = [m.faceWarn != null ? 'fața ' + m.faceWarn + '%' : '', m.bodyWarn != null ? 'corpul ' + m.bodyWarn + '%' : ''].filter(Boolean), l = Array.isArray(m.lookWarn) ? m.lookWarn : [];   // 10.0: și ce diferă la măsurătoarea de culori și proporții
+const warnLine = m => { const a = [m.duoId && m.duoNm ? m.duoNm.map((n, i) => m.duoId[i] != null ? `${n.split(' ')[0]} ${m.duoId[i]}%` : '').filter(Boolean).join(' · ') : m.faceWarn != null ? 'fața ' + m.faceWarn + '%' : '', m.bodyWarn != null ? 'corpul ' + m.bodyWarn + '%' : ''].filter(Boolean), l = Array.isArray(m.lookWarn) ? m.lookWarn : [];   // 10.0: și ce diferă la măsurătoarea de culori și proporții
   return a.length || l.length ? `⚠️ ${[a.length ? 'seamănă: ' + a.join(' · ') : '', l.length ? 'diferă: ' + l.join(', ') : ''].filter(Boolean).join(' · ')} · 🎲 Altă poză → spune ce n-a mers` : ''; };
 /* ═════════ 9.94 ═════════
    (A) „Completează acum”: fișa corpului se face și când silueta pozei întregi nu se poate măsura (verificată atunci doar după față);
@@ -3477,7 +3484,7 @@ function lab2css(L){
   return 'rgb(' + lin.map(v => Math.round(255 * Math.max(0, Math.min(1, v > .0031308 ? 1.055 * Math.pow(v, 1 / 2.4) - .055 : 12.92 * v)))).join(',') + ')';
 }
 const hlRo = (hl, cut) => hl == null ? '' : (cut ? 'cel puțin ' : '') + (hl < -.2 ? 'scurt, deasupra bărbiei' : hl < .25 ? 'până la bărbie' : hl < .8 ? 'până la umeri' : hl < 1.6 ? 'trecut de umeri' : 'lung, spre mijlocul spatelui');
-const fidRedraw = (c, id, fn) => { const el = $('#' + id); if(!el || profId !== c.id) return; const box = el.parentNode, nx = el.nextSibling; el.remove(); const tmp = document.createElement('div'); fn(c, tmp); while(tmp.firstChild) box.insertBefore(tmp.firstChild, nx); fidHead(c); };
+const fidRedraw = (c, id, fn) => { const el = $('#' + id); if(!el || !profIs(c)) return; const box = el.parentNode, nx = el.nextSibling; el.remove(); const tmp = document.createElement('div'); fn(c, tmp); while(tmp.firstChild) box.insertBefore(tmp.firstChild, nx); fidHead(c); };
 function drawAudit(c, box){
   const a = auditOf(c), fresh = auditFresh(c), open = auditOpen(c), must = mustOf(c), marks = marksPosOf(c) || [], R = c.lookRef && c.lookRef.k === lookKey(c) && !c.lookRef.none ? c.lookRef : null;
   const st = !a ? 'Încă neverificat.' : !fresh ? '⚠️ Descrierea sau pozele s-au schimbat de la ultima verificare.' : open.length ? `⚠️ ${open.length} ${open.length === 1 ? 'contradicție' : 'contradicții'} de rezolvat.` : '✅ Descrierea și pozele spun același lucru.';
@@ -3522,7 +3529,7 @@ function auditSheet(c){
   $$('.sheet .audi [data-how]').forEach(b => b.onclick = async () => { const row = b.closest('.audi'); row.querySelectorAll('button').forEach(z => z.disabled = true);
     const r = await auditResolve(c, row.dataset.id, b.dataset.how).catch(() => ({ok:false}));
     if(r.note) toast(r.note, 6500);
-    if(profId === c.id && $('#pfBody2')) $('#pfBody2').value = c.physUser || '';
+    if(profIs(c) && $('#pfBody2')) $('#pfBody2').value = c.physUser || '';
     auditSheet(c); if(!auditOpen(c).length) fidRedraw(c, 'pfAudit', drawAudit); });
 }
 function drawStats(c, box){
@@ -3581,7 +3588,7 @@ function drawEtalon(c, box){
     e.stopPropagation(); const k = bt.dataset.etref, nm = (ETALON.find(x => x[0] === k) || [])[1] || k; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
     const r = await etalonToRef(c, k).catch(er => ({ok:false, why:er.message}));
     toast(r.ok ? `📌 „${nm}” a devenit reper: ${r.done.join(' și ')}.` : `„${nm}” n-a intrat ca reper: ${r.why}.`, 4500);
-    if(profId === c.id) drawPics(c); });
+    if(profIs(c)) drawPics(c); });
   el.querySelectorAll('[data-etr]').forEach(bt => bt.onclick = async e => {   // 11.2: o singură poză din set, refăcută
     e.stopPropagation(); if(etalonJob){ toast('Setul rulează deja.'); return; }
     const k = bt.dataset.etr, nm = (ETALON.find(x => x[0] === k) || [])[1] || k; bt.disabled = true; bt.innerHTML = '<span class="spin"></span>';
@@ -3593,7 +3600,7 @@ function drawEtalon(c, box){
   el.querySelector('#pfEtGo').onclick = async () => {
     if(etalonJob){ if(etalonJob.cid === c.id){ etalonStop(); toast('Se oprește după poza în lucru…'); } else toast('Setul rulează deja pentru alt personaj.'); return; }
     if(etalonFresh(c) && !el.dataset.sure){ confirmSheet('Reperele nu s-au schimbat de la ultima rulare, deci nota e la zi. Rulezi oricum (6 poze)?', 'Rulează', () => { el.dataset.sure = '1'; el.querySelector('#pfEtGo').click(); }); return; }   // 11.3 (E2)
-    const p = etalonGo(c, (i, key) => { const s = $('#pfEtSt'); if(s && profId === c.id) s.innerHTML = `<span class="spin"></span> Poza ${i + 1} din ${ETALON.length}: ${esc((ETALON[i] || [])[1] || key)}…`; });
+    const p = etalonGo(c, (i, key) => { const s = $('#pfEtSt'); if(s && profIs(c)) s.innerHTML = `<span class="spin"></span> Poza ${i + 1} din ${ETALON.length}: ${esc((ETALON[i] || [])[1] || key)}…`; });
     re();
     try{ const r = await p; toast(r.part ? 'Set oprit: am păstrat ce s-a făcut.' : `🎯 Set gata: nota ${r.score ?? '—'}${r.usd ? ' · ' + usd(r.usd) : ''}`, 4500); }catch(e){ toast(e.message || 'Setul n-a mers.', 4000); }
     re(); fidRedraw(c, 'pfStats', drawStats);
@@ -3686,7 +3693,7 @@ function drawIdTest(c, box){
   el.querySelectorAll('.shgrid img').forEach(im => { im.style.cursor = 'zoom-in'; im.onclick = () => viewImg(im.dataset.fk, imgs); });
   const re = () => fidRedraw(c, 'pfIdTest', drawIdTest);
   const start = async ab => {
-    let p; try{ p = idtGo(c, ab, (i, k, v) => { const s = $('#pfIdtSt'); if(s && profId === c.id) s.innerHTML = `<span class="spin"></span> Poza ${i + 1} din ${ab ? 8 : 4}: ${esc((IDT.find(y => y[0] === k) || [])[1] || k)}${ab ? ' (' + IDT_V[v] + ')' : ''}…`; }); }catch(e){ toast(e.message, 3500); return; }
+    let p; try{ p = idtGo(c, ab, (i, k, v) => { const s = $('#pfIdtSt'); if(s && profIs(c)) s.innerHTML = `<span class="spin"></span> Poza ${i + 1} din ${ab ? 8 : 4}: ${esc((IDT.find(y => y[0] === k) || [])[1] || k)}${ab ? ' (' + IDT_V[v] + ')' : ''}…`; }); }catch(e){ toast(e.message, 3500); return; }
     re();
     try{ const r = await p; const n = r.new, o = r.old; toast(r.part ? 'Test oprit: am păstrat ce s-a făcut.' : `🧪 Gata: 13.7 👤${n ? Math.round(n.face) + '% (dist. ' + idtD(n.fd) + ')' : '—'}${o ? ' · 13.6 👤' + Math.round(o.face) + '% (dist. ' + idtD(o.fd) + ')' : ''}`, 6000); }
     catch(e){ toast(e.message || 'Testul n-a mers.', 4000); }
@@ -3884,12 +3891,75 @@ async function yawRefs(c, face, n = 2){
   }
   return out;
 }
+/* 14.4: poza cu amândouă din duo.
+   Repere: fața fiecăreia (portretul de aproape sau decupajul din poza de profil) + poza întreagă a fiecăreia (corpul, proporțiile, părul),
+   plus descrierea fizică a fiecăreia. Două variante (când e Runware), se păstrează cea în care cea mai slabă față seamănă cel mai bine;
+   fiecare față din poză se potrivește cu persoana ei (cea mai bună împerechere), apoi retuș țintit pe fața care e sub țintă (cel mult
+   2 treceri pe persoană, păstrat doar dacă fața ei se apropie și a celeilalte nu se strică). */
+const facePickFor = new WeakMap();
+async function duoFaceOf(c){
+  const prof = c.photo ? await DB.get(c.photo).catch(() => null) : null; if(!prof) return null;
+  const crs = closeOf(c), crb = crs && !refOut(c, crs.img) ? await DB.get(crs.img).catch(() => null) : null; if(crb) return crb;
+  let id = null; try{ id = await identityOf(c); }catch(e){}
+  return await cropFace(prof, await profFaceBox(c, prof).catch(() => null) || (id && !id.none ? id : null));
+}
+async function duoFaces(blob, A, B){
+  const faces = (await faceDescs(blob).catch(() => [])).filter(f => f && f.d && f.box).sort((a, b) => (b.box.w * b.box.h) - (a.box.w * a.box.h)).slice(0, 2);
+  const [ra, rb] = await Promise.all([refDescs(A).catch(() => []), refDescs(B).catch(() => [])]);
+  const dd = (f, R) => f && R.length ? Math.min(...R.map(r => fdist(f.d, r))) : null;
+  if(!faces.length) return {n:0, dA:null, dB:null};
+  if(faces.length === 1){ const a = dd(faces[0], ra), b = dd(faces[0], rb); return a != null && (b == null || a <= b) ? {n:1, dA:a, boxA:faces[0].box, dB:null} : {n:1, dA:null, dB:b, boxB:faces[0].box}; }
+  const [f0, f1] = faces, s1 = [dd(f0, ra), dd(f1, rb)], s2 = [dd(f1, ra), dd(f0, rb)], sum = x => (x[0] ?? 9) + (x[1] ?? 9);
+  return sum(s1) <= sum(s2) ? {n:2, dA:s1[0], dB:s1[1], boxA:f0.box, boxB:f1.box} : {n:2, dA:s2[0], dB:s2[1], boxA:f1.box, boxB:f0.box};
+}
+const duoWorst = F => F && F.n === 2 && F.dA != null && F.dB != null ? Math.max(F.dA, F.dB) : 9;
+async function duoBothPhoto(c0, who, shot, signal, asked){
+  const A = duoChar(c0, who), B = duoChar(c0, 1 - who);
+  let idA = null, idB = null; try{ [idA, idB] = await Promise.all([identityOf(A).catch(() => null), identityOf(B).catch(() => null)]); }catch(e){}
+  const [fA, fB] = await Promise.all([duoFaceOf(A), duoFaceOf(B)]);
+  const bodyOf = async c => (c.photoFull && await DB.get(c.photoFull).catch(() => null)) || await DB.get(c.photo).catch(() => null);
+  const [bA, bB] = await Promise.all([bodyOf(A), bodyOf(B)]);
+  if(!fA || !fB) throw new Error('lipsește poza de profil a uneia dintre ele');
+  const nA = A.name, nB = B.name, pA = physFull(A, idA, shot), pB = physFull(B, idB, shot);
+  const prompt = `${togetherFraming(shot)}. ${shot}. Exactly two people in this photo, ${nA} and ${nB}, together in the scene described above; both adults, fully dressed, an ordinary everyday moment.
+Image 1 is a close-up of ${nA}'s face; image 2 is a close-up of ${nB}'s face; image 3 shows ${nA}'s whole appearance (body shape, proportions, height, hair); image 4 shows ${nB}'s whole appearance.
+${nA}: ${pA || 'exactly as in images 1 and 3'}.
+${nB}: ${pB || 'exactly as in images 2 and 4'}.
+They are two different people: keep each one's face, facial features, skin tone, hair and body type exactly as in her own references; do not blend, average or swap their features. This is ONE single natural photo of the two of them: not a collage, not a split screen, no border; the location, clothing, poses and light come only from the scene description. Realistic photo, no text.`;
+  const one = async () => {
+    if(useF3()) return await f3Image(prompt, [fA, fB, bA, bB].filter(Boolean), S.wkSize, signal, 'quiet');
+    return await genImage(prompt, fA, signal, fB, {model:'ancorat', force:{two:true}, px1:768, px2:768, extra:[bA, bB].filter(Boolean), quiet:true, why:'duo'});
+  };
+  pstage(signal, '📸 Face poza cu amândouă', 92);
+  const n = rwReady() && fixBudget() ? 2 : 1;
+  const set = await Promise.allSettled(Array.from({length:n}, one)), outs = set.filter(x => x.status === 'fulfilled' && x.value).map(x => x.value);
+  if(!outs.length) throw (set.find(x => x.status === 'rejected') || {}).reason || new Error('n-a ieșit poza');
+  if(n > 1) addUsage(c0.id, imgPrice() * (n - 1), 'img');
+  let best = null;
+  for(const b of outs){ const F = await duoFaces(b, A, B); if(!best || duoWorst(F) < duoWorst(best.F)) best = {blob:b, F}; }
+  let {blob, F} = best; const t0 = performance.now(), tgt = fRet({}), passes = {A:0, B:0};
+  for(let round = 0; round < 4 && performance.now() - t0 < 100e3; round++){
+    const cand = [['A', A, F.dA, F.boxA, 'dB'], ['B', B, F.dB, F.boxB, 'dA']].filter(x => x[2] != null && x[2] > tgt && x[3] && passes[x[0]] < 2).sort((a, b) => b[2] - a[2])[0];
+    if(!cand || !fixBudget()) break;
+    const [key, P, d0, box, other] = cand; passes[key]++;
+    pstage(signal, `✨ Potrivește fața lui ${P.name}`, 96);
+    try{
+      facePickFor.set(blob, [box.x + box.w / 2, box.y + box.h / 2]);
+      const y = await facePass(P, blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
+      addUsage(c0.id, imgPrice(), 'img', null, 'retus');
+      if(y){ const F2 = await duoFaces(y, A, B), d1 = key === 'A' ? F2.dA : F2.dB, o0 = F[other], o1 = F2[other];
+        if(F2.n === 2 && d1 != null && d1 < d0 - .01 && (o0 == null || o1 == null || o1 <= o0 + .03)){ blob = y; F = F2; } }
+    }catch(e){ if(e.name === 'AbortError') throw e; }
+  }
+  return {blob, prompt, duoF:F, duoNames:[nA, nB]};
+}
 async function facePass(c, blob, signal, model = 'eco', shot = '', why = 'retus', src = null, area = 'face', extra0 = ''){   // 13.6: extra0 = o cerință în plus (vârsta)   // 9.83 (5): area = 'hair' → doar părul   // 9.35: `src` = altă poză de bază (editor: varianta aleasă)
   const u = URL.createObjectURL(blob); let im;
   try{ im = await loadImgEl(u); } finally { URL.revokeObjectURL(u); }
   const faces = await faceDescs(blob); if(!faces.length) return null;          // fața nu se vede (de spate, prea mică): poza rămâne așa
   const ref = src ? (src.refD || []) : await refDescs(c).catch(() => []);
-  const pick = ref.length ? faces.map(f => ({f, d:Math.min(...ref.map(r => fdist(f.d, r)))})).sort((a, b) => a.d - b.d)[0].f : faces.sort((a, b) => b.a - a.a)[0];
+  const ov = facePickFor.get(blob), cen = b => [b.x + b.w / 2, b.y + b.h / 2];   // 14.4: la poza cu amândouă, fața cui se retușează e aleasă dinainte
+  const pick = ov ? faces.slice().sort((a, b) => Math.hypot(cen(a.box)[0] - ov[0], cen(a.box)[1] - ov[1]) - Math.hypot(cen(b.box)[0] - ov[0], cen(b.box)[1] - ov[1]))[0] : ref.length ? faces.map(f => ({f, d:Math.min(...ref.map(r => fdist(f.d, r)))})).sort((a, b) => a.d - b.d)[0].f : faces.sort((a, b) => b.a - a.a)[0];
   const W = im.naturalWidth, H = im.naturalHeight, bx = pick.box;
   if(bx.w < 14 || bx.h < 14) return null;
   const hair = area === 'hair', side = Math.min(W, H, Math.max(bx.w, bx.h) * (hair ? 3.2 : 2.1)), cx = bx.x + bx.w / 2, cy = bx.y + bx.h * (hair ? .32 : .46);
@@ -5824,8 +5894,8 @@ async function gLifeSweep(){
 
 /* ───────── CONVERSAȚIE ───────── */
 async function openChat(id, push = true, tid, dir){
-  whenIdle(() => { const cc = charById(id); if(cc) kitEnsure(cc, {delay:0}); }, 5000);
-  whenIdle(() => callFramePre(id), 15000, 180e3);   // 12.9: cadrul de apel, dinainte   // 9.92: partea gratuită a pachetului; 10.6 (C): doar când nu atingi ecranul, iar modelele de recunoaștere se încarcă abia când ceri o poză
+  whenIdle(() => { const cc = charById(id); if(cc && duoOn(cc)) duoKits(cc); else if(cc) kitEnsure(cc, {delay:0}); }, 5000);   // 14.4
+  whenIdle(() => { const cc = charById(id); if(!cc || !duoOn(cc)) callFramePre(id); }, 15000, 180e3);   // 14.4: la duo nu (cadrul ar primi numele amândurora)   // 12.9: cadrul de apel, dinainte   // 9.92: partea gratuită a pachetului; 10.6 (C): doar când nu atingi ecranul, iar modelele de recunoaștere se încarcă abia când ceri o poză
   cur = charById(id); if(!cur) return;
   threadsOf(cur);
   tid = tid || cur.thread || 'main';
@@ -7379,6 +7449,19 @@ function drawBodyNote(c, box){
   };
   const re = $('#pfBodyRe'); if(re) re.onclick = async () => { re.disabled = true; re.innerHTML = '<span class="spin"></span> Citesc…'; try{ await identityOf(c, true); }catch(e){} drawPics(c); };
 }
+/* 14.4: la duo, profilul arată identitatea uneia odată (comutatorul de deasupra); actualizările din fundal o recunosc */
+let profAlt = new Set(), duoPfK = 0;
+const profIs = c => !!c && (profId === c.id || profAlt.has(c.id));
+function drawPicsFor(c){
+  const old = $('#pfDuoId');
+  if(!duoOn(c)){ profAlt = new Set(); if(old) old.remove(); drawPics(c); return; }
+  const k = duoPfK, pc = duoChar(c, k) || duoChar(c, 0); profAlt = new Set([pc.id]);
+  const box = $('#pfPics'); if(!box) return;
+  let sw = old; if(!sw){ sw = document.createElement('div'); sw.id = 'pfDuoId'; sw.className = 'duoidsw'; box.parentNode.insertBefore(sw, box); }
+  sw.innerHTML = `<span>🧬 Identitatea pentru pozele din chat</span><div>${[0, 1].map(i => `<button type="button" data-dik="${i}" class="${i === k ? 'on' : ''}" style="--dc:${DUO_COL[i]}">${duoAv1(c, i)}${esc(duoNm(c, i).split(' ')[0])}</button>`).join('')}</div><small>Fiecare are fața, corpul, reperele și fișa ei. Pozele cu amândouă le folosesc pe ale amândurora.</small>`;
+  hydrate(sw); sw.onclick = e => { const b = e.target.closest('[data-dik]'); if(!b) return; duoPfK = +b.dataset.dik; drawPicsFor(c); };
+  drawPics(pc);
+}
 function drawPics(c){
   const box = $('#pfPics'); if(!box) return;
   const why = S.imgProv === 'none' ? 'Pozele sunt oprite în Setări → Poze; pornește-le acolo.' : !c.photo ? 'Are nevoie de o poză de profil (după ea se păstrează fața).' : '';   // 11.5: fără comutator, pornite la toate
@@ -7411,7 +7494,7 @@ function drawFidCard(c, box){
 }
 const plural = (n, a, b) => n + ' ' + (n === 1 ? a : b);
 function fidHead(c){
-  const h = $('#pfFidH'); if(!h || profId !== c.id) return;
+  const h = $('#pfFidH'); if(!h || !profIs(c)) return;
   const photo = (c.stil || 'photo') === 'photo', K = c.photo && photo ? kitState(c) : null, kb = kitBusy.has(c.id);
   const a = auditOf(c), fresh = auditFresh(c), open = auditOpen(c), s = statsOf(c), et = etalonOf(c), last = et[et.length - 1], must = mustOf(c), sc = idScore(c);   // 11.6 (F6)
   const todo = [];
@@ -7451,11 +7534,11 @@ async function fidGo(c, btn){
     if(photo && c.photo){ say('Măsor portretul…'); try{ await lookRefOf(c); }catch(e){} }
     let r = null;
     if(photo && c.photo && aiReady() && !auditFresh(c)){ say('Compar descrierea cu pozele…'); r = await auditRun(c); }
-    if(profId === c.id) drawPics(c);
+    if(profIs(c)) drawPics(c);
     const K2 = kitState(c), left = K2.items.filter(x => !x.ok && !x.warn);
     if(r && r.n) auditSheet(c);
     else toast(left.length ? '⏳ N-au ieșit încă: ' + left.map(x => x.l.replace(/^\S+\s/, '')).join(', ') + '. Încearcă din nou peste câteva minute.' : '✅ Reperele sunt complete și descrierea se potrivește cu pozele.', 4500);
-  }catch(e){ toast(e.message || 'N-a mers.', 4000); if(profId === c.id) drawPics(c); }
+  }catch(e){ toast(e.message || 'N-a mers.', 4000); if(profIs(c)) drawPics(c); }
 }
 // fața decupată din portret (al doilea reper) + un singur buton care recitește tot portretul: trăsăturile, părul, semnele și locul feței
 function drawFaceRef(c, box){
@@ -7465,7 +7548,7 @@ function drawFaceRef(c, box){
     try{
       if(force){ const bt = $('#pfFaceRe'); if(bt){ bt.disabled = true; bt.innerHTML = '<span class="spin"></span> Citesc portretul…'; }
         delete c.faceLoc; await profFaceBox(c, await DB.get(c.photo)); try{ await identityOf(c, true); }catch(e){} }
-      const b = await faceRef(c, force); if(profId !== c.id) return; const u = URL.createObjectURL(b); el.innerHTML = `<img src="${u}" alt="">`; if(force){ drawPics(c); toast('↻ Portretul e recitit: fața, părul, trăsăturile și semnele.', 3500); } }
+      const b = await faceRef(c, force); if(!profIs(c)) return; const u = URL.createObjectURL(b); el.innerHTML = `<img src="${u}" alt="">`; if(force){ drawPics(c); toast('↻ Portretul e recitit: fața, părul, trăsăturile și semnele.', 3500); } }
     catch(e){ el.textContent = '!'; toast('N-am putut citi fața: ' + e.message, 3500); } };
   if(fb) show(false);
   $('#pfFaceRe').onclick = () => show(true);
@@ -7547,7 +7630,7 @@ async function genAvatars0(c, all = true){
 }
 // 9.26: după avatarele vii (sau pornit/oprit): profilul întreg, Acasă și antetul chatului arată imediat poza de acum
 function avRefresh(c){
-  if(profId === c.id && !$('#vProf').hidden) charProfile(c.id, false); else if(profId === c.id) drawAv(c);
+  if(profIs(c) && !$('#vProf').hidden) charProfile(profId, false); else if(profIs(c)) drawAv(c);
   if(!$('#vHome').hidden) renderHome();
   if(cur === c && $('#chAv')){ $('#chAv').outerHTML = avatarHTML(cur, 'av" id="chAv'); const bg = $('#chatBg'); if(bg && cur.photo && ['clar', 'poza'].includes(cur.bg || 'clar')) bg.dataset.bgk = photoNow(cur); hydrate(document); }
 }
@@ -7939,7 +8022,7 @@ function avTick(){
 }
 function avSoft(c){
   if(!$('#vHome').hidden) renderHome();
-  if(profId === c.id && !$('#vProf').hidden) drawAv(c);
+  if(profIs(c) && !$('#vProf').hidden) drawAv(c);
   if(cur === c && $('#chAv')){ $('#chAv').outerHTML = avatarHTML(cur, 'av" id="chAv'); hydrate(document); }
 }
 setInterval(avTick, 60e3);
@@ -8174,7 +8257,7 @@ async function genStickers0(c){
     }catch(e){ toast('Un sticker n-a mers: ' + e.message, 3500); if(e.cap) break; }
   }
   if(ok){ for(const x of old) delImg(x.k).catch(() => {}); c.stickers = out; await saveChars(); toast(`😺 ${ok} stickere gata!`); fxBurst('😺', 8); }
-  if(profId === c.id) drawStk(c);
+  if(profIs(c)) drawStk(c);
 }
 async function stickerSheet(){   // 12.3: ale lui + ale tale (colecția ta, în toate chaturile)
   const c = cur; if(!c) return;
@@ -10567,7 +10650,8 @@ function duoSheet(c){
   openSheet(`<h4>👯 ${ed0 ? 'Duo-ul' : 'Duo nou'}</h4><div class="pad duosheet">
     <div class="seg" id="duMode"${ed0 ? ' hidden' : ''}><button type="button" data-v="nou" class="${D.mode === 'nou' ? 'on' : ''}">✨ Personaje noi</button><button type="button" data-v="ex" class="${D.mode === 'ex' ? 'on' : ''}">📂 Din personajele mele</button></div>
     <div id="duNew"${D.mode === 'nou' ? '' : ' hidden'}>
-      <details class="duidea"><summary>✨ Pornește de la o idee (AI-ul le scrie pe amândouă)</summary><textarea id="duIdea" rows="3" placeholder="ex. două surori, una medic serioasă, cealaltă barmaniță haotică; stau împreună în Cluj"></textarea><button type="button" class="btn sm" id="duIdeaGo">✨ Scrie fișele</button></details>
+      <div class="dumaster"><div class="dulbl">📝 Prompt general</div><textarea id="duIdea" rows="6" placeholder="Descrie-le pe amândouă și ce e între ele: cine sunt, ce vârstă au, cum arată, cum vorbesc, ce relație au, cum se poartă cu tine. Din el se completează automat toate câmpurile (și salutul).">${esc(d.master || '')}</textarea>
+        <div class="btns"><button type="button" class="btn pri sm" id="duIdeaGo">✨ Completează tot din prompt</button></div><small class="hint">Aspectul se ia din poze (dacă le-ai pus), restul din prompt. Câmpurile de mai jos le poți corecta; la salvare, dacă ai schimbat promptul, se completează singure.</small></div>
       <div class="dutabs" id="duTabs"><button type="button" data-t="0" class="on" style="--dc:${DUO_COL[0]}">${esc(F[0].name || 'Personajul 1')}</button><button type="button" data-t="1" style="--dc:${DUO_COL[1]}">${esc(F[1].name || 'Personajul 2')}</button></div>
       ${tab(0)}${tab(1)}
       <p class="hint">Vrei portretul generat cu AI? Creează-l întâi ca personaj (＋ Personaj nou), apoi alege-l la „Din personajele mele”.</p>
@@ -10605,8 +10689,36 @@ function duoSheet(c){
     catch(e){ toast('N-a mers: ' + (e.message || e)); } finally { b.disabled = false; b.textContent = '🔎 Descrie din poză'; }
   };
   sh.querySelectorAll('[data-dpread]').forEach(b => b.onclick = () => readPic(+b.dataset.dpread));
-  // ideea → amândouă fișele
-  $('#duIdeaGo').onclick = async () => {
+  // 14.4: promptul general → toate câmpurile (aspectul din poze, dacă există)
+  const masterFill = async (quiet) => {
+    const src = $('#duIdea').value.trim(); if(src.length < 12){ if(!quiet) toast('Scrie promptul în câteva cuvinte.'); return false; }
+    if(typeof CR_MINOR !== 'undefined' && CR_MINOR.test(src)){ toast('Personajele trebuie să fie adulte.'); return false; }
+    if(!aiReady()){ toast('Adaugă cheia în Setări.'); return false; }
+    const b = $('#duIdeaGo'); b.disabled = true; b.innerHTML = '<span class="spin"></span> Completez…';
+    try{
+      const ex = D.mode === 'ex', cl = v => faraLiniute(String(v || '')).trim();
+      const ph = ex ? [null, null] : await Promise.all([0, 1].map(async k => { const bl = D.blob[k] || (D.pics[k] ? await DB.get(D.pics[k]).catch(() => null) : null); if(!bl) return null; try{ const r = await describePhoto(bl); D.look = D.look || []; D.look[k] = r.look; return r.aspect || null; }catch(e){ return null; } }));
+      const who = k => ex ? duoRef(D.pick[k]) : null;
+      if(ex && (!who(0) || !who(1))) throw new Error('alege întâi amândouă personajele');
+      const u = S.userName.trim() || 'utilizatorul';
+      const j = await crAskJSON('Transformi un prompt general în fișele a două personaje de poveste, distincte. Răspunzi DOAR cu JSON valid, în română corectă, cu diacritice.',
+`Promptul general al utilizatorului (${u}):
+${src}
+${ex ? `Personajele sunt deja făcute: ${who(0).name} (${String(who(0).persona || '').slice(0, 500)}) și ${who(1).name} (${String(who(1).persona || '').slice(0, 500)}). Scrie doar ce ține de ele două.` : `Scrie DOUĂ personaje adulte (21+), fiecare cu: "name", "tag" (o frază scurtă), "persona" (cine e, ce-i place, cum se poartă, relația cu ${u}, 3-6 propoziții), "aspect" (cum arată, 2-4 propoziții), "speech" (cum vorbește, scurt).${ph[0] || ph[1] ? ' Aspectul din poze (nu-l contrazice în persona): ' + [0, 1].map(k => ph[k] ? `personajul ${k + 1}: ${ph[k]}` : '').filter(Boolean).join('; ') + '.' : ''}`}
+Plus "rel" (relația dintre ele, o propoziție), "dyn" (dinamica lor, scurt), "toU" (cum se poartă cu ${u}, scurt), "greet" (primul lor mesaj către ${u}: 2-4 replici scurte, fiecare pe rândul ei, începând cu numele și două puncte). Fără liniuțe de dialog.
+JSON: {${ex ? '' : '"a":{"name":"","tag":"","persona":"","aspect":"","speech":""},"b":{"name":"","tag":"","persona":"","aspect":"","speech":""},'}"rel":"","dyn":"","toU":"","greet":""}`, 2200);
+      if(typeof CR_MINOR !== 'undefined' && CR_MINOR.test(JSON.stringify(j))) throw new Error('personajele trebuie să fie adulte');
+      if(!ex) [j.a || {}, j.b || {}].forEach((x, k) => { for(const f of ['name', 'tag', 'persona', 'aspect', 'speech']){ const v = f === 'aspect' && ph[k] ? ph[k] : cl(x[f]); if(v) setV(k, f, v.slice(0, f === 'name' ? 40 : f === 'tag' ? 120 : 2000)); } });
+      if(cl(j.rel)) $('#duRel').value = cl(j.rel).slice(0, 160);
+      if(cl(j.dyn)) $('#duDyn').value = cl(j.dyn).slice(0, 160);
+      if(cl(j.toU)) $('#duToU').value = cl(j.toU).slice(0, 160);
+      if(cl(j.greet)) $('#duGreet').value = cl(j.greet).slice(0, 1200);
+      D.filled = src; drawTabs(); if(!quiet) toast('👯 Gata: toate câmpurile sunt completate din prompt'); return true;
+    }catch(e){ toast('N-a mers: ' + (e.message || e), 4000); return false; } finally { b.disabled = false; b.textContent = '✨ Completează tot din prompt'; }
+  };
+  D.filled = (d.master || '').trim();
+  $('#duIdeaGo').onclick = () => masterFill(false);
+  const ideaOld = async () => {
     const src = $('#duIdea').value.trim(); if(src.length < 12){ toast('Scrie ideea în câteva cuvinte.'); return; }
     if(typeof CR_MINOR !== 'undefined' && CR_MINOR.test(src)){ toast('Personajele trebuie să fie adulte.'); return; }
     if(!aiReady()){ toast('Adaugă cheia în Setări.'); return; }
@@ -10636,6 +10748,7 @@ JSON: {"a":{"name":"","tag":"","persona":"","aspect":"","speech":""},"b":{"name"
     }catch(e){ toast('N-a mers: ' + (e.message || e)); } finally { b.disabled = false; b.textContent = '✨ Scrie-l'; }
   };
   $('#duSave').onclick = async () => {
+    { const ms = $('#duIdea').value.trim(); if(ms.length >= 12 && ms !== D.filled && aiReady()){ if(!(await masterFill(true))) return; } }   // 14.4: promptul schimbat → câmpurile din el
     const n = names(); if(!n[0] || !n[1]){ toast(D.mode === 'ex' ? 'Alege amândouă personajele.' : 'Pune numele amândurora.'); return; }
     if(pnorm(n[0]) === pnorm(n[1])){ toast('Cele două personaje au nevoie de nume diferite.'); return; }
     const all = D.mode === 'nou' ? [0, 1].map(k => ['persona', 'aspect', 'tag'].map(f => val(k, f)).join(' ')).join(' ') : '';
@@ -10658,10 +10771,10 @@ JSON: {"a":{"name":"","tag":"","persona":"","aspect":"","speech":""},"b":{"name"
         if(D.look && D.look[1]) b0.look = D.look[1];
         x.duo = {on:true, a:{name:n[0], tag:val(0, 'tag').trim()}, b:b0, rel, dyn, toU}; x.name = n[0] + ' & ' + n[1];
       }
-      x.greet = greet;
+      x.greet = greet; x.duo.master = $('#duIdea').value.trim() || undefined;   // 14.4
       if(isNew) chars.push(x);
       duoFix(x); await saveChars(); closeSheet();
-      if(D.mode === 'nou') for(const k of [0, 1]){ const pc = duoChar(x, k); if(pc && pc.photo) kitEnsure(pc, {delay:4000 + k * 8000}); }   // pachetul de identitate al fiecăreia, în fundal
+      if(D.mode === 'nou'){ for(const k of [0, 1]){ const pc = duoChar(x, k); if(pc) delete pc.kitGenAsk; } duoKits(x); }   // 14.4: pachetul întreg pentru fiecare   // pachetul de identitate al fiecăreia, în fundal
       renderHome();
       if(isNew){ openChat(x.id); toast(`👯 ${x.name}: ${D.mode === 'nou' ? 'fiecare cu fișa și poza ei' : 'din personajele tale'}`); }
       else if(!$('#vProf').hidden) charProfile(x.id, false);
@@ -10691,7 +10804,7 @@ function duoCardsWire(c){
   if(pick) pick.onclick = () => file.click();
   file.onchange = async () => {
     const f = file.files && file.files[0]; file.value = ''; if(!f) return;
-    try{ const blob = await toJpeg(f, 1024, .9), old = c.duo.b.photo; c.duo.b.photo = await saveImg(blob); await saveChars(); if(old) await delImg(old).catch(() => {});
+    try{ const blob = await toJpeg(f, 1024, .9), old = c.duo.b.photo; c.duo.b.photo = await saveImg(blob); delete c.duo.b.kitGenAsk; await saveChars(); if(old) await delImg(old).catch(() => {}); duoKits(c);   // 14.4
       toast('📷 Poza lui ' + c.duo.b.name + ' e pusă'); charProfile(c.id, false); renderHome(); }
     catch(e){ toast('N-am putut citi poza: ' + (e.message || e)); }
   };
@@ -10707,7 +10820,7 @@ function pfMixStat(chats){
 }
 async function charProfile(id, push = true){
   const c = charById(id); if(!c) return;
-  profId = id;
+  if(profId !== id) duoPfK = 0; profId = id; profAlt = new Set();
   const chats = await allChats(c);
   const picsM = chats.flatMap(ch => ch.msgs.filter(m => m.img && m.role === 'ai').map(m => ({k:m.img, ts:m.ts, scene:m.scene}))).sort((a, b) => b.ts - a.ts);
   { const have = new Set(picsM.map(y => y.k)); for(const fp of feedCache.filter(x => x.cid === id && x.img && !have.has(x.img))) picsM.push({k:fp.img, ts:fp.ts, scene:fp.scene, story:fp.story}); }   // 11.7
@@ -10824,7 +10937,7 @@ async function charProfile(id, push = true){
     $('#pfPrefs').querySelectorAll('[data-lx]').forEach(b => b.onclick = async () => { c.liked.splice(+b.dataset.lx, 1); await saveChars(); drawPrefs(); });
   };
   drawPrefs();
-  drawLife(c); drawAgenda(c); drawMem(c); drawPics(c); drawAv(c); drawStk(c);
+  drawLife(c); drawAgenda(c); drawMem(c); drawPicsFor(c); drawAv(c); drawStk(c);   // 14.4
   pfTabsInit();
   const showWx = () => weatherOf(c).then(w => { const el = $('#pfWx'); if(el) el.textContent = w ? `Acum în ${w.city}: ${wxLine(w)}. Intră în conversații și în poze.` : (c.city ? 'Nu găsesc orașul ăsta. Încearcă alt nume.' : 'Vremea reală de acolo intră în conversații și în poze (Open-Meteo, gratuit).'); }).catch(() => { const el = $('#pfWx'); if(el) el.textContent = 'Nu pot citi vremea acum (internet?).'; });
   showWx();
@@ -10920,9 +11033,9 @@ async function askPhoto0(spont, target, mode, opt = {}){
       // 14.3: amândouă în aceeași poză (doar scene obișnuite): cealaltă intră ca „partener”, cu poza și fața ei
       if(duoBoth && (requestedExposure === 'topless' || requestedExposure === 'explicit' || requestedExposure === 'full')) duoBoth = false;
       if(duoBoth && !together){
-        const pp = await duoPartner(c0, 1 - who);
-        if(pp){ shot = `${shot}. ${pp.name} is with her in the photo, both fully dressed, an ordinary everyday moment`; peopleIn = {names:[pp.name], self:true, pid:pp.id, duo:true};
-          edited = await makeScenePhoto(c, shot, busy.signal, {together:true, partner:pp, asked}); }
+        const pp = duoChar(c0, 1 - who);   // 14.4: generarea cu reperele amândurora + verificarea fiecărei fețe
+        if(pp && pp.photo && c.photo){ peopleIn = {names:[pp.name], self:true, pid:'duo:' + (pp.id || 1 - who), duo:true};
+          edited = await duoBothPhoto(c0, who, shot, busy.signal, asked); }
         else duoBoth = false;
       }
       // 9.43: o persoană din viața personajului (prietenă, soră, coleg…): aceeași persoană de fiecare dată, alta decât personajul
@@ -10933,7 +11046,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
       }
     }
     // 9.92: motorul unic: generarea + garanția + finisarea (și pentru editări și pozele împreună)
-    const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && !peopleIn.self)})
+    const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && (!peopleIn.self || peopleIn.duo))})
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt});
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
     if(gdiag){ gdiag.tm = {...tm.s, total:performance.now() - tm.t0}; gdiag.rwc = rwCalls.filter(x => x.i > rwC0).map(({i, ...x}) => x); if(gdiag.mdl === 'Klein 9B') gdiag.mdl = kleinLbl(); }   // 13.3: tot, inclusiv pașii de după (garanția, măsurarea, finisarea)
@@ -10951,6 +11064,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     if(editLog){ m.edits = (m.edits || []).concat(editLog).slice(-10); if(editLog.auto) toast('✏️ Editarea pozei n-a schimbat destul, așa că am făcut-o din nou cu modificarea.', 4000); }   // 9.40
     m.img = k; m.prompt = prompt; m.scene = shot; if(where) m.where = where; if(asked.length) m.asked = asked; else delete m.asked; if(together) m.together = true; else delete m.together; if(check) m.check = check; else delete m.check;
     addUsage(c0.id, imgPrice(), 'img'); if(duo){ m.who = who; if(duoBoth) m.duoBoth = true; else delete m.duoBoth; }
+    if(edited && edited.duoF){ const F = edited.duoF, pc = d => d == null ? null : idPct(d); m.duoId = [pc(F.dA), pc(F.dB)]; m.duoNm = edited.duoNames; const lo = m.duoId.filter(x => x != null); if(F.n < 2) m.lookWarn = (m.lookWarn || []).concat('nu se văd amândouă fețele'); else if(lo.length && Math.min(...lo) < idPct(idMax(c))) R.faceWarn = Math.min(...lo); } else delete m.duoId;   // 14.4
     if(bd != null) m.bd = Math.round(bd * 1000) / 1000; else delete m.bd;
     if(bodyWarn != null) m.bodyWarn = bodyWarn; else delete m.bodyWarn;   // 9.85 (6)
     if(faceWarn != null) m.faceWarn = faceWarn; else delete m.faceWarn;   // 9.92 (3)
@@ -14817,7 +14931,7 @@ async function lookKeep(c, por, full, ch, ro, en, bodyEn){
   delete c.kit; delete c.sheetFill; delete c.sheetTry; delete c.closeTry; kitRan.delete(c.id);
   await saveChars();
   if(aiReady()) (async () => { try{ const k = c.photoFull, b = await DB.get(k), t = await crBodyRead(b, c.id); if(c.photoFull === k){ c.bodyFull = {k, t}; await saveChars(); } }catch(e){} })();
-  if(profId === c.id) charProfile(c.id, false);
+  if(profIs(c)) charProfile(profId, false);
   setTimeout(() => kitBuild(c, {gen:true, toast:true}).catch(() => {}), 1500);
 }
 async function lookRevert(c){
@@ -14828,7 +14942,7 @@ async function lookRevert(c){
     delete c.bodyFull; delete c.bodySig; delete c.bsheetTry; delete c.kit; delete c.sheetFill; delete c.sheetTry; delete c.closeTry; kitRan.delete(c.id);
     c.lookPrev = cur; bodyRevBump(c, crBodyEn({body:bodyOf(c)}), 'back to the previous look'); await saveChars();
     toast(`↩ ${c.name} are din nou aspectul de dinainte. Reperele se refac în fundal.`, 3500);
-    if(profId === c.id) charProfile(c.id, false);
+    if(profIs(c)) charProfile(profId, false);
     setTimeout(() => kitBuild(c, {gen:true, toast:true}).catch(() => {}), 1500);
   });
 }
