@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.5';
+const APP_VER = '14.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2705,9 +2705,9 @@ const bodyTol = c => { const n = c && c.bodyNoise && c.bodyNoise.k === c.photoFu
 // (1) profilul: poza întreagă
 async function pfFullSheet(c){
   if(!c) return;
-  const has = !!c.photoFull, ratio = has ? bodyRatioRo(await refBodySig(c).catch(() => null)) : '';
+  const has = !!c.photoFull, ratio = '';   // 14.6
   openSheet(`<h4>🧍 Poza întreagă a lui ${esc(c.name)}</h4><div class="pad">
-    ${has ? `<div class="pffull"><img data-k="${esc(c.photoFull)}" alt=""><div><small>Corpul din pozele din chat se ia de aici (și din fișa de corp făcută din ea).</small>${ratio ? `<small style="margin-top:6px">📐 Proporții măsurate: <b>${esc(ratio)}</b></small>` : ''}</div></div>` : '<p class="hint">Nu are încă o poză întreagă: corpul din pozele din chat e completat aproximativ.</p>'}
+    ${has ? `<div class="pffull"><img data-k="${esc(c.photoFull)}" alt=""><div><small>Corpul din pozele din chat se ia de aici (și din fișa de corp făcută din ea).</small><small style="margin-top:6px" id="pffRatio" hidden></small></div></div>` : '<p class="hint">Nu are încă o poză întreagă: corpul din pozele din chat e completat aproximativ.</p>'}
     <div class="pfopts">
       ${has ? '<button class="btn" id="pffView">👁️ Vezi mare</button>' : ''}
       <button class="btn" id="pffRe">↻ ${has ? 'Refă' : 'Fă'} din portret <small>2 variante, aceeași față</small></button>
@@ -2716,6 +2716,7 @@ async function pfFullSheet(c){
       <input type="file" id="pffFile" accept="image/*" hidden>
     </div></div>`);
   hydrate($('.sheet'));
+  if(has) refBodySig(c).then(sig => { const r = bodyRatioRo(sig), el = $('#pffRatio'); if(r && el){ el.innerHTML = `📐 Proporții măsurate: <b>${esc(r)}</b>`; el.hidden = false; } }).catch(() => {});   // 14.6
   const v = $('#pffView'); if(v) v.onclick = () => { closeSheet(); viewFull(c); };
   $('#pffRe').onclick = () => { closeSheet(); setTimeout(() => pfMakeFull(c), 60); };
   $('#pffBody').onclick = () => { closeSheet(); setTimeout(() => pfBodySheet(c), 60); };
@@ -14356,8 +14357,9 @@ async function crAfterBatch(E, list){
   ok.forEach(v => v.note = crNote(v));   // 11.6 (F3): nota 0–100
   const sorted = ok.slice().sort((x, y) => (y.note ?? -1) - (x.note ?? -1) || ((y.chk && y.chk.match) || 0) - ((x.chk && x.chk.match) || 0));
   R.vars.forEach(v => v.best = false);
-  const best = sorted[0];
-  if(best && best.note != null) best.best = true;
+  const best = sorted[0], sec = sorted[1];
+  const tie = !!(best && sec && (sec.note ?? -1) === (best.note ?? -1) && ((sec.chk && sec.chk.match) || 0) === ((best.chk && best.chk.match) || 0));   // 14.6
+  if(best && best.note != null && !tie) best.best = true;
   crRender();
   const auto = best && best.best && R.chosen < 0 && S.crAuto !== 'off';
   setEdStatus(`✓ ${ok.length} ${ok.length === 1 ? 'variantă gata' : 'variante gata'}${best && best.best ? `. ⭐ = nota cea mai bună (${best.note}/100)` + (auto ? ', o aleg eu; poți alege oricând alta' : '') : ''}. Atinge una ca s-o vezi mare.`, 'ok');
