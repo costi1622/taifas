@@ -1938,6 +1938,43 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 @keyframes mladjust{0%{transform:none}45%{transform:scale(1.1) translateY(-2%)}100%{transform:none}}
 @keyframes mlslip{0%{transform:none}25%{transform:translateY(12%) rotate(-6deg);filter:blur(3px)}55%{transform:translateY(-3%) rotate(2deg)}100%{transform:none}}
 @media (prefers-reduced-motion:reduce){.callv .cvid.walk,.callv .cvid[class*=ml-]{animation:none!important}}
+
+/* ═════ 14.3: duo ═════ */
+.duomw .duorow{margin-bottom:3px}
+.duomw .duorow.cont{margin-top:-1px}
+.bub.duo1{border-left:3px solid var(--dc)}
+.bub.duo1 .duo .dnm{display:flex;align-items:baseline;gap:6px}
+.bub.duo1 .dnm small{font-weight:500;color:var(--tx3);font-size:.72rem}
+.duoty{align-self:center;font-size:.74rem;color:var(--tx3);margin-left:4px;order:3}
+#duoTo{display:flex;align-items:center;gap:6px;padding:4px 12px;overflow-x:auto;scrollbar-width:none;font-size:.78rem}
+#duoTo[hidden]{display:none}
+#duoTo>span{color:var(--tx3);flex:none}
+#duoTo button{flex:none;display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 4px;border-radius:99px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font-size:.78rem}
+#duoTo button .av{width:20px;height:20px;font-size:.62rem}
+#duoTo button:first-of-type{padding-left:10px}
+#duoTo button.on{background:color-mix(in srgb,var(--acc) 22%,var(--bg2));border-color:var(--acc);font-weight:700}
+.card.duonew span{font-size:1.6rem}
+.duosheet .seg{margin-bottom:10px}
+.duosheet .dutabs{display:flex;gap:6px;margin:10px 0}
+.duosheet .dutabs button{flex:1;padding:9px;border-radius:12px;border:1px solid var(--line);background:var(--bg2);color:var(--tx);font-weight:700;border-bottom:3px solid transparent}
+.duosheet .dutabs button.on{border-bottom-color:var(--dc);background:color-mix(in srgb,var(--dc) 14%,var(--bg2))}
+.duosheet .duphoto{width:132px;height:168px;margin:6px auto 8px;border-radius:18px;overflow:hidden;border:2px dashed var(--line);display:grid;place-items:center;cursor:pointer;background:var(--bg2)}
+.duosheet .duphoto img{width:100%;height:100%;object-fit:cover}
+.duosheet .duphoto span{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:1.6rem;text-align:center}
+.duosheet .duphoto span b{font-size:.78rem}.duosheet .duphoto span small{font-size:.7rem;color:var(--tx3)}
+.duosheet .dulbl{font-weight:800;margin:12px 0 6px}
+.duosheet .dusec{margin-top:12px;padding-top:6px;border-top:1px solid var(--line)}
+.duosheet .dupick{max-height:220px;overflow:auto}
+.duosheet .duidea{margin:4px 0 6px}
+.duosheet .duidea textarea{margin-top:6px}
+/* 14.3: apelul video: bara de sus nu mai intră sub fereastra ta, iar reacțiile din „Mai mult” încap */
+.callv.vid.v2 .vtop{right:122px!important}
+.callv.vid.v2 .cbtns button{display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+.callv.vid.v2 #clEnd{align-self:stretch}
+.callv.vid.v2 #clEnd svg{width:46px;height:46px}
+.callv.vid.v2 .vlivec{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cmore .cmrx{flex-wrap:wrap;justify-content:center}
+.cmore .cmrx button{width:42px;height:42px;font-size:1.2rem}
 </style>
 </head>
 <body>
@@ -2006,6 +2043,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
   <div id="msgs"></div>
   <button id="jumpDown" hidden aria-label="Mergi jos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><b id="jumpN" hidden></b></button>
   <div id="replyBar" hidden><div><b id="rbName"></b><span id="rbTxt"></span></div><button type="button" id="rbX" aria-label="Anulează">✕</button></div>
+  <div id="duoTo" hidden></div>
   <div id="typingBar" hidden><span id="tbAv"></span><span id="tbTxt"></span></div>
   <div id="sugg"></div>
   <section id="intimacyQuick" hidden aria-label="Acțiuni rapide de apropiere">
@@ -2157,7 +2195,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
           <label for="edDuoAspect">Aspect (personajul 2)</label><textarea id="edDuoAspect" rows="4"></textarea>
           <label for="edDuoSpeech">Cum vorbește (personajul 2)</label><input id="edDuoSpeech" maxlength="200" placeholder="ex. sec, ironică, fraze scurte">
           <label for="edDuoRel">Ce relație au între ele</label><input id="edDuoRel" maxlength="160" placeholder="ex. surori, colege de apartament, cele mai bune prietene">
-          <p class="hint">La două personaje nu sunt (încă) poze, apeluri și grupuri.</p>
+          <p class="hint">Pentru două poze de profil, vocea fiecăreia și duo din personajele tale: ＋ 👯 Duo nou pe Acasă, sau „✏️ Editează fișele” în profil.</p>
         </div>
       </div>
       <div class="sec">
