@@ -1893,6 +1893,51 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 .view.vin-f,.view.vin-b,.view.vout-f,.view.vout-b,.view.vin-b::after{animation-duration:.26s!important}
 .view.vin-z,.view.vout-z{animation-duration:.24s!important}
 .sheet{animation-duration:.22s}
+
+/* ═════ 14.2: UI nou de apel video ═════ */
+.callv.vid.v2 .vtop{left:12px!important;right:12px!important;top:calc(10px + var(--safe-t,0px));padding:10px 14px;border-radius:22px;background:linear-gradient(180deg,#0000008c,#0000);backdrop-filter:blur(6px);row-gap:4px}
+.callv.vid.v2 .vname{font-size:1.12rem;font-weight:800;letter-spacing:.2px}
+.callv.vid.v2 .vchips{display:flex;gap:6px;flex-wrap:wrap;width:100%}
+.callv.vid.v2 .vloc,.callv.vid.v2 .vper,.callv.vid.v2 .vlivec{font-size:.72rem;font-weight:600;padding:3px 9px;border-radius:99px;background:#ffffff1f;border:1px solid #ffffff22;backdrop-filter:blur(10px)}
+.callv.vid.v2 .vlivec{display:inline-block;margin-top:4px;background:color-mix(in srgb,var(--acc) 35%,#0000);animation:pulse 2.4s infinite}
+.callv.vid.v2 .vlivec[hidden],.callv.vid.v2 .vloc[hidden]{display:none}
+.callv.vid.v2 .cbtns{width:min(96%,460px);margin-left:auto;margin-right:auto;display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:4px;overflow-x:auto;scrollbar-width:none;padding:8px 10px;border-radius:30px;background:#16161ccc;backdrop-filter:blur(24px) saturate(1.4);border:1px solid #ffffff17;box-shadow:0 10px 40px #000a;z-index:5}
+.callv.vid.v2 .cbtns::-webkit-scrollbar{display:none}
+.callv.vid.v2 .cbtns button{flex:0 0 auto;min-width:56px}
+.callv.vid.v2 .cbtns button svg{width:46px;height:46px;padding:12px;border-radius:50%;background:#ffffff14}
+.callv.vid.v2 .cbtns button.off svg{background:#fff;color:#111}
+.callv.vid.v2 .cbtns button span{font-size:.6rem;opacity:.8}
+.callv.vid.v2 #clEnd{position:sticky;right:0;margin-left:auto;padding-left:6px;background:linear-gradient(90deg,#16161c00,#16161c 30%)}
+.callv.vid.v2 #clEnd svg{width:52px;height:52px;background:#ff3b30;color:#fff}
+.callv.vid.v2 .cmain{gap:6px}
+.callv.vid.v2 .vreact:empty{display:none}
+.callv.vid.v2 .ccap{max-width:min(92%,440px);border-radius:20px;background:#0f0f14b3;border:1px solid #ffffff14;font-size:1.04rem;line-height:1.38}
+.callv.vid.v2 #clState{font-size:.72rem;background:#ffffff1c}
+.callv.vid.v2 .cself{border-radius:22px;border:2px solid #ffffff38;box-shadow:0 12px 30px #000b,0 0 0 0 color-mix(in srgb,var(--acc) 60%,#0000);transition:box-shadow .35s,width .25s,height .25s,left .25s,top .25s}
+.callv.vid.v2 .vreact{right:10px;top:auto;bottom:calc(190px + env(safe-area-inset-bottom,0px));padding:6px;border-radius:24px;background:#0000004d;backdrop-filter:blur(14px);gap:6px}
+.callv.vid.v2 .vreact button{width:42px;height:42px;border-radius:50%}
+.callv.vid.v2 .ccprog{top:calc(124px + var(--safe-t,0px))}
+.callv .cgest{position:absolute!important;left:0;right:0;margin:0 auto;width:max-content;top:44%;transform:translateY(-8px);z-index:30;padding:6px 14px;border-radius:99px;background:#000c;color:#fff;font-size:.82rem;font-weight:700;font-style:normal;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+.callv .cgest.on{opacity:1;transform:none}
+.callv .cdown{position:absolute!important;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#fff;opacity:0;transition:opacity .5s;background:radial-gradient(60% 40% at 50% 30%,#f5e6c8 0%,#b9a68a 35%,#5a4f43 75%,#2a2520 100%);pointer-events:none}
+.callv .cdown.on{opacity:1}
+.callv .cdown .lamp{width:90px;height:90px;border-radius:50%;background:radial-gradient(#fff 0%,#fff6 40%,#fff0 70%);filter:blur(6px);animation:handheld 4s ease-in-out infinite alternate}
+.callv .cdown b{text-shadow:0 1px 8px #000a}
+.callv .cdown small{opacity:.8}
+.callv .cvid video.cmove{z-index:1;opacity:0}
+.callv .cvid video.cmove.on{opacity:1}
+.callv .cvid.walk{animation:mlwalk .55s ease-in-out infinite alternate}
+.callv .cvid.chest{filter:blur(14px) brightness(.55);transition:filter .6s}
+.callv .cvid.ml-hand{animation:mlhand 1.4s ease-in-out}
+.callv .cvid.ml-sit{animation:mlsit 1.5s ease-in-out}
+.callv .cvid.ml-adjust{animation:mladjust 1.3s ease-in-out}
+.callv .cvid.ml-slip{animation:mlslip 1.2s cubic-bezier(.3,1.4,.5,1)}
+@keyframes mlwalk{from{transform:translate(-1.2%,0) rotate(-.8deg) scale(1.06)}to{transform:translate(1.2%,-1.5%) rotate(.8deg) scale(1.06)}}
+@keyframes mlhand{0%{transform:none}35%{transform:translateX(7%) rotate(5deg) scale(1.05);filter:blur(2px)}60%{transform:translateX(-4%) rotate(-3deg) scale(1.04);filter:blur(1px)}100%{transform:none}}
+@keyframes mlsit{0%{transform:none}40%{transform:translateY(7%) scale(1.06)}70%{transform:translateY(-2%) scale(1.03)}100%{transform:none}}
+@keyframes mladjust{0%{transform:none}45%{transform:scale(1.1) translateY(-2%)}100%{transform:none}}
+@keyframes mlslip{0%{transform:none}25%{transform:translateY(12%) rotate(-6deg);filter:blur(3px)}55%{transform:translateY(-3%) rotate(2deg)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){.callv .cvid.walk,.callv .cvid[class*=ml-]{animation:none!important}}
 </style>
 </head>
 <body>
@@ -2355,6 +2400,12 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <h3 class="sh">🎬 Imaginea</h3>
       <label>🎬 Mișcare reală (clipuri Runware)<small class="lh">8 clipuri scurte o dată pe loc (dormitor, bucătărie, afară…). Cer cheia Runware în telefon.</small></label>
       <div class="seg" id="stCallClips"><button data-v="on">Pornit</button><button data-v="profil">Doar pe avatar</button><button data-v="off">Oprit</button></div>
+      <label style="margin-top:10px">🤳 Vie în apel<small class="lh">Te vede din cap și din mâini (da/nu, faci cu mâna, ridici mâna, arăți spre ceva), se mută prin casă cu telefonul, se schimbă de haine (fără să se vadă), mișcă telefonul ca un om.</small></label>
+      <div class="seg" id="stCallGest"><button data-v="on">👋 Gesturile tale: da</button><button data-v="off">Nu</button></div>
+      <div class="seg" id="stCallMoves" style="margin-top:6px"><button data-v="0">Nu se mută</button><button data-v="1">Se mută o dată</button><button data-v="2">De două ori</button></div>
+      <div class="seg" id="stCallOutfit" style="margin-top:6px"><button data-v="0">Nu se schimbă</button><button data-v="1">Se schimbă o dată</button></div>
+      <div class="seg" id="stCallHand" style="margin-top:6px"><button data-v="on">📱 Telefonul în mână: da</button><button data-v="off">Nu</button></div>
+      <p class="hint">Mutarea: ~$0,10 drumul + ~$0,30 o cameră nouă (refolosită apoi). Hainele: ~$0,22. Gesturile și mișcările telefonului: gratuite, în telefon.</p>
       <div class="seg" id="stCcFid" style="margin-top:6px"><button data-v="max">🎯 Fidelitate 1:1</button><button data-v="eco">💰 Economic</button></div>
       <p class="hint" id="stCcHint"></p>
       <label>🗣️ Cât vorbește<small class="lh">Clip real: se mișcă natural, gura nu e potrivită pe cuvinte. Fața din telefon: gura pe cuvinte, restul nemișcat.</small></label>
