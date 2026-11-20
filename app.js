@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.8';
+const APP_VER = '14.9';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -38,7 +38,7 @@ const DEF = {
   userName:'', userAbout:'', len:'mediu', font:16,
   imgProv:'none',
   wkBase:'', wkTok:'', wkModel:'eco', wkSize:'768x1024',
-  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', vidFid:'max', arc:'on', vidRep:'on', callGest:'on', callPre:'on', callLib:'on', callMoves:'1', callOutfit:'1', callHand:'on', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
+  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', vidFid:'max', arc:'on', vidRep:'on', callGest:'on', callPre:'on', callLib:'on', callMoves:'1', callOutfit:'1', callHand:'on', callClips:'on', callTalk:'hybrid', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
   vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
 };
 let S = {...DEF};
@@ -13730,6 +13730,12 @@ function ccWhyNot(cc){
    de apel a locului (sau a tuturor locurilor), clipurile intră exact ca cele făcute aici. Cu set din Animas, în apel nu se face nimic pe Runware
    (nici clipurile lipsă, nici mutarea, nici schimbatul hainelor). „📚 Din Animas: Nu” (Setări → Apeluri) revine la imaginile și clipurile de aici. */
 const LIB_V = 1;
+// Biblioteca Animas 1.8: 30 roluri; primele 8 rămân compatibile cu Animas 1.7.x.
+const CC_LIB_KINDS = ['vorb','asc','activ','vorb2','gand','ras','priv','bye','smile','smile2','nod','agree','curious','surprised','concern','think2','listen2','lookdown','lookup','left','right','hair','sip','phone','stretch','shift','wave','greet','calm','attentive'];
+const CC_LIB_TALK = ['vorb','vorb2'];
+const CC_LIB_LISTEN = ['asc','nod','agree','listen2','attentive'];
+const CC_LIB_THINK = ['gand','think2','curious','lookdown','lookup','concern'];
+const CC_LIB_IDLE = ['activ','smile','smile2','priv','left','right','calm','shift','hair','sip','phone','stretch','surprised','ras','listen2','attentive'];
 function libOpen(){
   return new Promise(async res => {
     try{ if(indexedDB.databases){ const L = await indexedDB.databases(); if(!L.some(d => d.name === 'animas')) return res(null); } }catch(e){}
@@ -13776,12 +13782,13 @@ async function libSync0(){
         const fb = await libGet(db, s.frame); if(!(fb instanceof Blob)) continue;
         clipsA = clipsA || (await libGet(db, 'clips')) || [];
         const v = {};
-        for(const kind of CC_KINDS){
+        for(const kind of CC_LIB_KINDS){
           const id = s.clips && s.clips[kind], ok = id && s.chk && s.chk[id] && s.chk[id].ok;
           const cl = ok && clipsA.find(x => x && x.id === id); if(!cl || !cl.vid) continue;
           let vb = await libGet(db, cl.vid); if(!(vb instanceof Blob) || vb.size < 1000) continue;
           if(!/^video\//.test(vb.type)) vb = new Blob([vb], {type:'video/mp4'});
-          v[kind] = {k:await saveImg(vb), at:Date.now(), lib:1, reuse:1};
+          const meta = s.roles && s.roles[kind] || {};
+          v[kind] = {k:await saveImg(vb), at:Date.now(), lib:1, reuse:1, group:meta.group || (['vorb','vorb2'].includes(kind) ? 'talk' : ['asc'].includes(kind) ? 'listen' : ['gand'].includes(kind) ? 'think' : kind === 'bye' ? 'bye' : 'idle'), loop:meta.loop !== false, transition:meta.transition || 'soft'};
         }
         if(!Object.keys(v).length) continue;
         if(have[s.id]) libDrop(cc, s.id);
@@ -13802,7 +13809,7 @@ async function libSync0(){
 }
 function libHintDraw(){
   const h = $('#stLibHint'); if(!h) return;
-  const L = chars.flatMap(c => [c, c.duo && c.duo.b].filter(x => x && x.id)).flatMap(c => Object.values(c.libSets || {}).map(r => `${c.name}: ${r.place === 'toate' ? 'toate locurile' : ENV_RO_LIB[r.place] || r.place}, ${r.n}/${CC_KINDS.length} clipuri`));
+  const L = chars.flatMap(c => [c, c.duo && c.duo.b].filter(x => x && x.id)).flatMap(c => Object.values(c.libSets || {}).map(r => `${c.name}: ${r.place === 'toate' ? 'toate locurile' : ENV_RO_LIB[r.place] || r.place}, ${r.n}/${CC_LIB_KINDS.length} clipuri`));
   h.textContent = S.callLib === 'off' ? 'Oprit: apelurile folosesc imaginile și clipurile făcute aici.'
     : L.length ? '📚 Seturi din Animas: ' + L.join(' · ') + '. În apelurile cu ele: fără cost Runware.' : 'Niciun set de apel din Animas încă (Animas → 📞 Apel). Se preiau singure când revii în Taifas.';
 }
@@ -13814,15 +13821,16 @@ const ENV_RO_LIB = {casa:'acasă', pat:'în pat', bucatarie:'bucătărie', strad
    la final, următorul clip potrivit intră lin peste el (vezi ccPlay); la schimbarea stării, trecerea se face imediat. */
 const CC_IDLE = ['activ', 'asc', 'priv', 'activ', 'gand'];
 const ccHasClip = (L, k) => !!(L && L.els[k] && L.els[k] !== 1);
-function ccLibOn(c){ const L = c && c.cl; return !!(L && ccIsLib(c) && CC_IDLE.some(k => ccHasClip(L, k))); }
+function ccLibOn(c){ const L = c && c.cl; return !!(L && ccIsLib(c) && [...CC_LIB_IDLE, ...CC_LIB_LISTEN, ...CC_LIB_THINK].some(k => ccHasClip(L, k))); }
 function ccLibWant(c){
-  if(c.state === 'speak') return S.callTalk === 'face' ? [] : ['vorb', 'vorb2'];
-  if(c.state === 'listen' && c.interim && performance.now() - (c.heardAt || 0) < 1500) return ['asc'];
-  if(c.state === 'think') return ['gand', 'asc'];
-  return CC_IDLE;
+  // Hibrid: când personajul rostește textul curent, clipurile cu gură generică se ascund și rămâne gura procedurală, temporizată pe cuvintele reale.
+  if(c.state === 'speak') return S.callTalk === 'face' || S.callTalk === 'hybrid' ? [] : CC_LIB_TALK;
+  if(c.state === 'listen' && c.interim && performance.now() - (c.heardAt || 0) < 1500) return CC_LIB_LISTEN;
+  if(c.state === 'think') return CC_LIB_THINK.concat(CC_LIB_LISTEN);
+  return CC_LIB_IDLE.concat(CC_LIB_LISTEN, CC_LIB_THINK);
 }
 function ccLibPick(c, want){
-  const L = c.cl; let ks = want.filter(k => ccHasClip(L, k)); if(!ks.length && c.state !== 'speak') ks = CC_IDLE.filter(k => ccHasClip(L, k)); if(!ks.length) return null;
+  const L = c.cl; let ks = want.filter(k => ccHasClip(L, k)); if(!ks.length && c.state !== 'speak') ks = CC_LIB_IDLE.concat(CC_LIB_LISTEN).filter(k => ccHasClip(L, k)); if(!ks.length) return null;
   const cur = L.cur && L.cur !== 1 ? L.cur.dataset.kind : '', alt = ks.filter(k => k !== cur), pool = alt.length ? alt : ks;
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -13892,7 +13900,7 @@ async function ccAdd(c, kind, r){
   v.addEventListener('error', () => { if(c.cl && c.cl.els[kind] === v){ delete c.cl.els[kind]; if(c.cl.cur === v) c.cl.cur = null; } v.remove(); }, {once:true});
   v.addEventListener('ended', () => {   // 12.5: cât vorbește, clipurile „vorbește” se continuă unul pe altul
     if(call === c && c.cl && c.cl.cur === v && kind !== 'bye' && ccLibOn(c)){ ccLibNext(c); return; }   // 14.8: mișcare continuă
-    if(call === c && c.state === 'speak' && /^vorb/.test(kind) && S.callTalk !== 'face' && c.cl.cur === v){ const o = kind === 'vorb' ? 'vorb2' : 'vorb', ov = c.cl.els[o]; if(ccPlay(c, ov && ov !== 1 ? o : kind, true)) return; }
+    if(call === c && c.state === 'speak' && /^vorb/.test(kind) && S.callTalk !== 'face' && S.callTalk !== 'hybrid' && c.cl.cur === v){ const o = kind === 'vorb' ? 'vorb2' : 'vorb', ov = c.cl.els[o]; if(ccPlay(c, ov && ov !== 1 ? o : kind, true)) return; }
     ccOff(c, v); });
   cvd.insertBefore(v, cvd.querySelector('.cgrain'));
   c.cl.els[kind] = v;
@@ -13937,7 +13945,7 @@ function ccRun(c){
     if(ccLibOn(c)){ ccRunLib(c); return; }   // 14.8: setul din Animas: mereu un clip, schimbat după ce se întâmplă
     const now = performance.now(), since = k => now - (L.last[k] || 0), quiet = now - (L.lastAny || 0), has = k => L.els[k] && L.els[k] !== 1;
     if(c.state === 'speak'){
-      if(S.callTalk !== 'face' && (has('vorb') || has('vorb2'))){ if(!L.cur || !/^vorb|^bye/.test(L.cur.dataset.kind)){ const k = has('vorb') && (L.lastTalk !== 'vorb' || !has('vorb2')) ? 'vorb' : 'vorb2'; L.lastTalk = k; ccPlay(c, k, true); } return; }   // 12.5
+      if(S.callTalk !== 'face' && S.callTalk !== 'hybrid' && (has('vorb') || has('vorb2'))){ if(!L.cur || !/^vorb|^bye/.test(L.cur.dataset.kind)){ const k = has('vorb') && (L.lastTalk !== 'vorb' || !has('vorb2')) ? 'vorb' : 'vorb2'; L.lastTalk = k; ccPlay(c, k, true); } return; }   // 12.5
       if(L.cur && L.cur.dataset.kind !== 'bye') ccOff(c, L.cur, true); return; }
     if(L.cur && /^vorb/.test(L.cur.dataset.kind)){ ccOff(c, L.cur); return; }   // a terminat de vorbit
     if(L.cur || c.ending) return;
@@ -13962,8 +13970,9 @@ function callDiag(c){
   out.push(['🖼️ Imaginea', !c.video ? 'apel doar audio' : k0 && cc.callClips && cc.callClips[k0] && cc.callClips[k0].lib ? `imaginea de apel din Animas („${env}”)` : c.framePending ? `se pregătește imaginea de apel pentru „${env}”` : k0 && callFrameOf(cc, env) === k0 ? `imaginea de apel pentru „${env}”` : `poza de profil sau din chat${c.frameLate ? ' (imaginea de apel va fi gata data viitoare)' : ''}`]);
   const clipOn = !!(L && L.cur && L.cur !== 1 && L.cur.classList.contains('on'));
   out.push(['👄 Fața și gura', !c.video ? '—' : c.vfWhy || (!V ? 'nepornită încă' : V.ready ? `găsită (${V.how || 'detector'}) · ${V.spr ? 'gura din cadre reale' : 'gura desenată'} · acum se vede ${clipOn ? 'un clip' : 'fața care vorbește'}` : (V.why || 'caut fața…'))]);
-  const set = cc.callClips && k0 ? cc.callClips[k0] : null, n = set && set.v ? CC_KINDS.filter(k => set.v[k] && !set.v[k].bad).length : 0, nb = set && set.v ? CC_KINDS.filter(k => set.v[k] && set.v[k].bad).length : 0;   // 13.8
-  let cl = !c.video ? '—' : S.callClips === 'off' ? 'oprite (Setări → Apeluri)' : c.framePending ? 'așteaptă imaginea de apel' : c.ccWhy || `${n}/${CC_KINDS.length} gata${set && set.lib ? ' · 📚 din Animas, fără cost' : ''}${c.ccMaking ? ', se fac acum' : ''}`;
+  out.push(['🔄 Sincronizare', S.callTalk === 'hybrid' ? 'hibridă: clipuri Animas pentru reacții/activități; fața Taifas cu gura temporizată pe text în timpul replicilor' : S.callTalk === 'face' ? 'fața din telefon pe text' : 'clipuri preînregistrate pentru vorbire']);
+  const set = cc.callClips && k0 ? cc.callClips[k0] : null, kinds = set && set.lib ? CC_LIB_KINDS : CC_KINDS, n = set && set.v ? kinds.filter(k => set.v[k] && !set.v[k].bad).length : 0, nb = set && set.v ? kinds.filter(k => set.v[k] && set.v[k].bad).length : 0;   // 13.8
+  let cl = !c.video ? '—' : S.callClips === 'off' ? 'oprite (Setări → Apeluri)' : c.framePending ? 'așteaptă imaginea de apel' : c.ccWhy || `${n}/${kinds.length} gata${set && set.lib ? ' · 📚 din Animas, fără cost' : ''}${c.ccMaking ? ', se fac acum' : ''}`;
   if(clipOn) cl += ` · rulează „${L.cur.dataset.kind}”${L.cur.paused ? ' (pe pauză)' : ''}`;
   if(c.ccErr) cl += ` · ultima problemă: ${c.ccErr}`;
   out.push(['🎬 Clipurile', cl]);
@@ -16262,7 +16271,9 @@ async function init(){
   // 9.70: pe Android, ascultarea pornită cât vorbește ea (întreruperi vocale, „îhî”) îi tăia vocea (focus audio / căști Bluetooth în mod apel); o dată, le oprim
   if((S.sv || 0) < 45){ if(IS_ANDROID){ S.callBarge = 'off'; S.callBack = 'off'; } S.sv = 45; saveSettings(); }
   // 9.84: setările de creare și poze rămân doar cele care dau fidelitatea maximă (celelalte nu mai apar în Setări)
-  if((S.sv || 0) < 46){ Object.assign(S, FIDEL_FIX); S.sv = 46; saveSettings(); }   // 9.51: cache-ul de 5 min a dus la rescrieri complete după pauze de 5-60 min (mai scump decât economia)
+  if((S.sv || 0) < 46){ Object.assign(S, FIDEL_FIX); S.sv = 46; saveSettings(); }
+  // 14.9: setul Animas extins + redare hibridă: clipuri pentru reacții, gură sincronizată procedural pe text în timpul vorbirii.
+  if((S.sv || 0) < 47){ S.callTalk = 'hybrid'; S.sv = 47; saveSettings(); }   // 9.51: cache-ul de 5 min a dus la rescrieri complete după pauze de 5-60 min (mai scump decât economia)
   onlyOurProviders();   // 9.19: la fiecare pornire (și după o restaurare dintr-un backup vechi)
   if(cspSync(true)) return;   // 8.20: adresă nouă → repornim o dată, ca politica de securitate să o permită
   chars = (await DB.get('chars') || []).filter(c => c && c.id && c.name);
