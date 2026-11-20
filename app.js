@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.6';
+const APP_VER = '14.7';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -38,7 +38,7 @@ const DEF = {
   userName:'', userAbout:'', len:'mediu', font:16,
   imgProv:'none',
   wkBase:'', wkTok:'', wkModel:'eco', wkSize:'768x1024',
-  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', vidFid:'max', arc:'on', vidRep:'on', callGest:'on', callPre:'on', callMoves:'1', callOutfit:'1', callHand:'on', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
+  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', vidFid:'max', arc:'on', vidRep:'on', callGest:'on', callPre:'on', callLib:'on', callMoves:'1', callOutfit:'1', callHand:'on', callClips:'on', callTalk:'clip', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
   vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
 };
 let S = {...DEF};
@@ -5895,6 +5895,7 @@ async function gLifeSweep(){
 
 /* ───────── CONVERSAȚIE ───────── */
 async function openChat(id, push = true, tid, dir){
+  libSync().catch(() => {});   // 14.7: clipurile de apel făcute între timp în Animas
   whenIdle(() => { const cc = charById(id); if(cc && duoOn(cc)) duoKits(cc); else if(cc) kitEnsure(cc, {delay:0}); }, 5000);   // 14.4
   whenIdle(() => { const cc = charById(id); if(!cc || !duoOn(cc)) callFramePre(id); }, 15000, 180e3);   // 14.4: la duo nu (cadrul ar primi numele amândurora)   // 12.9: cadrul de apel, dinainte   // 9.92: partea gratuită a pachetului; 10.6 (C): doar când nu atingi ecranul, iar modelele de recunoaștere se încarcă abia când ceri o poză
   cur = charById(id); if(!cur) return;
@@ -11887,7 +11888,7 @@ const MOVE_ENV = {sufragerie:'casa', living:'casa', 'camera de zi':'casa', casa:
 const callEnv = c => { if(c && c.envOver) return c.envOver; try{ return ambEnv(c); }catch(e){ return 'casa'; } };
 const liveOn = () => !callHarness() || !!window.__liveTest;   // testele vechi rulează ca înainte
 function callLiveRules(c){
-  if(!c || !c.video || !liveOn()) return '';
+  if(!c || !c.video || !liveOn() || ccIsLib(c)) return '';   // 14.7: cu setul din Animas nu se mută și nu se schimbă (ar costa și ar ieși din set)
   const u = S.userName.trim() || 'el', env = callEnv(c), r = [];
   if(+S.callMoves > (c.moves || 0) && HOME_ENV.includes(env) && callFrameCan()) r.push(`ca într-un apel video real, poți (rar, cel mult ${+S.callMoves - (c.moves || 0) === 1 ? 'o dată' : 'de două ori'} în apelul ăsta) să te muți cu telefonul în mână în altă cameră a casei, când e firesc (te duci după ceva, faci ceva acolo) sau când ți-o cere ${u}: atunci încheie replica cu [mut: bucătărie], [mut: dormitor] sau [mut: sufragerie] (acum ești ${ENV_RO[env] || 'acasă'})`);
   if(+S.callOutfit > (c.outfits || 0) && callFrameCan()) r.push(`dacă e firesc (te pregătești de ieșit, ți-e frig sau cald, vii de la sport) sau ți-o cere ${u}, poți să te schimbi de haine: spune că lași telefonul o clipă și încheie replica cu [haine: ținuta nouă de zi cu zi, în engleză]; schimbatul nu se vede, revii îmbrăcată`);
@@ -12224,7 +12225,7 @@ function callLocDraw(c){ const el = $('#clLoc'); if(!el || !c.video) return; con
 function callChip2(c, t){ const el = $('#clLive'); if(!el) return; if(!t){ el.hidden = true; el.textContent = ''; return; } el.textContent = t; el.hidden = false; }
 // după replica ei: [mut: …] / [haine: …]
 function callTags(c, m){
-  if(!c.video || !liveOn()) return;
+  if(!c.video || !liveOn() || ccIsLib(c)) return;
   const t = String(m.text || ''), mv = t.match(/\[\s*mut:\s*([^\]\n]{2,40})\]/i), hn = t.match(/\[\s*haine:\s*([^\]\n]{2,200})\]/i);
   if(mv) callMove(c, mv[1]).catch(() => {}); else if(hn) callOutfit(c, hn[1]).catch(() => {});
 }
@@ -13447,6 +13448,7 @@ async function ccPrebuild(cc, env, k0){
   if(!cc || !k0 || S.callPre === 'off' || S.callClips === 'off' || ccWhyNot(cc) || (callHarness() && !window.__liveTest)) return;
   try{ if(call) return; }catch(e){}
   cc.callClips = cc.callClips || {};
+  if(cc.callClips[k0] && cc.callClips[k0].lib) return;   // 14.7: setul din Animas nu se completează pe Runware
   const set = cc.callClips[k0] = cc.callClips[k0] || {at:Date.now(), env, v:{}}; set.v = set.v || {};
   const run = CC_PRE.run[k0] = CC_PRE.run[k0] || new Set();
   const todo = CC_BASE.filter(k => (!set.v[k] || set.v[k].draft) && !run.has(k)); if(!todo.length) return;
@@ -13471,6 +13473,7 @@ function ccSwap(c, kind, r){
 }
 // 13.8: prețurile exacte, după alegeri
 function vidHintDraw(){
+  libHintDraw();   // 14.7
   const h = $('#stVidHint'); if(h){ const f = vidFid(), q = vidQ(), s0 = vidSec();
     h.textContent = f ? `🎯 1:1, ${S.vidQ === 'clar' ? 'Standard' : 'Ciornă'}, ${s0} s: clipul ${usd4(q.usd * s0)} + cadrul de final (o poză${imgPrice() > 0 ? ', ~' + usd4(imgPrice()) : ''}); dacă fața alunecă, refăcut automat o dată (încă ${usd4(q.usd * s0)}).`
       : `💰 Economic, ${S.vidQ === 'clar' ? 'Clar' : 'Ciornă'}, ${s0} s: ${usd4(q.usd * s0)}; doar primul cadru, fără refacere (fața se măsoară și se arată pe video).${+S.vidS > 6 ? ' Economic merge până la 6 s.' : ''}`; }
@@ -13618,7 +13621,7 @@ const CC_PLACE = {casa:'at home in the living room', pat:'in bed at home, leanin
   parc:'outdoors in a park', cafenea:'sitting in a cafe', masina:'sitting in a parked car', birou:'at the office desk', plaja:'at the beach'};
 const CALL_FRAME_DAYS = 3;
 const callHarness = () => !!(window.__said && !window.__callFrameTest);   // rularea automată a testelor vechi: ca înainte
-function callFrameOf(cc, env){ const f = cc && cc.callFrames && cc.callFrames[env]; return f && f.k && (!f.ph || f.ph === cc.photo) ? f.k : null; }   // 14.5: rămâne cât poza de profil e aceeași (înainte: 3 zile)
+function callFrameOf(cc, env){ { const L = libFrameOf(cc, env); if(L) return L; } const f = cc && cc.callFrames && cc.callFrames[env]; return f && f.k && (!f.ph || f.ph === cc.photo) ? f.k : null; }   // 14.5: rămâne cât poza de profil e aceeași (înainte: 3 zile)
 function callPicsNow(cc, ch){
   if(callHarness()) return ccPlacePics(cc, ch, callPics(cc, ch));
   if(!cc.photo) return [];
@@ -13704,7 +13707,7 @@ function callFrameSwitch(c, k){   // trece pe cadrul nou ca un telefon mutat și
 }
 const ccSet = c => c && c.c && c.c.callClips && c.pics && c.pics[0] ? c.c.callClips[c.pics[0]] : null;
 function ccPrune(cc){   // 14.5: păstrează seturile imaginilor de apel ale locurilor ei + ultimele 3 în plus
-  const keep = new Set(Object.values(cc.callFrames || {}).map(f => f && f.k).filter(Boolean));
+  const keep = new Set([...Object.values(cc.callFrames || {}), ...Object.values(cc.libFrames || {})].map(f => f && f.k).filter(Boolean));   // 14.7: + imaginile din Animas
   const all = Object.entries(cc.callClips || {}).filter(([k]) => !keep.has(k)).sort((a, b) => (b[1].at || 0) - (a[1].at || 0));
   for(const [k, set] of all.slice(3)){ for(const r of Object.values(set.v || {})) if(r && r.k && !r.reuse) delImg(r.k).catch(() => {}); delete cc.callClips[k]; }
 }
@@ -13720,6 +13723,88 @@ function ccWhyNot(cc){
   if(!rwDirect()) return 'cheia Runware nu e în telefon: prin Worker merg doar poze (Setări → Poze → cheia Runware)';
   return '';
 }
+/* ═════════ 📚 14.7: clipurile de apel din Animas ═════════
+   Animas (aceeași adresă, costi1622.github.io → aceeași bază a telefonului) face „seturi pentru apel”: o imagine de apel + clipuri pe
+   roluri (vorbește, ascultă, ce face, se gândește, râde, privește în altă parte, la revedere), fiecare verificat în Animas (haine de zi cu zi,
+   mișcare obișnuită). Taifas le citește doar (nu scrie nimic în baza Animas; dacă baza nu există, crearea ei e anulată), le copiază la el
+   și le folosește în apelurile video ale personajului (după id-ul din Taifas, păstrat de Animas la import): imaginea setului devine imaginea
+   de apel a locului (sau a tuturor locurilor), clipurile intră exact ca cele făcute aici. Cu set din Animas, în apel nu se face nimic pe Runware
+   (nici clipurile lipsă, nici mutarea, nici schimbatul hainelor). „📚 Din Animas: Nu” (Setări → Apeluri) revine la imaginile și clipurile de aici. */
+const LIB_V = 1;
+function libOpen(){
+  return new Promise(async res => {
+    try{ if(indexedDB.databases){ const L = await indexedDB.databases(); if(!L.some(d => d.name === 'animas')) return res(null); } }catch(e){}
+    let r; try{ r = indexedDB.open('animas'); }catch(e){ return res(null); }
+    r.onupgradeneeded = () => { try{ r.transaction.abort(); }catch(e){} };
+    r.onsuccess = () => { const db = r.result; if(!db.objectStoreNames.contains('kv')){ db.close(); return res(null); } res(db); };
+    r.onerror = () => res(null); r.onblocked = () => res(null);
+  });
+}
+const libGet = (db, k) => new Promise(res => { try{ const q = db.transaction('kv', 'readonly').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }catch(e){ res(null); } });
+const ccIsLib = c => { const set = ccSet(c); return !!(set && set.lib); };
+function libFrameOf(cc, env){
+  if(S.callLib === 'off' || !cc || !cc.libFrames) return null;
+  const f = cc.libFrames[env] || cc.libFrames['*'];
+  return f && f.k && cc.callClips && cc.callClips[f.k] && cc.callClips[f.k].lib ? f.k : null;
+}
+function libDrop(cc, sid){
+  const r = cc.libSets && cc.libSets[sid]; if(!r) return;
+  const set = cc.callClips && cc.callClips[r.fk];
+  if(set){ for(const x of Object.values(set.v || {})) if(x && x.k) delImg(x.k).catch(() => {}); delete cc.callClips[r.fk]; }
+  if(r.fk) delImg(r.fk).catch(() => {});
+  for(const [e, f] of Object.entries(cc.libFrames || {})) if(f && f.sid === sid) delete cc.libFrames[e];
+  delete cc.libSets[sid];
+}
+let LIB_RUN = null;
+function libSync(){
+  if(LIB_RUN) return LIB_RUN;
+  LIB_RUN = libSync0().finally(() => { LIB_RUN = null; });
+  return LIB_RUN;
+}
+async function libSync0(){
+  try{ if(call) return {n:0, busy:1}; }catch(e){}   // nu în mijlocul unui apel
+  const all = chars.flatMap(c => [c, c.duo && c.duo.b].filter(x => x && x.id));
+  const db = await libOpen();
+  let sets = [];
+  if(db){ const v = await libGet(db, 'callsets'); sets = Array.isArray(v) ? v.filter(s => s && s.v === LIB_V && s.id && s.tid && s.frame) : []; }
+  let changed = false, n = 0, clipsA = null;
+  try{
+    for(const cc of all){
+      const mine = sets.filter(s => s.tid === cc.id), have = cc.libSets || {};
+      if(db) for(const sid of Object.keys(have)) if(!mine.some(s => s.id === sid)){ libDrop(cc, sid); changed = true; }   // șters în Animas
+      for(const s of mine){
+        if(have[s.id] && have[s.id].upd === s.upd){ n++; continue; }
+        const fb = await libGet(db, s.frame); if(!(fb instanceof Blob)) continue;
+        clipsA = clipsA || (await libGet(db, 'clips')) || [];
+        const v = {};
+        for(const kind of CC_KINDS){
+          const id = s.clips && s.clips[kind], ok = id && s.chk && s.chk[id] && s.chk[id].ok;
+          const cl = ok && clipsA.find(x => x && x.id === id); if(!cl || !cl.vid) continue;
+          let vb = await libGet(db, cl.vid); if(!(vb instanceof Blob) || vb.size < 1000) continue;
+          if(!/^video\//.test(vb.type)) vb = new Blob([vb], {type:'video/mp4'});
+          v[kind] = {k:await saveImg(vb), at:Date.now(), lib:1, reuse:1};
+        }
+        if(!Object.keys(v).length) continue;
+        if(have[s.id]) libDrop(cc, s.id);
+        const fk = await saveImg(fb), envs = s.place === 'toate' ? ['*'] : [s.place || 'casa'];
+        cc.callClips = cc.callClips || {}; cc.libFrames = cc.libFrames || {}; cc.libSets = cc.libSets || {};
+        cc.callClips[fk] = {at:Date.now(), env:envs[0] === '*' ? 'casa' : envs[0], v, lib:s.id};
+        for(const e of envs) cc.libFrames[e] = {k:fk, sid:s.id};
+        cc.libSets[s.id] = {upd:s.upd, fk, envs, n:Object.keys(v).length, place:s.place || 'casa', at:Date.now()};
+        changed = true; n++;
+      }
+    }
+  } finally { try{ db && db.close(); }catch(e){} }
+  if(changed){ await saveChars(); libHintDraw(); }
+  return {n, changed};
+}
+function libHintDraw(){
+  const h = $('#stLibHint'); if(!h) return;
+  const L = chars.flatMap(c => [c, c.duo && c.duo.b].filter(x => x && x.id)).flatMap(c => Object.values(c.libSets || {}).map(r => `${c.name}: ${r.place === 'toate' ? 'toate locurile' : ENV_RO_LIB[r.place] || r.place}, ${r.n}/${CC_KINDS.length} clipuri`));
+  h.textContent = S.callLib === 'off' ? 'Oprit: apelurile folosesc imaginile și clipurile făcute aici.'
+    : L.length ? '📚 Seturi din Animas: ' + L.join(' · ') + '. În apelurile cu ele: fără cost Runware.' : 'Niciun set de apel din Animas încă (Animas → 📞 Apel). Se preiau singure când revii în Taifas.';
+}
+const ENV_RO_LIB = {casa:'acasă', pat:'în pat', bucatarie:'bucătărie', strada:'pe stradă', parc:'în parc', cafenea:'cafenea', masina:'în mașină', birou:'la birou', plaja:'la plajă'};
 async function ccEnsure(c){
   if(call !== c || !c.video || S.callClips === 'off' || c.ccOn || c.framePending) return;
   c.ccOn = 1;
@@ -13729,6 +13814,7 @@ async function ccEnsure(c){
   const av = Object.entries(cc.avs || {}).find(([, v]) => v === k0);   // e chiar o variantă a avatarului viu: clipul ei e „ce face acum”
   if(av && !set.v.activ){ const ac = avClipOf(cc, av[0]); if(ac) set.v.activ = {...ac, reuse:1}; }
   ccLoad(c);
+  if(set.lib){ c.ccWhy = ''; return; }   // 14.7: clipurile din Animas: nimic pe Runware în apel
   const why = ccWhyNot(cc), prof = S.callClips === 'profil' && !av && k0 !== cc.photo;
   const fast = liveOn(), pre = CC_PRE.run[k0] || new Set();   // 14.5
   const todo = CC_KINDS.filter(k => (!set.v[k] || (fast && set.v[k].draft)) && !pre.has(k) && (!c.ccOnly || c.ccOnly.has(k)));   // 14.2: camera nouă / hainele noi: doar clipurile de bază
@@ -13833,11 +13919,11 @@ const CALL_BYE = {ro:['Pa, pa!', 'Hai, pa!', 'Bine, vorbim. Pa!', 'Pa! Vorbim.']
 function callDiag(c){
   const cc = c.c, V = c.vf, L = c.cl, out = [], k0 = c.pics && c.pics[0];
   let env = '?'; try{ env = ambEnv(c); }catch(e){}
-  out.push(['🖼️ Imaginea', !c.video ? 'apel doar audio' : c.framePending ? `se pregătește imaginea de apel pentru „${env}”` : k0 && callFrameOf(cc, env) === k0 ? `imaginea de apel pentru „${env}”` : `poza de profil sau din chat${c.frameLate ? ' (imaginea de apel va fi gata data viitoare)' : ''}`]);
+  out.push(['🖼️ Imaginea', !c.video ? 'apel doar audio' : k0 && cc.callClips && cc.callClips[k0] && cc.callClips[k0].lib ? `imaginea de apel din Animas („${env}”)` : c.framePending ? `se pregătește imaginea de apel pentru „${env}”` : k0 && callFrameOf(cc, env) === k0 ? `imaginea de apel pentru „${env}”` : `poza de profil sau din chat${c.frameLate ? ' (imaginea de apel va fi gata data viitoare)' : ''}`]);
   const clipOn = !!(L && L.cur && L.cur !== 1 && L.cur.classList.contains('on'));
   out.push(['👄 Fața și gura', !c.video ? '—' : c.vfWhy || (!V ? 'nepornită încă' : V.ready ? `găsită (${V.how || 'detector'}) · ${V.spr ? 'gura din cadre reale' : 'gura desenată'} · acum se vede ${clipOn ? 'un clip' : 'fața care vorbește'}` : (V.why || 'caut fața…'))]);
   const set = cc.callClips && k0 ? cc.callClips[k0] : null, n = set && set.v ? CC_KINDS.filter(k => set.v[k] && !set.v[k].bad).length : 0, nb = set && set.v ? CC_KINDS.filter(k => set.v[k] && set.v[k].bad).length : 0;   // 13.8
-  let cl = !c.video ? '—' : S.callClips === 'off' ? 'oprite (Setări → Apeluri)' : c.framePending ? 'așteaptă imaginea de apel' : c.ccWhy || `${n}/${CC_KINDS.length} gata${c.ccMaking ? ', se fac acum' : ''}`;
+  let cl = !c.video ? '—' : S.callClips === 'off' ? 'oprite (Setări → Apeluri)' : c.framePending ? 'așteaptă imaginea de apel' : c.ccWhy || `${n}/${CC_KINDS.length} gata${set && set.lib ? ' · 📚 din Animas, fără cost' : ''}${c.ccMaking ? ', se fac acum' : ''}`;
   if(clipOn) cl += ` · rulează „${L.cur.dataset.kind}”${L.cur.paused ? ' (pe pauză)' : ''}`;
   if(c.ccErr) cl += ` · ultima problemă: ${c.ccErr}`;
   out.push(['🎬 Clipurile', cl]);
@@ -15331,7 +15417,7 @@ const FIELDS = {stKey:'key', stModel:'model', stUser:'userName', stAbout:'userAb
 const SEGS = {stCallFill:'callFill', stCallClips:'callClips', stCallTalk:'callTalk', stCallReal:'callReal', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
 SEGS.stVoiceReal = 'voiceReal';   // 12.9
 SEGS.stVid = 'vid'; SEGS.stVidQ = 'vidQ'; SEGS.stVidS = 'vidS';   // 13.5
-SEGS.stCallPre = 'callPre'; SEGS.stCallGest = 'callGest'; SEGS.stCallMoves = 'callMoves'; SEGS.stCallOutfit = 'callOutfit'; SEGS.stCallHand = 'callHand';   // 14.2
+SEGS.stCallPre = 'callPre'; SEGS.stCallLib = 'callLib'; SEGS.stCallGest = 'callGest'; SEGS.stCallMoves = 'callMoves'; SEGS.stCallOutfit = 'callOutfit'; SEGS.stCallHand = 'callHand';   // 14.2
 SEGS.stVidFid = 'vidFid'; SEGS.stCcFid = 'vidFid'; SEGS.stArc = 'arc'; SEGS.stVidRep = 'vidRep'; SEGS.stFaceMarks = 'faceMarks'; SEGS.stBodyWeak = 'bodyWeak';   // 14.0   // 13.8: o singură alegere, pentru video-uri și apeluri
 let setPanel = null, setPanelPushed = false;
 /* 8.7: actualizare din aplicație. Codul vine oricum din rețea la pornire;
@@ -16174,6 +16260,8 @@ async function init(){
     navigator.serviceWorker.addEventListener('message', e => { if(e.data && e.data.go) whenUnlocked(() => runShortcut(e.data.go)); });
     if(S.pushOn) pushCfgToSW().catch(() => {});
   }
+  setTimeout(() => libSync().catch(() => {}), 2500);   // 14.7
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) setTimeout(() => libSync().catch(() => {}), 1200); });
   setInterval(tickClocks, 30e3);
   setTimeout(laterPoll, 25e3); setInterval(() => { if(!document.hidden) laterPoll(); }, 3 * 60e3);
   document.addEventListener('visibilitychange', () => { if(!document.hidden) setTimeout(laterPoll, 6e3); });
