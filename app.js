@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.7';
+const APP_VER = '14.8';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -13539,6 +13539,7 @@ function ccTalk(c, on){
   const L = c && c.cl; if(!L || call !== c) return;
   L.talkOn = on; clearTimeout(L.tt);
   const v = L.cur; if(!v || !/^vorb/.test(v.dataset.kind || '')) return;
+  if(ccIsLib(c)){ if(v.paused) v.play().catch(() => {}); return; }   // 14.8: cu setul din Animas, clipul curge continuu (pauzele dintre propoziții îl făceau sacadat)
   if(on){ if(v.paused) v.play().catch(() => {}); }
   else L.tt = setTimeout(() => { if(!L.talkOn && L.cur === v && c.state === 'speak') try{ v.pause(); }catch(e){} }, 160);
 }
@@ -13806,6 +13807,35 @@ function libHintDraw(){
     : L.length ? '📚 Seturi din Animas: ' + L.join(' · ') + '. În apelurile cu ele: fără cost Runware.' : 'Niciun set de apel din Animas încă (Animas → 📞 Apel). Se preiau singure când revii în Taifas.';
 }
 const ENV_RO_LIB = {casa:'acasă', pat:'în pat', bucatarie:'bucătărie', strada:'pe stradă', parc:'în parc', cafenea:'cafenea', masina:'în mașină', birou:'la birou', plaja:'la plajă'};
+/* ═════════ 🎬 14.8: apelul cu setul din Animas, fără goluri ═════════
+   Înainte: între clipuri se vedea imaginea statică (pauze aleatoare de 4,5–12 s), „vorbește” se oprea între propoziții, iar „ce face”,
+   „privește”, „se gândește” rulau rar (măsurat într-un apel simulat de 33 s: 41% din timp imagine statică, 4 căderi pe ea).
+   Acum, cu setul din Animas: mereu rulează un clip, ales după starea apelului (vorbește / te ascultă / se gândește / liniște);
+   la final, următorul clip potrivit intră lin peste el (vezi ccPlay); la schimbarea stării, trecerea se face imediat. */
+const CC_IDLE = ['activ', 'asc', 'priv', 'activ', 'gand'];
+const ccHasClip = (L, k) => !!(L && L.els[k] && L.els[k] !== 1);
+function ccLibOn(c){ const L = c && c.cl; return !!(L && ccIsLib(c) && CC_IDLE.some(k => ccHasClip(L, k))); }
+function ccLibWant(c){
+  if(c.state === 'speak') return S.callTalk === 'face' ? [] : ['vorb', 'vorb2'];
+  if(c.state === 'listen' && c.interim && performance.now() - (c.heardAt || 0) < 1500) return ['asc'];
+  if(c.state === 'think') return ['gand', 'asc'];
+  return CC_IDLE;
+}
+function ccLibPick(c, want){
+  const L = c.cl; let ks = want.filter(k => ccHasClip(L, k)); if(!ks.length && c.state !== 'speak') ks = CC_IDLE.filter(k => ccHasClip(L, k)); if(!ks.length) return null;
+  const cur = L.cur && L.cur !== 1 ? L.cur.dataset.kind : '', alt = ks.filter(k => k !== cur), pool = alt.length ? alt : ks;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function ccLibNext(c){ const k = ccLibPick(c, ccLibWant(c)); if(k) ccPlay(c, k, true); else ccOff(c, c.cl.cur); }
+function ccRunLib(c){
+  const L = c.cl; if(c.ending) return;
+  const cur = L.cur && L.cur !== 1 ? L.cur.dataset.kind : '', want = ccLibWant(c);
+  if(cur === 'bye') return;
+  if(c.state === 'speak' && !want.length){ if(L.cur) ccOff(c, L.cur, true); return; }   // „Cât vorbește: fața din telefon”
+  if(cur && want.includes(cur)) return;
+  if(cur && c.state !== 'speak' && (L.hold || 0) > performance.now()) return;   // reacția (râde, privește) se termină întâi
+  const k = ccLibPick(c, want); if(k && k !== cur) ccPlay(c, k, true);
+}
 async function ccEnsure(c){
   if(call !== c || !c.video || S.callClips === 'off' || c.ccOn || c.framePending) return;
   c.ccOn = 1;
@@ -13861,6 +13891,7 @@ async function ccAdd(c, kind, r){
   v.setAttribute('playsinline', ''); v.setAttribute('muted', ''); v.dataset.kind = kind; v.src = u;
   v.addEventListener('error', () => { if(c.cl && c.cl.els[kind] === v){ delete c.cl.els[kind]; if(c.cl.cur === v) c.cl.cur = null; } v.remove(); }, {once:true});
   v.addEventListener('ended', () => {   // 12.5: cât vorbește, clipurile „vorbește” se continuă unul pe altul
+    if(call === c && c.cl && c.cl.cur === v && kind !== 'bye' && ccLibOn(c)){ ccLibNext(c); return; }   // 14.8: mișcare continuă
     if(call === c && c.state === 'speak' && /^vorb/.test(kind) && S.callTalk !== 'face' && c.cl.cur === v){ const o = kind === 'vorb' ? 'vorb2' : 'vorb', ov = c.cl.els[o]; if(ccPlay(c, ov && ov !== 1 ? o : kind, true)) return; }
     ccOff(c, v); });
   cvd.insertBefore(v, cvd.querySelector('.cgrain'));
@@ -13872,10 +13903,17 @@ function ccPlay(c, kind, force){
   if(c.state === 'speak' && kind !== 'bye' && !/^vorb/.test(kind)) return false;
   if(c.ending && kind !== 'bye') return false;
   if(L.cur && !force) return false;
-  if(L.cur && L.cur !== v) ccOff(c, L.cur, true);
+  /* 14.8: trecere lină: clipul vechi rămâne vizibil până când cel nou are primul cadru pe ecran; cel nou intră deasupra (ultimul în
+     pagină, înainte de granulație), apoi cel vechi se stinge sub el. Înainte, cel vechi se stingea imediat → se vedea imaginea statică. */
+  const old = L.cur && L.cur !== v ? L.cur : null;
+  if(old){ const cvd = v.parentNode, gr = cvd && cvd.querySelector('.cgrain'); if(cvd && v.nextSibling !== gr) try{ cvd.insertBefore(v, gr); }catch(e){} }
   try{ v.currentTime = 0; }catch(e){}
   v.classList.remove('out', 'fast'); L.cur = v; L.last[kind] = performance.now(); L.lastAny = performance.now();
-  const p = v.play(); if(p && p.then) p.then(() => { if(L.cur === v) v.classList.add('on'); }).catch(() => { if(L.cur === v) L.cur = null; }); else v.classList.add('on');
+  if(force && (kind === 'ras' || kind === 'priv')) L.hold = performance.now() + 2600;   // o reacție se vede până la capăt
+  let shown = false;
+  const show = () => { if(shown) return; shown = true; if(L.cur !== v){ return; } v.classList.add('on'); if(old) setTimeout(() => { if(L.cur !== old) ccOff(c, old, true); }, 300); };
+  const ready = () => { if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => show()); setTimeout(show, 260); };
+  const p = v.play(); if(p && p.then) p.then(ready).catch(() => { if(L.cur === v){ L.cur = old && old.classList.contains('on') ? old : null; } }); else show();
   return true;
 }
 function ccOff(c, v, fast){
@@ -13896,6 +13934,7 @@ function ccRun(c){
       } else if(v0 && v0 !== 1 && t1 - (L.lastAny || 0) > 4000){ ccOff(c, v0, true); c.ccErr = `clipul „${v0.dataset.kind}” n-a pornit`; return; } }
     if(c.lit && c.lit.tgn){ const L0 = c.lit, C = L0.cur; C.gn = C.gn.map((x, i) => x + (L0.tgn[i] - x) * .12); C.sat += (L0.tsat - C.sat) * .12; C.fl += (L0.tfl - C.fl) * .12; }   /* lumina se apropie de ținta ei și cât rulează un clip */
     const LC = c.lit && c.lit.cur, cvd = L.cv || (L.cv = $('.callv .cvid')); if(LC && cvd){ const warm = Math.max(0, LC.gn[0] - LC.gn[2]); cvd.style.setProperty('--cf', `brightness(${LC.fl.toFixed(3)}) saturate(${LC.sat.toFixed(3)}) sepia(${Math.min(.4, warm * 1.8).toFixed(3)})`); }   // 12.6
+    if(ccLibOn(c)){ ccRunLib(c); return; }   // 14.8: setul din Animas: mereu un clip, schimbat după ce se întâmplă
     const now = performance.now(), since = k => now - (L.last[k] || 0), quiet = now - (L.lastAny || 0), has = k => L.els[k] && L.els[k] !== 1;
     if(c.state === 'speak'){
       if(S.callTalk !== 'face' && (has('vorb') || has('vorb2'))){ if(!L.cur || !/^vorb|^bye/.test(L.cur.dataset.kind)){ const k = has('vorb') && (L.lastTalk !== 'vorb' || !has('vorb2')) ? 'vorb' : 'vorb2'; L.lastTalk = k; ccPlay(c, k, true); } return; }   // 12.5
