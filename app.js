@@ -11891,7 +11891,7 @@ function callLiveRules(c){
   if(!c || !c.video || !liveOn() || ccIsLib(c)) return '';   // 14.7: cu setul din Animas nu se mută și nu se schimbă (ar costa și ar ieși din set)
   const u = S.userName.trim() || 'el', env = callEnv(c), r = [];
   if(+S.callMoves > (c.moves || 0) && HOME_ENV.includes(env) && callFrameCan()) r.push(`ca într-un apel video real, poți (rar, cel mult ${+S.callMoves - (c.moves || 0) === 1 ? 'o dată' : 'de două ori'} în apelul ăsta) să te muți cu telefonul în mână în altă cameră a casei, când e firesc (te duci după ceva, faci ceva acolo) sau când ți-o cere ${u}: atunci încheie replica cu [mut: bucătărie], [mut: dormitor] sau [mut: sufragerie] (acum ești ${ENV_RO[env] || 'acasă'})`);
-  if(+S.callOutfit > (c.outfits || 0) && callFrameCan()) r.push(`dacă e firesc (te pregătești de ieșit, ți-e frig sau cald, vii de la sport) sau ți-o cere ${u}, poți să te schimbi de haine: spune că lași telefonul o clipă și încheie replica cu [haine: ținuta nouă de zi cu zi, în engleză]; schimbatul nu se vede, revii îmbrăcată`);
+  if(+S.callOutfit > (c.outfits || 0) && callFrameCan()) r.push(`dacă e firesc (te pregătești de ieșit, ți-e frig sau cald, vii de la sport, mergi la plajă/piscină etc.) sau ți-o cere ${u}, poți să te schimbi de haine: spune că lași telefonul o clipă și încheie replica cu [haine: ținuta nouă, în engleză]; schimbatul nu se vede`);
   return r.length ? '. ' + r.join('. ') : '';
 }
 function callClean(t){
@@ -12270,8 +12270,7 @@ async function callMove(c, raw){
   }catch(e){ c.moveErr = String(e.message || e).slice(0, 120); callChip2(c, ''); return false; }
   finally{ c.moving = false; clearInterval(c.downT); if(cvd) cvd.classList.remove('walk', 'chest'); }
 }
-// hainele noi: doar haine de zi cu zi; schimbatul nu se vede (telefonul e lăsat jos)
-const OUTFIT_BAD = /(nud|naked|topless|lingerie|underwear|\bbra\b|panties|thong|bikini|swim|towel|prosop|lenjerie|sutien|chilo|gol[ăa]|dezbr|sheer|see.?through|transparent|negligee|nightie|bathrobe|\brobe\b|halat|corset|stocking|ciorap)/i;
+// hainele noi; schimbatul nu se vede (telefonul e lăsat jos)
 const OUTFIT_SAFE = 'a casual everyday outfit: jeans and a soft knit sweater';
 function callDown(c, on){
   const v = $('.callv'); if(!v) return; let el = v.querySelector('.cdown');
@@ -12282,14 +12281,14 @@ function callDown(c, on){
 }
 async function callOutfit(c, raw){
   if(!c.video || (c.outfits || 0) >= +S.callOutfit || c.moving || c.dressing || !callFrameCan()) return false;
-  let out = String(raw || '').trim().replace(/[.]+$/, '').slice(0, 140); if(!out || OUTFIT_BAD.test(out)) out = OUTFIT_SAFE;
+  let out = String(raw || '').trim().replace(/[.]+$/, '').slice(0, 140); if(!out) out = OUTFIT_SAFE;
   c.dressing = true; c.outfits = (c.outfits || 0) + 1; const t0 = Date.now();
   callDown(c, true);
   try{
     const fromK = c.pics[0], from = await DB.get(fromK).catch(() => null); if(!from) throw new Error('fără cadru');
     const prof = await DB.get(c.c.photo).catch(() => null), crs = closeOf(c.c), crb = crs && !refOut(c.c, crs.img) ? await DB.get(crs.img).catch(() => null) : null;
     const pf = crb || (prof ? await cropFace(prof, await profFaceBox(c.c, prof).catch(() => null)) : null);
-    const prompt = `Edit image 1: the same person in the same place, with the same framing, camera angle and light of a phone front-camera video call; she is now wearing ${out}, fully dressed in ordinary everyday clothes. Keep exactly the same face (image 2), hair, body shape and expression style; realistic photo, no text, no other people.`;
+    const prompt = `Edit image 1: the same person in the same place, with the same framing, camera angle and light of a phone front-camera video call; she is now wearing ${out}. Keep exactly the same face (image 2), hair, body shape and expression style; realistic photo, no text, no other people.`;
     let bl = await genImage(prompt, from, null, pf, {model:'ancorat', force:{two:true}, size:await imgSize(from), quiet:true, why:'apel'});
     addUsage(c.c.id, imgPrice(), 'img', null, 'apel');
     try{ const R = await finishPerson(c.c, {blob:bl, fd:(await localFace(bl, c.c)).d}, 'video call selfie', null, {kind:'avatar', tag:'apel'}); bl = R.blob; }catch(e){}
@@ -13238,12 +13237,11 @@ function litStep(c, now){
   return {gn:[C.gn[0], C.gn[1], C.gn[2] * b], sat:C.sat, fl:C.fl * f};
 }
 /* ── 🔄 „stai să-ți arăt”: o poză din telefonul ei (din chat și din stories), ținută la cameră ── */
-const SHOW_SKIP = /\b(nude|naked|topless|undress|undressed|lingerie|underwear|no clothes|bare breasts|bare chest)\b/i;
 function showWhen(ts){ const d = Math.round((new Date(dayKey(Date.now()) + 'T12:00') - new Date(dayKey(ts) + 'T12:00')) / 864e5); return d <= 0 ? 'azi' : d === 1 ? 'ieri' : `acum ${d} zile`; }
 function showList(c){
   if(c._show && Date.now() - c._showAt < 60e3) return c._show;
   const skip = new Set(c.pics || []), out = [];
-  const add = (k, ts, scene) => { if(!k || skip.has(k) || !scene || SHOW_SKIP.test(scene) || out.some(x => x.k === k) || Date.now() - (ts || 0) > 14 * 864e5) return; out.push({k, ts:ts || 0, scene:String(scene).replace(/\s+/g, ' ').slice(0, 90)}); };
+  const add = (k, ts, scene) => { if(!k || skip.has(k) || !scene || out.some(x => x.k === k) || Date.now() - (ts || 0) > 14 * 864e5) return; out.push({k, ts:ts || 0, scene:String(scene).replace(/\s+/g, ' ').slice(0, 90)}); };
   for(const m of [...c.ch.msgs].reverse()) if(m.role === 'ai' && m.img && !m.err) add(m.img, m.ts, m.scene);
   for(const p of (typeof feedCache !== 'undefined' ? feedCache : []).filter(x => x.cid === c.c.id && x.img)) add(p.img, p.ts, p.scene);
   out.sort((a, b) => b.ts - a.ts); c._show = out.slice(0, 6); c._showAt = Date.now();
@@ -13634,7 +13632,7 @@ function callFrameCan(){ return S.imgProv !== 'none' && aiReady(); }
 async function callFrameMake(cc, ch, env, signal = null, o = {}){
   let w = ch && ch.where && Date.now() - (ch.where.ts || 0) < 6 * 36e5 ? ch.where : {};
   if(o.place) w = {...w, place:o.place, room:''};   // 14.2: camera în care se mută
-  const out = w.outfit && !/(nud|naked|topless|lingerie|underwear|\bbra\b|panties|gol[ăa]|dezbr|lenjerie|chilo|sutien|bikini)/i.test(w.outfit) ? w.outfit : '';
+  const out = w.outfit || '';
   const place = [w.place, w.room].filter(Boolean).join(', ').slice(0, 160) || CC_PLACE[env] || CC_PLACE.casa;
   const shot = `front camera selfie during a video call, the phone held at arm's length, head and shoulders in frame, the face large, sharp and well lit, looking straight into the camera, ${place}${out ? ', wearing ' + out : ''}${w.light ? ', ' + w.light : ''}, natural real moment, ordinary phone front camera photo`;
   let bl = null, bd = 9;
@@ -13790,7 +13788,10 @@ async function libSync0(){
         cc.callClips = cc.callClips || {}; cc.libFrames = cc.libFrames || {}; cc.libSets = cc.libSets || {};
         cc.callClips[fk] = {at:Date.now(), env:envs[0] === '*' ? 'casa' : envs[0], v, lib:s.id};
         for(const e of envs) cc.libFrames[e] = {k:fk, sid:s.id};
-        cc.libSets[s.id] = {upd:s.upd, fk, envs, n:Object.keys(v).length, place:s.place || 'casa', at:Date.now()};
+        const chks = Object.values(s.chk || {});
+        const in_bikini = chks.some(x => x && x.in_bikini === true);
+        const outfit_desc = (chks.find(x => x && x.outfit_desc) || {}).outfit_desc || '';
+        cc.libSets[s.id] = {upd:s.upd, fk, envs, n:Object.keys(v).length, place:s.place || 'casa', in_bikini, outfit_desc, at:Date.now()};
         changed = true; n++;
       }
     }
