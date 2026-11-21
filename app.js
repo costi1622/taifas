@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.3';
+const APP_VER = '14.9.4';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -7723,7 +7723,7 @@ async function vidFetch(u){
    singur cadru prins în mișcare nu contează) SAU corpul scade în medie cu peste 10 puncte. Sub 3 cadre cu fața văzută: nu se judecă. */
 const VCHK = {mean:8, min2:18, body:10, frames:8, arcMin:64};   // 14.0: cu ArcFace și un prag absolut (64% ≈ asemănare 0,45)
 async function vidFrames(blob, n = VCHK.frames){
-  const u = URL.createObjectURL(blob), v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = u;
+  const u = URL.createObjectURL(blob), v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'metadata'; v.src = u;
   try{
     await new Promise((res, rej) => { v.addEventListener('loadeddata', res, {once:true}); v.addEventListener('error', () => rej(new Error('video')), {once:true}); setTimeout(() => rej(new Error('timeout')), 15000); });
     const D = v.duration; if(!(D > 0) || !v.videoWidth) return [];
@@ -11913,31 +11913,62 @@ function ccScriptMatch(c, text){
   if(!norm) return null;
   return (set && set.scripted || []).find(x => ccScriptNorm(x.text) === norm) || null;
 }
+// 14.9.4: orice clip cu voce are limită de timp și fallback la TTS dinamic.
+// Nu ținem un apel în așteptare dacă playerul nu trimite evenimentul ended.
 async function ccScriptPlay(c, item, text, capOff){
   if(call !== c || c.interrupted || !c.video || !item) return false;
-  const url=await imgUrl(item.k).catch(()=>null);
+  let url;
+  try { url = await imgUrl(item.k); } catch(e) { return false; }
   if(!url || call !== c || c.interrupted) return false;
   const cvd=$('.callv .cvid'); if(!cvd) return false;
-  const v=document.createElement('video'); v.className='cclip'; v.playsInline=true; v.preload='auto'; v.muted=false;
+  const v=document.createElement('video');
+  v.className='cclip'; v.playsInline=true; v.preload='metadata'; v.muted=false;
   v.setAttribute('playsinline',''); v.src=url; v.dataset.kind='scripted';
-  let started=false;
-  const L=c.cl;
-  const old=L && L.cur && L.cur!==1 ? L.cur : null;
-  const stop=()=>{ try{v.pause();}catch(e){} v.remove(); if(L && L.cur===v) L.cur=null; if(c.scriptStop===stop) c.scriptStop=null; if(old && old.isConnected && call===c && c.state==='speak') ccPlay(c,old.dataset.kind,true); };
+  const L=c.cl, old=L && L.cur && L.cur!==1 ? L.cur : null;
+  let completed=false, stopWait=null;
+  const stop=()=>{
+    if(stopWait) stopWait();
+    try{v.pause();}catch(e){}
+    v.remove();
+    if(L && L.cur===v) L.cur=null;
+    if(c.scriptStop===stop) c.scriptStop=null;
+    if(cvd && (!L || !L.cur)) cvd.classList.remove('clip-active');
+    if(old && old.isConnected && call===c && !c.interrupted){
+      // Restabilim clipul anterior doar dacă nu există deja un altul activ.
+      if(L && !L.cur) { L.cur=old; old.classList.add('on'); old.play().catch(()=>{}); }
+    }
+  };
   try{
-    cvd.insertBefore(v,cvd.querySelector('.cgrain')); v.classList.add('on'); cvd.classList.add('clip-active');
-    if(old) {try{old.pause();old.classList.remove('on');}catch(e){}}
+    cvd.insertBefore(v,cvd.querySelector('.cgrain'));
+    const start= v.play();
+    // Dacă browserul refuză autoplay cu sunet, nu blocăm apelul.
+    await Promise.race([start, new Promise((_,reject)=>setTimeout(()=>reject(new Error('play timeout')),4500))]);
+    if(call!==c || c.interrupted) return false;
+    c.scriptStop=stop;
+    v.classList.add('on'); cvd.classList.add('clip-active');
+    if(old){try{old.pause();old.classList.remove('on');}catch(e){}}
     if(L) L.cur=v;
-    await v.play(); started=true; c.scriptStop=stop;
     c.state='speak'; callState('vorbește','speak'); callBarge(c);
-    // Subtitrarea este deja gestionată de apel, nu o duplicăm.
-    await new Promise(resolve=>{
-      v.addEventListener('ended',resolve,{once:true}); v.addEventListener('error',resolve,{once:true});
-      const check=setInterval(()=>{if(call!==c || c.interrupted || !v.isConnected){clearInterval(check);resolve();}},150);
-      v.addEventListener('ended',()=>clearInterval(check),{once:true}); v.addEventListener('error',()=>clearInterval(check),{once:true});
+    const result=await new Promise(resolve=>{
+      let done=false;
+      const finish=ok=>{if(done)return;done=true;cleanup();resolve(ok);};
+      const onEnd=()=>finish(true), onError=()=>finish(false);
+      let check=null, timer=null;
+      const cleanup=()=>{v.removeEventListener('ended',onEnd);v.removeEventListener('error',onError);clearInterval(check);clearTimeout(timer);};
+      stopWait=()=>finish(false);
+      v.addEventListener('ended',onEnd);v.addEventListener('error',onError);
+      check=setInterval(()=>{if(call!==c || c.interrupted || !v.isConnected)finish(false);},200);
+      // Durata reală + marjă; un stream cu metadata defectă nu poate bloca apelul.
+      const maxMs=Number.isFinite(v.duration)&&v.duration>0 ? Math.min(45000,Math.max(6500,v.duration*1000+3500)) : 18000;
+      timer=setTimeout(()=>finish(false),maxMs);
     });
-    return true;
-  }catch(e){return started;}finally{stop();}
+    completed=result;
+    if(!completed) c.ccErr='clipul cu voce nu s-a terminat; revenire la vocea Taifas';
+    return completed;
+  }catch(e){
+    c.ccErr='clipul cu voce nu a pornit; revenire la vocea Taifas';
+    return false;
+  }finally{stop();}
 }
 async function callSay(c, text, capOff, who, fill){   // 9.98 (11): who = cine vorbește, când e și altcineva în apel
   // 9.69: bucăți de cel mult ~170 de caractere, vocea după genul ei, redare prin `ttsPlay` (fără blocaje pe „vorbește”)
@@ -13988,6 +14019,7 @@ function ccPlay(c, kind, force){
   if(c.state === 'speak' && kind !== 'bye' && !/^vorb/.test(kind)) return false;
   if(c.ending && kind !== 'bye') return false;
   if(L.cur && !force) return false;
+  if(L.cur === v && !v.ended && !v.paused) return true; // 14.9.4: nu reporni același clip deja activ
   /* 14.8: trecere lină: clipul vechi rămâne vizibil până când cel nou are primul cadru pe ecran; cel nou intră deasupra (ultimul în
      pagină, înainte de granulație), apoi cel vechi se stinge sub el. Înainte, cel vechi se stingea imediat → se vedea imaginea statică. */
   const old = L.cur && L.cur !== v ? L.cur : null;
@@ -14055,6 +14087,7 @@ function callDiag(c){
   let cl = !c.video ? '—' : S.callClips === 'off' ? 'oprite (Setări → Apeluri)' : c.framePending ? 'așteaptă imaginea de apel' : c.ccWhy || `${n}/${kinds.length} gata${set && set.lib ? ' · 📚 din Animas, fără cost' : ''}${c.ccMaking ? ', se fac acum' : ''}`;
   if(clipOn) cl += ` · rulează „${L.cur.dataset.kind}”${L.cur.paused ? ' (pe pauză)' : ''}`;
   if(c.ccErr) cl += ` · ultima problemă: ${c.ccErr}`;
+  if(set && set.lib) cl += ` · ${((set.scripted || []).length)} replici cu voce fixă importate (redare doar la potrivire exactă)`;
   out.push(['🎬 Clipurile', cl]);
   const w = rvWhy(cc);
   out.push(['🎙️ Vocea', (w ? 'a telefonului: ' + w : 'reală · ' + rvLabel(cc) + (RV.cur ? ' · vorbește' : RV.q.length ? ` · ${RV.q.length} în coadă` : '')) + (RV.lastErr ? ` · ultima eroare: ${RV.lastErr}` : '')]);
