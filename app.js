@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.13';
+const APP_VER = '14.9.14';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -14159,7 +14159,7 @@ function ccRun(c){
         else if(t1 - L.wAt > (v0.paused && c.state === 'speak' ? 2500 : 1600)){ ccOff(c, v0, true); L.wv = null; L.stalls = (L.stalls || 0) + 1; if(!(v0.paused && c.state === 'speak')) c.ccErr = `clipul „${v0.dataset.kind}” s-a blocat la redare; a revenit fața care vorbește`; return; }
       } else if(v0 && v0 !== 1 && v0.dataset.kind !== 'scripted' && t1 - (L.lastAny || 0) > 4000){ ccOff(c, v0, true); c.ccErr = `clipul „${v0.dataset.kind}” n-a pornit`; return; } }
     if(c.lit && c.lit.tgn){ const L0 = c.lit, C = L0.cur; C.gn = C.gn.map((x, i) => x + (L0.tgn[i] - x) * .12); C.sat += (L0.tsat - C.sat) * .12; C.fl += (L0.tfl - C.fl) * .12; }   /* lumina se apropie de ținta ei și cât rulează un clip */
-    const LC = c.lit && c.lit.cur, cvd = L.cv || (L.cv = $('.callv .cvid')); if(LC && cvd){ const warm = Math.max(0, LC.gn[0] - LC.gn[2]); cvd.style.setProperty('--cf', `brightness(${LC.fl.toFixed(3)}) saturate(${LC.sat.toFixed(3)}) sepia(${Math.min(.4, warm * 1.8).toFixed(3)})`); }   // 12.6
+    const LC = c.lit && c.lit.cur, cvd = L.cv || (L.cv = $('.callv .cvid')); if(LC && cvd){ const warm = Math.max(0, LC.gn[0] - LC.gn[2]); cvd.style.setProperty('--cf', 'none'); } // 14.9.14: keep original Animas clip colors
     if(c.scriptStop) return;
     if(ccLibOn(c)){ ccRunLib(c); return; }   // 14.8: setul din Animas: mereu un clip, schimbat după ce se întâmplă
     const now = performance.now(), since = k => now - (L.last[k] || 0), quiet = now - (L.lastAny || 0), has = k => L.els[k] && L.els[k] !== 1;
