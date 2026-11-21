@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.2';
+const APP_VER = '14.9.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -11856,6 +11856,7 @@ function callState(t, cls){ const el = $('#clState'); if(el){ el.textContent = t
 function endCall(){
   if(!call) return;
   const c = call;
+  if(c.scriptStop) c.scriptStop();
   call = null; c.alive = false; clearInterval(c.tick); clearInterval(c.picT); clearInterval(c.ccT); clearTimeout(c.hangT); clearTimeout(c.lifeT); clearTimeout(c.refT); window.__talk = null; rvStop(); ringback(false); callWake(c, false); vfStop(c);
   try{ c.bargeRec && c.bargeRec.abort(); }catch(e){} clearInterval(c.pollT); clearInterval(c.watchT); clearTimeout(c.exT);
   // 9.23
@@ -11903,8 +11904,48 @@ function callClean(t){
 }
 // o propoziție pusă la coadă în vocea telefonului; subtitrarea crește odată cu ea
 // 9.23: vocea cu emoție (`callProso`): ton, viteză și volum după starea ei, propoziție și oră; frazele lungi în două bucăți, cu pauză reală
-function callSay(c, text, capOff, who, fill){   // 9.98 (11): who = cine vorbește, când e și altcineva în apel
+// 14.9.3: o replică fixă este permisă numai dacă textul vorbit coincide integral.
+// Dacă lipsește clipul sau playerul eșuează, revenim la TTS-ul dinamic existent.
+function ccScriptNorm(t){ return String(t || '').normalize('NFKC').toLocaleLowerCase().replace(/[’‘]/g, "'").replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' '); }
+function ccScriptMatch(c, text){
+  if(!c || !c.video || !ccIsLib(c)) return null;
+  const set=ccSet(c), norm=ccScriptNorm(text);
+  if(!norm) return null;
+  return (set && set.scripted || []).find(x => ccScriptNorm(x.text) === norm) || null;
+}
+async function ccScriptPlay(c, item, text, capOff){
+  if(call !== c || c.interrupted || !c.video || !item) return false;
+  const url=await imgUrl(item.k).catch(()=>null);
+  if(!url || call !== c || c.interrupted) return false;
+  const cvd=$('.callv .cvid'); if(!cvd) return false;
+  const v=document.createElement('video'); v.className='cclip'; v.playsInline=true; v.preload='auto'; v.muted=false;
+  v.setAttribute('playsinline',''); v.src=url; v.dataset.kind='scripted';
+  let started=false;
+  const L=c.cl;
+  const old=L && L.cur && L.cur!==1 ? L.cur : null;
+  const stop=()=>{ try{v.pause();}catch(e){} v.remove(); if(L && L.cur===v) L.cur=null; if(c.scriptStop===stop) c.scriptStop=null; if(old && old.isConnected && call===c && c.state==='speak') ccPlay(c,old.dataset.kind,true); };
+  try{
+    cvd.insertBefore(v,cvd.querySelector('.cgrain')); v.classList.add('on'); cvd.classList.add('clip-active');
+    if(old) {try{old.pause();old.classList.remove('on');}catch(e){}}
+    if(L) L.cur=v;
+    await v.play(); started=true; c.scriptStop=stop;
+    c.state='speak'; callState('vorbește','speak'); callBarge(c);
+    // Subtitrarea este deja gestionată de apel, nu o duplicăm.
+    await new Promise(resolve=>{
+      v.addEventListener('ended',resolve,{once:true}); v.addEventListener('error',resolve,{once:true});
+      const check=setInterval(()=>{if(call!==c || c.interrupted || !v.isConnected){clearInterval(check);resolve();}},150);
+      v.addEventListener('ended',()=>clearInterval(check),{once:true}); v.addEventListener('error',()=>clearInterval(check),{once:true});
+    });
+    return true;
+  }catch(e){return started;}finally{stop();}
+}
+async function callSay(c, text, capOff, who, fill){   // 9.98 (11): who = cine vorbește, când e și altcineva în apel
   // 9.69: bucăți de cel mult ~170 de caractere, vocea după genul ei, redare prin `ttsPlay` (fără blocaje pe „vorbește”)
+  // Prioritate doar pentru replici fixe identice; în orice alt caz rămâne vocea Taifas.
+  if(!who && !fill && c.video && !c.scriptStop){
+    const item=ccScriptMatch(c,text);
+    if(item && await ccScriptPlay(c,item,text,capOff)) return;
+  }
   const parts = callChunks(text).flatMap(([s, at]) => { let o = 0; return ttsSplitLong(s).map(x => { const r = [x.trim(), at + o]; o += x.length; return r; }); }).filter(([s]) => s);
   const vc = who || c.c, v = phoneVoice(langOf(vc), vc), rid = c._rid;
   return Promise.all(parts.map(([s, at], k) => new Promise(res => {
@@ -12062,7 +12103,7 @@ function callInviteSheet(c){
 function callInterrupt(c, heard){
   if(call !== c || c.state !== 'speak') return;
   c.saidText = [...($('#clCap') ? $('#clCap').querySelectorAll('.kw.lit') : [])].map(w => w.textContent).join(' ');
-  c.interrupted = true; c.state = 'listen';
+  c.interrupted = true; if(c.scriptStop) c.scriptStop(); c.state = 'listen';
   if(c.vf) c.vf.kf = [];   // 9.62: gura se oprește odată cu vocea
   try{ ttsCancel(); }catch(e){}
   if(busy && live && live.ch === c.ch) busy.abort();
@@ -13770,7 +13811,7 @@ function libFrameOf(cc, env){
 function libDrop(cc, sid){
   const r = cc.libSets && cc.libSets[sid]; if(!r) return;
   const set = cc.callClips && cc.callClips[r.fk];
-  if(set){ for(const x of Object.values(set.v || {})) if(x && x.k) delImg(x.k).catch(() => {}); delete cc.callClips[r.fk]; }
+  if(set){ for(const x of Object.values(set.v || {})) if(x && x.k) delImg(x.k).catch(() => {}); for(const x of (set.scripted || [])) if(x && x.k) delImg(x.k).catch(() => {}); delete cc.callClips[r.fk]; }
   if(r.fk) delImg(r.fk).catch(() => {});
   for(const [e, f] of Object.entries(cc.libFrames || {})) if(f && f.sid === sid) delete cc.libFrames[e];
   delete cc.libSets[sid];
@@ -13793,28 +13834,39 @@ async function libSync0(){
       const mine = sets.filter(s => s.tid === cc.id), have = cc.libSets || {};
       if(db) for(const sid of Object.keys(have)) if(!mine.some(s => s.id === sid)){ libDrop(cc, sid); changed = true; }   // șters în Animas
       for(const s of mine){
-        if(have[s.id] && have[s.id].upd === s.upd){ n++; continue; }
+        if(have[s.id] && have[s.id].upd === s.upd && have[s.id].voiceImport === 1 && have[s.id].voiceSig === (clipsA || (clipsA = (await libGet(db, 'clips')) || [])).filter(x => x && x.charId === cc.id && x.start === s.frame && x.callStudio && x.callStudio.mode === 'scripted').map(x => x.id).sort().join('|')){ n++; continue; }
         const fb = await libGet(db, s.frame); if(!(fb instanceof Blob)) continue;
         clipsA = clipsA || (await libGet(db, 'clips')) || [];
+        // 14.9.3: clipurile cu dialog fix sunt separate de rolurile reutilizabile.
+        // Niciun clip cu voce nu intră în selecția aleatoare de mișcări.
+        const scripted = [];
+        for(const cl of clipsA){
+          if(!cl || !cl.vid || !cl.callStudio || cl.callStudio.mode !== 'scripted' || cl.charId !== cc.id) continue;
+          if(cl.start !== s.frame || !cl.callStudio.dialogue || !CC_LIB_TALK.includes(cl.callStudio.role)) continue;
+          let blob = await libGet(db, cl.vid);
+          if(!(blob instanceof Blob) || blob.size < 1000) continue;
+          if(!/^video\//.test(blob.type)) blob = new Blob([blob], {type:'video/mp4'});
+          scripted.push({k:await saveImg(blob), text:cl.callStudio.dialogue, role:cl.callStudio.role, id:cl.id});
+        }
         const v = {};
         for(const kind of CC_LIB_KINDS){
           const id = s.clips && s.clips[kind], ok = id && s.chk && s.chk[id] && s.chk[id].ok;
-          const cl = ok && clipsA.find(x => x && x.id === id); if(!cl || !cl.vid) continue;
+          const cl = ok && clipsA.find(x => x && x.id === id); if(!cl || !cl.vid || (cl.callStudio && cl.callStudio.mode === 'scripted')) continue;
           let vb = await libGet(db, cl.vid); if(!(vb instanceof Blob) || vb.size < 1000) continue;
           if(!/^video\//.test(vb.type)) vb = new Blob([vb], {type:'video/mp4'});
           const meta = s.roles && s.roles[kind] || {};
           v[kind] = {k:await saveImg(vb), at:Date.now(), lib:1, reuse:1, group:meta.group || (['vorb','vorb2'].includes(kind) ? 'talk' : ['asc'].includes(kind) ? 'listen' : ['gand'].includes(kind) ? 'think' : kind === 'bye' ? 'bye' : 'idle'), loop:meta.loop !== false, transition:meta.transition || 'soft', studioMode:(s.roleConfig && s.roleConfig[kind] && s.roleConfig[kind].mode) || 'reusable', studioDialogue:(s.roleConfig && s.roleConfig[kind] && s.roleConfig[kind].dialogue) || ''};
         }
-        if(!Object.keys(v).length) continue;
+        if(!Object.keys(v).length && !scripted.length) continue;
         if(have[s.id]) libDrop(cc, s.id);
         const fk = await saveImg(fb), envs = s.place === 'toate' ? ['*'] : [s.place || 'casa'];
         cc.callClips = cc.callClips || {}; cc.libFrames = cc.libFrames || {}; cc.libSets = cc.libSets || {};
-        cc.callClips[fk] = {at:Date.now(), env:envs[0] === '*' ? 'casa' : envs[0], v, lib:s.id};
+        cc.callClips[fk] = {at:Date.now(), env:envs[0] === '*' ? 'casa' : envs[0], v, scripted, lib:s.id};
         for(const e of envs) cc.libFrames[e] = {k:fk, sid:s.id};
         const chks = Object.values(s.chk || {});
         const in_bikini = chks.some(x => x && x.in_bikini === true);
         const outfit_desc = (chks.find(x => x && x.outfit_desc) || {}).outfit_desc || '';
-        cc.libSets[s.id] = {upd:s.upd, fk, envs, n:Object.keys(v).length, place:s.place || 'casa', in_bikini, outfit_desc, at:Date.now()};
+        cc.libSets[s.id] = {upd:s.upd, fk, envs, n:Object.keys(v).length, place:s.place || 'casa', in_bikini, outfit_desc, at:Date.now(), voiceImport:1, voiceSig:scripted.map(x=>x.id).sort().join('|')};
         changed = true; n++;
       }
     }
@@ -13963,12 +14015,13 @@ function ccRun(c){
     if(call !== c){ clearInterval(c.ccT); return; }
     const L = c.cl; if(!L || !c.video || !c.t0) return;
     { const v0 = L.cur, t1 = performance.now();   // 13.2: un clip blocat (nu mai avansează) sau care n-a pornit nu ține imaginea înghețată
-      if(v0 && v0 !== 1 && v0.classList.contains('on')){
+      if(v0 && v0 !== 1 && v0.dataset.kind !== 'scripted' && v0.classList.contains('on')){
         if(v0 !== L.wv || v0.currentTime !== L.wt){ L.wv = v0; L.wt = v0.currentTime; L.wAt = t1; }
         else if(t1 - L.wAt > (v0.paused && c.state === 'speak' ? 2500 : 1600)){ ccOff(c, v0, true); L.wv = null; L.stalls = (L.stalls || 0) + 1; if(!(v0.paused && c.state === 'speak')) c.ccErr = `clipul „${v0.dataset.kind}” s-a blocat la redare; a revenit fața care vorbește`; return; }
-      } else if(v0 && v0 !== 1 && t1 - (L.lastAny || 0) > 4000){ ccOff(c, v0, true); c.ccErr = `clipul „${v0.dataset.kind}” n-a pornit`; return; } }
+      } else if(v0 && v0 !== 1 && v0.dataset.kind !== 'scripted' && t1 - (L.lastAny || 0) > 4000){ ccOff(c, v0, true); c.ccErr = `clipul „${v0.dataset.kind}” n-a pornit`; return; } }
     if(c.lit && c.lit.tgn){ const L0 = c.lit, C = L0.cur; C.gn = C.gn.map((x, i) => x + (L0.tgn[i] - x) * .12); C.sat += (L0.tsat - C.sat) * .12; C.fl += (L0.tfl - C.fl) * .12; }   /* lumina se apropie de ținta ei și cât rulează un clip */
     const LC = c.lit && c.lit.cur, cvd = L.cv || (L.cv = $('.callv .cvid')); if(LC && cvd){ const warm = Math.max(0, LC.gn[0] - LC.gn[2]); cvd.style.setProperty('--cf', `brightness(${LC.fl.toFixed(3)}) saturate(${LC.sat.toFixed(3)}) sepia(${Math.min(.4, warm * 1.8).toFixed(3)})`); }   // 12.6
+    if(c.scriptStop) return;
     if(ccLibOn(c)){ ccRunLib(c); return; }   // 14.8: setul din Animas: mereu un clip, schimbat după ce se întâmplă
     const now = performance.now(), since = k => now - (L.last[k] || 0), quiet = now - (L.lastAny || 0), has = k => L.els[k] && L.els[k] !== 1;
     if(c.state === 'speak'){
