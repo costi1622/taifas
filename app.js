@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.5';
+const APP_VER = '14.9.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -13907,23 +13907,44 @@ async function libSync0(){
 }
 // 14.9.5: diagnostic și previzualizare manuală a replicilor fixe, independent de dialogul generat.
 async function libVoiceInspect(){
+  // Open immediately: the user must never be left with an inert-looking button.
+  openSheet(`<h3>🎙 Clipuri cu voce din Animas</h3><p id="libVoiceStatus">Verific biblioteca locală…</p><div id="libVoiceResults"></div><button type="button" data-close>Închide</button>`);
+  const status=document.getElementById('libVoiceStatus'), out=document.getElementById('libVoiceResults');
+  const show=t=>{if(status&&status.isConnected)status.textContent=t;};
   try{
-    const r=await libSync();
-    const entries=chars.flatMap(c=>[c,c.duo&&c.duo.b].filter(Boolean)).flatMap(c=>Object.values(c.callClips||{}).filter(x=>x&&x.lib).flatMap(set=>(set.scripted||[]).map(x=>({character:c.name,clip:x}))));
-    if(!entries.length) return toast('Nu am găsit replici fixe. Verifică Animas și că ambele aplicații folosesc aceeași origine web.',6500);
-    const opts=entries.map((e,i)=>`<option value="${i}">${esc(e.character)} · ${esc(e.clip.role)} · ${esc(e.clip.text.slice(0,65))}</option>`).join('');
-    openSheet(`<h3>🎙 Clipuri cu voce din Animas</h3><p>${entries.length} clipuri cu voce importate. Testul nu schimbă dialogul din apel.</p><label>Clip<select id="libVoiceChoice">${opts}</select></label><button id="libVoiceTest">▶ Testează videoclipul</button><div id="libVoicePlayer"></div><button data-close>Închide</button>`);
-    const b=document.getElementById('libVoiceTest');
-    if(b) b.onclick=async()=>{
-      const n=Number(document.getElementById('libVoiceChoice').value), e=entries[n], target=document.getElementById('libVoicePlayer');
-      if(!e||!target)return;
-      const url=await imgUrl(e.clip.k);
-      target.replaceChildren();
-      const video=document.createElement('video'); video.controls=true;video.playsInline=true;video.preload='metadata';video.style.width='100%';video.src=url;target.appendChild(video);
-      video.play().catch(()=>{});
+    const db=await Promise.race([libOpen(),new Promise((_,rej)=>setTimeout(()=>rej(Error('Baza Animas nu răspunde în 8 secunde')),8000))]);
+    if(!db){show('Nu găsesc baza Animas pe această origine web. Ambele aplicații trebuie să fie instalate pe aceeași origine (protocol + domeniu + port).');return;}
+    let sets=[],clips=[];
+    try{sets=await libGet(db,'callsets')||[];clips=await libGet(db,'clips')||[];}finally{db.close();}
+    const voice=clips.filter(x=>x&&x.vid&&x.callStudio&&x.callStudio.mode==='scripted');
+    const names=chars.flatMap(c=>[c,c.duo&&c.duo.b].filter(Boolean));
+    show(`Animas: ${sets.length} seturi, ${clips.length} videoclipuri, ${voice.length} cu replică fixă. Taifas: ${names.length} personaje.`);
+    if(!voice.length){out.textContent='Nu există clipuri cu metadate de replică fixă în baza Animas. Verifică dacă videoclipul final (lip-sync), nu doar originalul, a păstrat callStudio.';return;}
+    const ul=document.createElement('div');out.appendChild(ul);
+    for(const x of voice){
+      const set=sets.find(z=>z&&z.charId===x.charId&&z.frame===x.start);
+      const target=set&&names.find(c=>c.id===set.tid);
+      const row=document.createElement('p');
+      row.textContent=`${x.callStudio.role||'?'} · ${String(x.callStudio.dialogue||'').slice(0,100)} · ${target?target.name:'neasociat cu Taifas'}${set?'':' · imaginea de start diferă de set'}`;
+      ul.appendChild(row);
+    }
+    const btn=document.createElement('button');btn.type='button';btn.className='btn';btn.textContent='Importă / actualizează biblioteca';out.appendChild(btn);
+    btn.onclick=async()=>{
+      btn.disabled=true;show('Import în curs…');
+      try{
+        const result=await Promise.race([libSync(),new Promise((_,rej)=>setTimeout(()=>rej(Error('Importul durează peste 45 secunde. Verifică spațiul disponibil și consola.')),45000))]);
+        const entries=names.flatMap(c=>Object.values(c.callClips||{}).filter(z=>z&&z.lib).flatMap(z=>(z.scripted||[]).map(clip=>({character:c.name,clip}))));
+        show(`Import încheiat: ${entries.length} replici fixe în Taifas${result&&result.busy?' (apel activ — încearcă după închidere)':''}.`);
+        const player=document.createElement('div');out.appendChild(player);
+        for(const e of entries){
+          const test=document.createElement('button');test.type='button';test.className='btn sm';test.textContent=`▶ ${e.character}: ${e.clip.text.slice(0,55)}`;player.appendChild(test);
+          test.onclick=async()=>{try{const url=await imgUrl(e.clip.k);if(!url)throw Error('Fișierul video nu a fost găsit');player.querySelectorAll('video').forEach(v=>v.remove());const v=document.createElement('video');v.controls=true;v.playsInline=true;v.preload='metadata';v.style.width='100%';v.src=url;test.after(v);await v.play();}catch(err){show('Redarea a eșuat: '+err.message);}};
+        }
+      }catch(err){show('Importul a eșuat: '+(err.message||err));}finally{btn.disabled=false;}
     };
-  }catch(e){toast('Importul nu a reușit: '+(e.message||e),6500);}
+  }catch(e){show('Verificarea a eșuat: '+(e.message||e));}
 }
+
 function libHintDraw(){
   const h = $('#stLibHint'); if(!h) return;
   const L = chars.flatMap(c => [c, c.duo && c.duo.b].filter(x => x && x.id)).flatMap(c => Object.values(c.libSets || {}).map(r => `${c.name}: ${r.place === 'toate' ? 'toate locurile' : ENV_RO_LIB[r.place] || r.place}, ${r.n}/${CC_LIB_KINDS.length} clipuri`));

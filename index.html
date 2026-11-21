@@ -2466,14 +2466,16 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <label>📚 Clipurile din Animas<small class="lh">Seturile pentru apel făcute în Animas (imaginea + clipurile pe roluri) se folosesc în apelurile video ale personajului, fără niciun cost Runware în apel.</small></label>
       <div class="seg" id="stCallLib"><button data-v="on">Da</button><button data-v="off">Nu</button></div>
       <p class="hint" id="stLibHint"></p>
-      <button type="button" class="btn sm" onclick="libVoiceInspect()">🎙 Sincronizează și testează clipurile cu voce</button>
+      <button type="button" class="btn sm" onclick="libVoiceInspect()">🎙 Verifică / importă clipurile cu voce</button>
       <p class="hint">Replicile în engleză se pot testa aici. În apel se redau numai când textul generat coincide; conversația în română rămâne neschimbată.</p>
+      <details class="sadv"><summary>⚙️ Setări video avansate <small>fidelitate, vorbire și expresii</small></summary>
       <div class="seg" id="stCcFid" style="margin-top:6px"><button data-v="max">🎯 Fidelitate 1:1</button><button data-v="eco">💰 Economic</button></div>
       <p class="hint" id="stCcHint"></p>
       <label>🗣️ Cât vorbește<small class="lh">Clip real: se mișcă natural, gura nu e potrivită pe cuvinte. Fața din telefon: gura pe cuvinte, restul nemișcat.</small></label>
       <div class="seg" id="stCallTalk"><button data-v="hybrid">Hibrid (recomandat)</button><button data-v="clip">Clip real</button><button data-v="face">Fața din telefon</button></div><p class="muted">Hibrid: clipurile Animas rulează pentru ascultare și reacții; cât personajul vorbește, gura procedurală urmărește textul rostit. Nu modifică videoclipul-sursă.</p>
       <label>👄 Fața vorbește<small class="lh">Buze, clipit și mișcarea capului pe imaginea ei, în telefon.</small></label>
       <div class="seg" id="stCallFace"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
+      </details>
       <details class="sadv" id="stCallFine"><summary>🎛️ Detalii de imagine <small>lumină, cameră, fundal, semnal</small></summary>
         <label>👄 Gura și clipitul din cadre reale<small class="lh">O dată pe imagine, 4 poze pe Runware (~1–2 ¢); cel mult 3 imagini noi pe zi.</small></label>
       <div class="seg" id="stCallSprites"><button data-v="on">Pornit</button><button data-v="off">Oprit</button></div>
