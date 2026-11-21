@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.10';
+const APP_VER = '14.9.11';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -11926,14 +11926,14 @@ function ccMediaInfo(v){
   const e=v.error;
   return `ready=${v.readyState}, network=${v.networkState}, t=${Number(v.currentTime||0).toFixed(1)}s, duration=${Number.isFinite(v.duration)?v.duration.toFixed(1):'unknown'}, muted=${v.muted}, error=${e?(e.code+': '+(e.message||'media')):'none'}`;
 }
-async function ccScriptPlay(c, item, text, capOff){
-  if(call !== c || c.interrupted || !c.video || !item) return false;
+async function ccScriptPlay(c, item, text, capOff, manual=false){
+  if(call !== c || (!manual && c.interrupted) || !c.video || !item || c.scriptStop) return false;
   let url;
   try { url = await imgUrl(item.k); } catch(e) { c.ccErr='clip cu voce: citire IndexedDB eșuată: '+String(e.message||e); return false; }
-  if(!url || call !== c || c.interrupted){c.ccErr='clip cu voce: fișierul nu este disponibil în IndexedDB';return false;}
+  if(!url || call !== c || (!manual && c.interrupted)){c.ccErr='clip cu voce: fișierul nu este disponibil în IndexedDB';return false;}
   const cvd=$('.callv .cvid'); if(!cvd) return false;
   const v=document.createElement('video');
-  v.className='cclip'; v.playsInline=true; v.preload='auto'; v.muted=false;
+  v.className='cclip scripted-voice'; v.playsInline=true; v.preload='auto'; v.muted=false;
   v.setAttribute('playsinline',''); v.src=url; v.dataset.kind='scripted';
   // The regular role scheduler must not replace the scripted player while it starts.
   const L=c.cl, old=L && L.cur && L.cur!==1 ? L.cur : null;
@@ -11944,16 +11944,17 @@ async function ccScriptPlay(c, item, text, capOff){
     v.remove();
     if(L && L.cur===v) L.cur=null;
     if(c.scriptStop===stop) c.scriptStop=null;
-    if(old && old.isConnected && call===c && !c.interrupted && L && !L.cur){
+    if(old && old.isConnected && call===c && L && !L.cur){
       L.cur=old; old.classList.add('on'); old.play().catch(()=>{});
     }
     if(cvd && (!L || !L.cur)) cvd.classList.remove('clip-active');
+    if(cvd) cvd.classList.remove('scripted-active');
   };
   try{
     cvd.insertBefore(v,cvd.querySelector('.cgrain'));
     c.scriptStop=stop;
     if(L) L.cur=v;
-    v.classList.add('on'); cvd.classList.add('clip-active');
+    v.classList.add('on'); cvd.classList.add('clip-active','scripted-active');
     if(old){try{old.pause();old.classList.remove('on');}catch(e){}}
     const result=await new Promise(resolve=>{
       let done=false, started=false, lastTime=0, lastAdvance=performance.now();
@@ -11967,7 +11968,7 @@ async function ccScriptPlay(c, item, text, capOff){
       v.addEventListener('playing',onStart);v.addEventListener('timeupdate',onProgress);
       v.addEventListener('ended',onEnd);v.addEventListener('error',onError);
       const check=setInterval(()=>{
-        if(call!==c || c.interrupted || !v.isConnected) return finish(false,'apel întrerupt');
+        if(call!==c || (!manual && c.interrupted) || !v.isConnected) return finish(false,'apel întrerupt');
         if(!started && performance.now()-begin>6500) return finish(false,'nu a început redarea');
         if(started && !v.paused && performance.now()-lastAdvance>6500) return finish(false,'redarea nu avansează');
       },250);
@@ -11977,6 +11978,7 @@ async function ccScriptPlay(c, item, text, capOff){
       catch(e){finish(false,'play() a aruncat: '+String(e.message||e));}
     });
     completed=result;
+    if(result) c.ccVoiceLast='redare completă · '+ccMediaInfo(v);
     return completed;
   }catch(e){c.ccErr='clip cu voce: '+String(e.message||e);return false;}
   finally{stop();}
@@ -14146,7 +14148,8 @@ function callDiag(c){
   let cl = !c.video ? '—' : S.callClips === 'off' ? 'oprite (Setări → Apeluri)' : c.framePending ? 'așteaptă imaginea de apel' : c.ccWhy || `${n}/${kinds.length} gata${set && set.lib ? ' · 📚 din Animas, fără cost' : ''}${c.ccMaking ? ', se fac acum' : ''}`;
   if(clipOn) cl += ` · rulează „${L.cur.dataset.kind}”${L.cur.paused ? ' (pe pauză)' : ''}`;
   if(c.ccErr) cl += ` · ultima problemă: ${c.ccErr}`;
-  if(set && set.lib) cl += ` · ${((set.scripted || []).length)} replici cu voce fixă importate (redare doar la potrivire exactă)`;
+  if(set && set.lib) cl += ` · ${((set.scripted || []).length)} replici cu voce fixă importate`;
+  if(c.ccVoiceLast) cl += ` · ultima replică video: ${c.ccVoiceLast}`;
   out.push(['🎬 Clipurile', cl]);
   const w = rvWhy(cc);
   out.push(['🌐 Limba apelului', callSharonEnglish(c) ? 'engleză (expresii ocazionale în spaniolă); chatul scris neschimbat' : 'limba personajului']);
@@ -14169,7 +14172,18 @@ function callDiagShow(c){
     if(call!==c || !el.isConnected){clearInterval(c.dgT);return;}
     if(busy)return; // never replace the active video element during playback
     const set=ccSet(c), scripted=(set&&set.scripted||[]);
-    el.innerHTML=`<h4>🔎 Starea apelului</h4>${callDiag(c).map(([a,b])=>`<p><b>${esc(a)}</b><br>${esc(b)}</p>`).join('')}${scripted.length?'<div class="btns"><button class="btn sm" data-script-test>🔍 Încarcă clipul cu voce</button></div><p data-script-status>Verifică fișierul separat de apel; apoi apasă Redă.</p><div data-script-preview></div>':''}<div class="btns"><button class="btn sm" data-dgc>Copiază</button><button class="btn sm pri" data-dgx>Închide</button></div>`;
+    el.innerHTML=`<h4>🔎 Starea apelului</h4>${callDiag(c).map(([a,b])=>`<p><b>${esc(a)}</b><br>${esc(b)}</p>`).join('')}${scripted.length?'<div class="btns"><button class="btn sm pri" data-script-call>▶ Redă în apel cu voce</button><button class="btn sm" data-script-test>🔍 Încarcă clipul cu voce</button></div><p data-script-status>Verifică fișierul separat de apel; apoi apasă Redă.</p><div data-script-preview></div>':''}<div class="btns"><button class="btn sm" data-dgc>Copiază</button><button class="btn sm pri" data-dgx>Închide</button></div>`;
+    const direct=el.querySelector('[data-script-call]');
+    if(direct)direct.onclick=async()=>{
+      if(c.scriptStop){toast('O replică video este deja în redare.',2500);return;}
+      const item=scripted[0];
+      close(); // închide panoul: clipul se vede în apel, nu sub diagnostic
+      try{ttsCancel();}catch(e){} // nu suprapune Nadine peste vocea din MP4
+      c.ccVoiceLast='pornire cerută din apel';
+      const ok=await ccScriptPlay(c,item,item.text,0,true);
+      if(call===c){ c.ccVoiceLast=ok?'redare completă în apel':'eșec în apel: '+(c.ccErr||'fără confirmare');
+        toast(ok?'🎬 Replica originală s-a redat în apel.':'🎬 Replica video nu a pornit. Verifică Starea apelului.',4500); }
+    };
     const test=el.querySelector('[data-script-test]');
     if(test)test.onclick=async()=>{
       if(busy)return;
