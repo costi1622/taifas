@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.1';
+const APP_VER = '14.9.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -13803,7 +13803,7 @@ async function libSync0(){
           let vb = await libGet(db, cl.vid); if(!(vb instanceof Blob) || vb.size < 1000) continue;
           if(!/^video\//.test(vb.type)) vb = new Blob([vb], {type:'video/mp4'});
           const meta = s.roles && s.roles[kind] || {};
-          v[kind] = {k:await saveImg(vb), at:Date.now(), lib:1, reuse:1, group:meta.group || (['vorb','vorb2'].includes(kind) ? 'talk' : ['asc'].includes(kind) ? 'listen' : ['gand'].includes(kind) ? 'think' : kind === 'bye' ? 'bye' : 'idle'), loop:meta.loop !== false, transition:meta.transition || 'soft'};
+          v[kind] = {k:await saveImg(vb), at:Date.now(), lib:1, reuse:1, group:meta.group || (['vorb','vorb2'].includes(kind) ? 'talk' : ['asc'].includes(kind) ? 'listen' : ['gand'].includes(kind) ? 'think' : kind === 'bye' ? 'bye' : 'idle'), loop:meta.loop !== false, transition:meta.transition || 'soft', studioMode:(s.roleConfig && s.roleConfig[kind] && s.roleConfig[kind].mode) || 'reusable', studioDialogue:(s.roleConfig && s.roleConfig[kind] && s.roleConfig[kind].dialogue) || ''};
         }
         if(!Object.keys(v).length) continue;
         if(have[s.id]) libDrop(cc, s.id);
@@ -13846,8 +13846,18 @@ function ccLibWant(c){
 }
 function ccLibPick(c, want){
   const L = c.cl; let ks = want.filter(k => ccHasClip(L, k)); if(!ks.length && c.state !== 'speak') ks = CC_LIB_IDLE.concat(CC_LIB_LISTEN).filter(k => ccHasClip(L, k)); if(!ks.length) return null;
-  const cur = L.cur && L.cur !== 1 ? L.cur.dataset.kind : '', alt = ks.filter(k => k !== cur), pool = alt.length ? alt : ks;
-  return pool[Math.floor(Math.random() * pool.length)];
+  // Evită repetițiile: ține cont de ultimele clipuri, nu doar de cel curent.
+  // Nu modifică alegerea stărilor și funcționează și cu bibliotecile vechi.
+  const cur = L.cur && L.cur !== 1 ? L.cur.dataset.kind : '';
+  const now=performance.now(), last=L.last || {};
+  const weights=ks.map(k=>{
+    const age=now-(last[k]||0);
+    return k===cur ? 0.1 : age<4500 ? 0.15 : age<12000 ? 0.5 : 1;
+  });
+  const total=weights.reduce((a,b)=>a+b,0);
+  let roll=Math.random()*total;
+  for(let i=0;i<ks.length;i++){roll-=weights[i];if(roll<=0)return ks[i];}
+  return ks[ks.length-1];
 }
 function ccLibNext(c){ const k = ccLibPick(c, ccLibWant(c)); if(k) ccPlay(c, k, true); else ccOff(c, c.cl.cur); }
 function ccRunLib(c){
