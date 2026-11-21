@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.16';
+const APP_VER = '14.9.17';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -13005,7 +13005,7 @@ function vfDraw(c, now){
     for(let i = V.nF; i < V.nF + V.nR; i++){ P[i][0] += .04 * fw * sy; P[i][1] += .04 * fh * sp; }
     for(const q of L0){ q[0] += V.z[62] * fw * .5 * sy; q[1] += V.z[62] * fh * .5 * sp; } }
   // ── capul: legănat ușor, încuviințări pe fraze, înclinat la întrebări, mici încuviințări cât asculți
-  if(st === 'listen' && heard && (!V.lnod || now - V.lnod > 2600 + Math.random() * 1500)){ V.lnod = now; V.nods.push({t:now, a:.55}); }
+  if(st === 'listen' && !c.video && heard && (!V.lnod || now - V.lnod > 2600 + Math.random() * 1500)){ V.lnod = now; V.nods.push({t:now, a:.55}); }
   V.nods = V.nods.filter(x => now < x.t + 450);
   let nod = 0; for(const x of V.nods){ const ph = (now - x.t) / 420; if(ph > 0 && ph < 1) nod = Math.max(nod, x.a * Math.sin(Math.PI * ph)); }
   const tilt = V.tiltT ? Math.max(0, 1 - Math.abs((now - V.tiltT) / 900 - .5) * 2) : 0;
@@ -13110,7 +13110,7 @@ function vfBehCtx(c){
 function vfBehave(c, V, now, st){
   const B = V.beh || (V.beh = {k:'', next:now + 5000 + Math.random() * 6000, ctx:vfBehCtx(c), ctxAt:now, yawns:0});
   if(now - B.ctxAt > 60e3){ B.ctx = vfBehCtx(c); B.ctxAt = now; }
-  const quiet = (st === 'listen' || st === 'idle' || st === 'think') && !(c.heardAt && now - c.heardAt < 2500) && !V.search;
+  const quiet = (st === 'listen' || st === 'idle' || st === 'think') && !(c.turn?.speaking || c.interim || (c.heardAt && now - c.heardAt < 4200)) && !V.search;
   if(B.k && !quiet && B.k !== 'swallow'){ B.k = ''; B.next = now + 6000 + Math.random() * 8000; }
   if(B.k && now > B.t0 + B.dur){ B.k = ''; B.next = now + (B.ctx.busy ? 6000 : 9000) + Math.random() * 12000; }
   if(!B.k && quiet && now > B.next){
@@ -13309,6 +13309,39 @@ function callChunks(text){
 }
 /* ── 💬 „îhî”, „da”, „aha” cât vorbești tu (în pauzele scurte; nu intră în ce ai spus) ── */
 const BC_WORDS = {ro:[['îhî', 'da', 'aha', 'da, da', 'îhî', 'așa'], ['îhî', 'înțeleg', 'vai']], en:[['uh-huh', 'yeah', 'right', 'mm-hm'], ['I see', 'oh no']], es:[['ajá', 'sí', 'claro'], ['vaya', 'entiendo']], fr:[['oui', 'ah oui', "d'accord"], ['oh', 'je vois']], it:[['sì', 'certo', 'ah'], ['capisco', 'oh no']], de:[['ja', 'genau', 'aha'], ['oh nein', 'verstehe']]};
+// One silent acknowledgment per video turn, with a cooldown between turns.
+function callVisualAck(c, turn, text, now = performance.now()){
+  if(call !== c || !c.video || c.blackout || c.ending || c.muted || c.away || c.scriptStop ||
+     c.state !== 'listen' || c.turn !== turn || turn.speaking || turn.stopping || turn.ack ||
+     S.callBack === 'off' || document.hidden || text.trim().split(/\s+/).length < 5 ||
+     (c.visualAckAt != null && now - c.visualAckAt < 8500)) return;
+  const warm = /\b(thanks|thank you|love that|wonderful|great news|gracias|me alegra|mulțumesc|mă bucur|minunat|super)\b/iu.test(text) &&
+    !/\b(not|never|nu|sad|sorry|trist|tristă|lo siento)\b/iu.test(text);
+  const L = c.cl, current = L?.cur, role = current?.dataset?.kind;
+  const nods = ['nod', 'agree', 'asc'];
+  const smiles = warm ? ['smile', 'smile2'] : [];
+  const acknowledged = smiles.concat(nods);
+  if(ccIsLib(c) && L && acknowledged.includes(role) && !current.paused && !current.ended){
+    turn.ack = true; c.visualAckAt = now; return;
+  }
+  if(ccIsLib(c) && L && role !== 'bye' && role !== 'scripted' &&
+     now >= (L.hold || 0) && (!current || now - L.lastAny >= 1400)){
+    const kind = acknowledged.find(k => ccHasClip(L, k) &&
+      (L.last[k] == null || now - L.last[k] >= 12000));
+    if(kind && ccPlay(c, kind, true)){
+      turn.ack = true; c.visualAckAt = now;
+      L.listenReaction = L.cur;
+      L.listenReactionUntil = now + 1250;
+      return;
+    }
+  }
+  const V = c.vf;
+  if(current || !V?.ready) return;
+  V.nods.push({t:now + 60, a:.55});
+  V.lnod = now;
+  if(warm) V.smileT = now;
+  turn.ack = true; c.visualAckAt = now;
+}
 function bcMaybe(c, txt, lastT){
   if(S.callBack === 'off' || !txt || call !== c || c.state !== 'listen' || c.muted || !lastT) return;
   if(IS_ANDROID && S.callBack !== 'force') return;   // 9.70: pe Android vocea peste microfonul deschis nu se aude și poate opri ascultarea
@@ -13620,6 +13653,7 @@ function callStopListening(c){
   clearTimeout(c.listenTimer);
   clearTimeout(c.turnTimer);
   clearTimeout(c.backchannelTimer);
+  c.backchannelTimer = 0;
   clearTimeout(c.recTimer);
   const r = c.rec;
   c.rec = null;
@@ -13675,9 +13709,13 @@ function callListen(quiet, recognition){
   const pause = () => callHold(text()) ? 1950 : 1200;
   const backchannel = () => {
     clearTimeout(c.backchannelTimer);
+    c.backchannelTimer = 0;
     c.bcPause = false;
     if(!turn.speaking && text()) c.backchannelTimer = setTimeout(() => {
-      if(listening() && !turn.speaking) bcMaybe(c, text(), turn.last);
+      c.backchannelTimer = 0;
+      if(!listening() || turn.speaking || turn.stopping) return;
+      if(c.video) callVisualAck(c, turn, text());
+      else bcMaybe(c, text(), turn.last);
     }, 470);
   };
   const finish = () => { if(listening() && text()) callCommitTurn(c, text()); };
@@ -13759,6 +13797,7 @@ function callListen(quiet, recognition){
     if(!current()) return;
     detach();
     if(turn.stopping){ finish(); return; }
+    if(c.video && !c.backchannelTimer) backchannel();
     checkPause();
     if(listening()) schedule(text() ? 100 : 250);
   };
@@ -14261,14 +14300,20 @@ const ENV_RO_LIB = {casa:'acasă', pat:'în pat', bucatarie:'bucătărie', strad
    Acum, cu setul din Animas: mereu rulează un clip, ales după starea apelului (vorbește / te ascultă / se gândește / liniște);
    la final, următorul clip potrivit intră lin peste el (vezi ccPlay); la schimbarea stării, trecerea se face imediat. */
 const CC_IDLE = ['activ', 'asc', 'priv', 'activ', 'gand'];
+const CC_LISTEN_GLANCES = ['priv', 'left', 'right'];
 const ccHasClip = (L, k) => !!(L && L.els[k] && L.els[k] !== 1);
 function ccLibOn(c){ const L = c && c.cl; return !!(L && ccIsLib(c) && [...CC_LIB_IDLE, ...CC_LIB_LISTEN, ...CC_LIB_THINK].some(k => ccHasClip(L, k))); }
 function ccLibWant(c){
   // Hibrid: când personajul rostește textul curent, clipurile cu gură generică se ascund și rămâne gura procedurală, temporizată pe cuvintele reale.
   if(c.state === 'speak') return S.callTalk === 'face' || S.callTalk === 'hybrid' ? [] : CC_LIB_TALK;
-  if(c.state === 'listen' && c.interim && performance.now() - (c.heardAt || 0) < 1500) return CC_LIB_LISTEN;
+  if(ccPresencePhase(c) === 'active-listen'){
+    const attentive = ['listen2', 'attentive', 'asc'];
+    return attentive.some(k => ccHasClip(c.cl, k)) ? attentive : CC_LIB_LISTEN;
+  }
   if(c.state === 'think') return CC_LIB_THINK.concat(CC_LIB_LISTEN);
-  return CC_LIB_IDLE.concat(CC_LIB_LISTEN, CC_LIB_THINK);
+  const quiet = c.heardAt == null || performance.now() - c.heardAt >= 4200;
+  const calm = ['activ', 'calm', 'shift', 'listen2', 'attentive', 'asc', 'hair', 'sip', 'phone', 'stretch'];
+  return quiet ? calm.concat(CC_LISTEN_GLANCES) : calm;
 }
 /* 14.9.15 — Natural Presence: un singur coordonator pentru stările vizuale.
    Nu schimbă motorul audio, Smart Voice Video sau culorile. Respectă blocarea
@@ -14276,22 +14321,25 @@ function ccLibWant(c){
 function ccPresencePhase(c){
   if(c.state === 'speak') return 'speak';
   if(c.state === 'think') return 'think';
-  if(c.state === 'listen' && c.interim && performance.now() - (c.heardAt || 0) < 1500) return 'active-listen';
+  if(c.state === 'listen' && (c.turn?.speaking || c.interim)) return 'active-listen';
   return 'calm-listen';
 }
 function ccLibPick(c, want){
   const L = c.cl; let ks = [...new Set(want)].filter(k => ccHasClip(L, k));
-  if(!ks.length && c.state !== 'speak') ks = [...new Set(CC_LIB_IDLE.concat(CC_LIB_LISTEN))].filter(k => ccHasClip(L, k));
+  if(!ks.length && c.state !== 'speak'){
+    const fallback = CC_LIB_LISTEN.concat('calm', 'activ', 'shift');
+    ks = [...new Set(fallback)].filter(k => ccHasClip(L, k));
+  }
   if(!ks.length) return null;
   const cur = L.cur && L.cur !== 1 ? L.cur.dataset.kind : '';
   const now = performance.now(), last = L.last || {}, phase = ccPresencePhase(c);
   const weights = ks.map(k => {
-    const age = now - (last[k] || 0);
+    const age = last[k] == null ? Infinity : now - last[k];
     let w = k === cur ? 0.05 : age < 6500 ? 0.08 : age < 16000 ? 0.35 : 1;
     if(phase === 'calm-listen' && (k === 'asc' || k === 'activ')) w *= 1.5;
     if(phase === 'active-listen' && k === 'asc') w *= 2;
     if(phase === 'think' && k === 'gand') w *= 2;
-    if(k === 'ras' && phase !== 'active-listen') w *= 0.1;
+    if(CC_LISTEN_GLANCES.includes(k)) w *= 0.35;
     return w;
   });
   const total = weights.reduce((a,b) => a+b,0);
@@ -14309,6 +14357,7 @@ function ccRunLib(c){
   const now=performance.now(), phase=ccPresencePhase(c);
   const cur=L.cur && L.cur !== 1 ? L.cur.dataset.kind : '';
   if(cur === 'bye' || cur === 'scripted') return;
+  if(phase !== 'speak' && L.cur && L.cur === L.listenReaction && now < L.listenReactionUntil && !L.cur.ended) return;
   if(L.presencePhase !== phase){
     L.presencePhase=phase; L.presenceAt=now;
     // Reacțiile scurte pot termina înaintea următoarei tranziții.
@@ -14318,7 +14367,8 @@ function ccRunLib(c){
   const want=ccLibWant(c);
   if(phase === 'speak' && !want.length){if(L.cur)ccOff(c,L.cur,true);return;}
   if(cur && want.includes(cur)) return;
-  if(cur && phase !== 'speak' && now < Math.max(L.hold||0,L.presenceHoldUntil||0)) return;
+  const clipHold = phase === 'active-listen' && CC_LISTEN_GLANCES.includes(cur) ? 0 : L.hold || 0;
+  if(cur && phase !== 'speak' && now < Math.max(clipHold, L.presenceHoldUntil || 0)) return;
   const k=ccLibPick(c,want);
   if(k && k !== cur) ccPlay(c,k,true);
 }
