@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.9';
+const APP_VER = '14.9.10';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -11921,61 +11921,67 @@ function ccScriptMatch(c, text){
 }
 // 14.9.4: orice clip cu voce are limită de timp și fallback la TTS dinamic.
 // Nu ținem un apel în așteptare dacă playerul nu trimite evenimentul ended.
+// 14.9.10: media diagnostics shared by the call player and the isolated preview.
+function ccMediaInfo(v){
+  const e=v.error;
+  return `ready=${v.readyState}, network=${v.networkState}, t=${Number(v.currentTime||0).toFixed(1)}s, duration=${Number.isFinite(v.duration)?v.duration.toFixed(1):'unknown'}, muted=${v.muted}, error=${e?(e.code+': '+(e.message||'media')):'none'}`;
+}
 async function ccScriptPlay(c, item, text, capOff){
   if(call !== c || c.interrupted || !c.video || !item) return false;
   let url;
-  try { url = await imgUrl(item.k); } catch(e) { return false; }
-  if(!url || call !== c || c.interrupted) return false;
+  try { url = await imgUrl(item.k); } catch(e) { c.ccErr='clip cu voce: citire IndexedDB eșuată: '+String(e.message||e); return false; }
+  if(!url || call !== c || c.interrupted){c.ccErr='clip cu voce: fișierul nu este disponibil în IndexedDB';return false;}
   const cvd=$('.callv .cvid'); if(!cvd) return false;
   const v=document.createElement('video');
-  v.className='cclip'; v.playsInline=true; v.preload='metadata'; v.muted=false;
+  v.className='cclip'; v.playsInline=true; v.preload='auto'; v.muted=false;
   v.setAttribute('playsinline',''); v.src=url; v.dataset.kind='scripted';
+  // The regular role scheduler must not replace the scripted player while it starts.
   const L=c.cl, old=L && L.cur && L.cur!==1 ? L.cur : null;
-  let completed=false, stopWait=null;
+  let completed=false, cancelWait=null;
   const stop=()=>{
-    if(stopWait) stopWait();
+    if(cancelWait) cancelWait();
     try{v.pause();}catch(e){}
     v.remove();
     if(L && L.cur===v) L.cur=null;
     if(c.scriptStop===stop) c.scriptStop=null;
-    if(cvd && (!L || !L.cur)) cvd.classList.remove('clip-active');
-    if(old && old.isConnected && call===c && !c.interrupted){
-      // Restabilim clipul anterior doar dacă nu există deja un altul activ.
-      if(L && !L.cur) { L.cur=old; old.classList.add('on'); old.play().catch(()=>{}); }
+    if(old && old.isConnected && call===c && !c.interrupted && L && !L.cur){
+      L.cur=old; old.classList.add('on'); old.play().catch(()=>{});
     }
+    if(cvd && (!L || !L.cur)) cvd.classList.remove('clip-active');
   };
   try{
     cvd.insertBefore(v,cvd.querySelector('.cgrain'));
-    const start= v.play();
-    // Dacă browserul refuză autoplay cu sunet, nu blocăm apelul.
-    await Promise.race([start, new Promise((_,reject)=>setTimeout(()=>reject(new Error('play timeout')),4500))]);
-    if(call!==c || c.interrupted) return false;
     c.scriptStop=stop;
+    if(L) L.cur=v;
     v.classList.add('on'); cvd.classList.add('clip-active');
     if(old){try{old.pause();old.classList.remove('on');}catch(e){}}
-    if(L) L.cur=v;
-    c.state='speak'; callState('vorbește','speak'); callBarge(c);
     const result=await new Promise(resolve=>{
-      let done=false;
-      const finish=ok=>{if(done)return;done=true;cleanup();resolve(ok);};
-      const onEnd=()=>finish(true), onError=()=>finish(false);
-      let check=null, timer=null;
-      const cleanup=()=>{v.removeEventListener('ended',onEnd);v.removeEventListener('error',onError);clearInterval(check);clearTimeout(timer);};
-      stopWait=()=>finish(false);
+      let done=false, started=false, lastTime=0, lastAdvance=performance.now();
+      const finish=(ok,why)=>{if(done)return;done=true;cleanup();if(!ok)c.ccErr='clip cu voce: '+why+' ('+ccMediaInfo(v)+')';resolve(ok);};
+      const onStart=()=>{started=true;lastAdvance=performance.now();};
+      const onProgress=()=>{if(v.currentTime>lastTime+.02){lastTime=v.currentTime;lastAdvance=performance.now();}};
+      const onEnd=()=>finish(true,'ended');
+      const onError=()=>finish(false,'eroare media');
+      const cleanup=()=>{['playing','timeupdate'].forEach((name,i)=>v.removeEventListener(name,i?onProgress:onStart));v.removeEventListener('ended',onEnd);v.removeEventListener('error',onError);clearInterval(check);clearTimeout(timer);};
+      cancelWait=()=>finish(false,'întrerupt');
+      v.addEventListener('playing',onStart);v.addEventListener('timeupdate',onProgress);
       v.addEventListener('ended',onEnd);v.addEventListener('error',onError);
-      check=setInterval(()=>{if(call!==c || c.interrupted || !v.isConnected)finish(false);},200);
-      // Durata reală + marjă; un stream cu metadata defectă nu poate bloca apelul.
-      const maxMs=Number.isFinite(v.duration)&&v.duration>0 ? Math.min(45000,Math.max(6500,v.duration*1000+3500)) : 18000;
-      timer=setTimeout(()=>finish(false),maxMs);
+      const check=setInterval(()=>{
+        if(call!==c || c.interrupted || !v.isConnected) return finish(false,'apel întrerupt');
+        if(!started && performance.now()-begin>6500) return finish(false,'nu a început redarea');
+        if(started && !v.paused && performance.now()-lastAdvance>6500) return finish(false,'redarea nu avansează');
+      },250);
+      const begin=performance.now();
+      const timer=setTimeout(()=>finish(false,'timeout redare'),45000);
+      try{Promise.resolve(v.play()).catch(e=>finish(false,'play() refuzat: '+String(e.message||e)));}
+      catch(e){finish(false,'play() a aruncat: '+String(e.message||e));}
     });
     completed=result;
-    if(!completed) c.ccErr='clipul cu voce nu s-a terminat; revenire la vocea Taifas';
     return completed;
-  }catch(e){
-    c.ccErr='clipul cu voce nu a pornit; revenire la vocea Taifas';
-    return false;
-  }finally{stop();}
+  }catch(e){c.ccErr='clip cu voce: '+String(e.message||e);return false;}
+  finally{stop();}
 }
+
 async function callSay(c, text, capOff, who, fill){   // 9.98 (11): who = cine vorbește, când e și altcineva în apel
   // 9.69: bucăți de cel mult ~170 de caractere, vocea după genul ei, redare prin `ttsPlay` (fără blocaje pe „vorbește”)
   // Prioritate doar pentru replici fixe identice; în orice alt caz rămâne vocea Taifas.
@@ -14151,32 +14157,56 @@ function callDiag(c){
   out.push(['⚡ Runware', `${String(S.rwKey || '').trim() ? 'cheia în telefon' : 'fără cheie în telefon'} · azi ${usd(rwDay().usd)}${busyMin != null && busyMin < 15 ? ` · „aglomerat” acum ${busyMin} min` : ''}`]);
   return out;
 }
+// 14.9.10: isolated, user-gesture media preview. No role scheduler or TTS involved.
 function callDiagShow(c){
-  const v = $('.callv'); if(!v || call !== c) return;
-  let el = v.querySelector('.cdiag'); v.classList.remove('more');
-  if(el){ el.remove(); clearInterval(c.dgT); return; }
-  el = document.createElement('div'); el.className = 'cdiag'; el.addEventListener('click', e => e.stopPropagation()); v.appendChild(el);
-  const close = () => { el.remove(); clearInterval(c.dgT); };
-  const draw = () => {
-    if(call !== c || !el.isConnected){ clearInterval(c.dgT); return; }
-    const set=ccSet(c), scripted=(set && set.scripted || []);
-    el.innerHTML = `<h4>🔎 Starea apelului</h4>${callDiag(c).map(([a, b]) => `<p><b>${esc(a)}</b><br>${esc(b)}</p>`).join('')}${scripted.length ? '<div class="btns"><button class="btn sm" data-script-test>▶ Test clip cu voce (manual)</button></div><p data-script-status>Testul redă clipul original fără a aștepta potrivirea replicii.</p>' : ''}<div class="btns"><button class="btn sm" data-dgc>Copiază</button><button class="btn sm pri" data-dgx>Închide</button></div>`;
+  const root=$('.callv'); if(!root || call!==c)return;
+  let el=root.querySelector('.cdiag');root.classList.remove('more');
+  if(el){el.remove();clearInterval(c.dgT);return;}
+  el=document.createElement('div');el.className='cdiag';el.addEventListener('click',e=>e.stopPropagation());root.appendChild(el);
+  let preview=null, busy=false;
+  const close=()=>{if(preview){preview.pause();preview.remove();preview=null;}el.remove();clearInterval(c.dgT);};
+  const draw=()=>{
+    if(call!==c || !el.isConnected){clearInterval(c.dgT);return;}
+    if(busy)return; // never replace the active video element during playback
+    const set=ccSet(c), scripted=(set&&set.scripted||[]);
+    el.innerHTML=`<h4>🔎 Starea apelului</h4>${callDiag(c).map(([a,b])=>`<p><b>${esc(a)}</b><br>${esc(b)}</p>`).join('')}${scripted.length?'<div class="btns"><button class="btn sm" data-script-test>🔍 Încarcă clipul cu voce</button></div><p data-script-status>Verifică fișierul separat de apel; apoi apasă Redă.</p><div data-script-preview></div>':''}<div class="btns"><button class="btn sm" data-dgc>Copiază</button><button class="btn sm pri" data-dgx>Închide</button></div>`;
     const test=el.querySelector('[data-script-test]');
-    if(test) test.onclick=async()=>{
-      if(call!==c || c.scriptStop || c.state==='speak' || c.ending){toast('Așteaptă să termine replica curentă înainte de test.',3000);return;}
-      const prior=c.state, status=el.querySelector('[data-script-status]');
-      test.disabled=true; if(status) status.textContent='Redau clipul cu voce…';
-      const ok=await ccScriptPlay(c,scripted[0],scripted[0].text,0);
-      if(call===c && !c.ending && c.state==='speak'){c.state=prior==='think'?'think':'listen';callState(prior==='think'?'se gândește…':'te ascultă…',c.state);}
-      if(status && status.isConnected) status.textContent=ok?'Clipul cu voce s-a redat complet.':'Redarea a eșuat sau a fost întreruptă; verifică diagnosticul.';
-      if(test.isConnected)test.disabled=false;
+    if(test)test.onclick=async()=>{
+      if(busy)return;
+      busy=true;test.disabled=true;
+      const status=el.querySelector('[data-script-status]'),slot=el.querySelector('[data-script-preview]');
+      status.textContent='Verific stocarea locală…';
+      try{
+        const item=scripted[0],blob=await DB.get(item.k);
+        if(!(blob instanceof Blob)||blob.size<1000)throw Error('Fișier lipsă sau gol în IndexedDB');
+        const url=await imgUrl(item.k);if(!url)throw Error('Nu pot obține adresa media');
+        const v=document.createElement('video');preview=v;
+        v.controls=true;v.playsInline=true;v.preload='auto';v.muted=false;v.src=url;
+        v.style.cssText='display:block;width:100%;max-height:42vh;background:#000;border-radius:10px;margin:8px 0;';
+        const btn=document.createElement('button');btn.className='btn sm pri';btn.textContent='▶ Redă clipul original cu sunet';
+        const info=()=>`${Math.round(blob.size/1024)} KB · ${blob.type||'tip necunoscut'} · ${ccMediaInfo(v)}`;
+        const update=msg=>{if(status.isConnected)status.textContent=msg+' · '+info();};
+        v.addEventListener('loadedmetadata',()=>update('Metadate încărcate'));
+        v.addEventListener('playing',()=>update('Redare pornită'));
+        v.addEventListener('timeupdate',()=>{if(v.currentTime>0&&!v.paused)update('Redare în curs');});
+        v.addEventListener('ended',()=>update('Redare completă'));
+        v.addEventListener('error',()=>update('EROARE media'));
+        btn.onclick=()=>{v.muted=false;v.play().then(()=>update('play() acceptat')).catch(e=>update('play() refuzat: '+String(e.message||e)));};
+        slot.append(v,btn);
+        update('Fișier găsit. Apasă Redă pentru testul cu sunet');
+        v.load();
+      }catch(e){status.textContent='EȘEC: '+String(e.message||e);c.ccErr='test clip voce: '+String(e.message||e);}
+      finally{test.disabled=false;busy=true;}
     };
-    el.querySelector('[data-dgx]').onclick = close;
-    el.querySelector('[data-dgc]').onclick = () => { const t = `Taifas ${APP_VER} · ${cc0()}\n` + callDiag(c).map(([a, b]) => `${a}: ${b}`).join('\n'); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copiat. Îl poți lipi în chat cu Claude.', 2200)).catch(() => toast('Nu pot copia aici.', 1800)); };
+    el.querySelector('[data-dgx]').onclick=close;
+    el.querySelector('[data-dgc]').onclick=()=>{
+      const t=`Taifas ${APP_VER} · ${c.c.name} · ${new Date().toLocaleString('ro-RO')}\n`+callDiag(c).map(([a,b])=>`${a}: ${b}`).join('\n')+'\n'+(el.querySelector('[data-script-status]')?.textContent||'');
+      (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('Diagnostic copiat.',2200)).catch(()=>toast('Nu pot copia aici.',1800));
+    };
   };
-  const cc0 = () => c.c.name + ' · ' + new Date().toLocaleString('ro-RO');
-  draw(); c.dgT = setInterval(() => { if(!c.scriptStop) draw(); }, 1000);
+  draw();c.dgT=setInterval(draw,1000);
 }
+
 function callHangup(c){
   if(call !== c) return;
   if(c.ending || !c.t0 || c.state === 'ring'){ endCall(); history.back(); return; }   // a doua atingere (sau încă sună): imediat
