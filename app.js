@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.7';
+const APP_VER = '14.9.8';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -11702,6 +11702,12 @@ const CALL_SPOKEN = u => `Vorbiți în timp real. Scrii doar ce spui cu voce tar
 const CALL_FIX = u => `ești într-un apel vocal la telefon cu ${u}. ` + CALL_SPOKEN(u);
 // 8.13: apel video: vă vedeți. Dacă primește un cadru din camera lui, îl vede ca într-un apel adevărat
 const CALL_FIX_V = u => `ești într-un apel video cu ${u}, vă vedeți pe ecran. ` + CALL_SPOKEN(u) + `. Dacă primești o imagine, e ce vezi chiar acum prin camera lui: poți reacționa firesc la ce vezi (unde e, lumina, ce face, expresia lui), în treacăt, fără s-o descrii ca pe o poză și fără comentarii despre corpul lui`;
+// 14.9.8: limba vorbită în apel este independentă de limba chatului și de recunoașterea microfonului.
+// Aplicăm preferința doar personajului Sharon G.; alte personaje rămân neschimbate.
+const callSharonEnglish = c => !!(c && c.c && /^sharon g\.?$/i.test(String(c.c.name || '').trim()));
+const callSpeechLang = c => callSharonEnglish(c) ? 'en-US' : langOf(c.c);
+const callSpeechRules = c => callSharonEnglish(c) ?
+  '. IMPORTANT — VIDEO CALL SPEECH ONLY: Sharon must speak in natural conversational English throughout this video call, with occasional short Spanish endearments (for example cariño, mi amor). Do not answer in Romanian, even if the caller speaks Romanian. Understand Romanian input and respond in English. Keep the existing character personality, relationship, and story unchanged. This rule applies ONLY to spoken video-call replies; written chat remains unchanged. Do not translate or rewrite earlier chat messages.' : '';
 const callFix = c => (c && c.video ? CALL_FIX_V : CALL_FIX)(S.userName.trim() || 'el') + showNote(c) + callLiveRules(c) + (c && c.video && c.exprReady ? '. Începe fiecare replică cu expresia feței tale de acum, exact așa: [față: zâmbet], [față: râs], [față: surpriză], [față: gânditoare], [față: tristă] sau [față: neutră]' : '');
 const ICO = {
   mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
@@ -11978,9 +11984,9 @@ async function callSay(c, text, capOff, who, fill){   // 9.98 (11): who = cine v
     if(item && await ccScriptPlay(c,item,text,capOff)) return;
   }
   const parts = callChunks(text).flatMap(([s, at]) => { let o = 0; return ttsSplitLong(s).map(x => { const r = [x.trim(), at + o]; o += x.length; return r; }); }).filter(([s]) => s);
-  const vc = who || c.c, v = phoneVoice(langOf(vc), vc), rid = c._rid;
+  const vc = who || c.c, speechLang = who ? langOf(who) : callSpeechLang(c), v = phoneVoice(speechLang, vc), rid = c._rid;
   return Promise.all(parts.map(([s, at], k) => new Promise(res => {
-    const u = new SpeechSynthesisUtterance(s); u.lang = langOf(vc); if(v) u.voice = v; u._rc = vc; u._rtag = 'apel'; if(fill) u._fill = 1;   // 12.9
+    const u = new SpeechSynthesisUtterance(s); u.lang = speechLang; if(v) u.voice = v; u._rc = vc; u._rtag = 'apel'; if(fill) u._fill = 1;   // 12.9
     const P = callProso(c, s, text, v); u.pitch = who ? Math.min(2, P.pitch + .14) : P.pitch * (c.sleepy ? .96 : 1); u.rate = P.rate * (c.sleepy && !who ? .9 : 1); u.volume = P.vol;   // 9.98: alt ton pentru a doua voce
     u.onstart = () => { u._t0 = performance.now(); if(!who) ccTalk(c, true); if(call === c && c.state !== 'listen'){ c.state = 'speak'; callState(who ? who.name + ' vorbește' : 'vorbește', 'speak'); callBarge(c); if(!who) vfUtter(c, u); } };   // 9.62: gura pe cronologia textului
     u.onboundary = e => { if(window.__talk) window.__talk(e, capOff + at); };
@@ -12038,7 +12044,7 @@ async function callReply(opts = {}){
   const n0 = c.ch.msgs.length;
   const pres = opts.pres ? `. Ce ai observat chiar acum la el în apel (reacționează firesc, doar dacă se potrivește, nu ca la o notă): ${opts.pres}` : '';   // 9.23
   const gN = c.guest ? `. ${c.guest.name} e și ea în apel cu voi și vă aude; dacă ${S.userName.trim() || 'el'} i se adresează ei, las-o pe ea să răspundă` : '';   // 9.98 (11)
-  const run = reply(null, {c:c.c, ch:c.ch, tag:'apel', ...opts, fix:(opts.pro ? (opts.fix || '') : callFix(c) + pres) + gN});
+  const run = reply(null, {c:c.c, ch:c.ch, tag:'apel', ...opts, fix:(opts.pro ? (opts.fix || '') : callFix(c) + pres + callSpeechRules(c)) + gN});
   const m = c.ch.msgs[n0];
   // vorbește de la prima propoziție gata, cât restul încă se scrie
   let said = 0, done = false; const q = [];
@@ -12062,7 +12068,7 @@ async function callReply(opts = {}){
   clearTimeout(c.fillT); if(!opts.pro && !learnOn(c.c) && S.callFill !== 'off') c.fillT = setTimeout(() => {
     const rvq = rvOn(c.c);   // 12.9: cu vocea reală, „hm…” acoperă și așteptarea sunetului primei propoziții
     if(call !== c || c.state !== 'think' || (said && !rvq) || c.interrupted || (!rvq && m && callClean(m.text || '').length > 3)) return;
-    const q = /\?\s*$/.test(c.lastHeard || ''), F = q ? ['Păi…', 'Stai…', 'Păi, stai…', 'Hmm, păi…'] : ['Îhî…', 'Aha…', 'Da…', 'Păi…'];   // 9.69: „Mhm” / „Mm” erau citite literă cu literă de vocile de telefon
+    const q = /\?\s*$/.test(c.lastHeard || ''), F = callSharonEnglish(c) ? (q ? ['Hmm…', 'Let me think…'] : ['Mm-hmm…', 'I see…']) : (q ? ['Păi…', 'Stai…', 'Păi, stai…', 'Hmm, păi…'] : ['Îhî…', 'Aha…', 'Da…', 'Păi…']);   // 9.69: „Mhm” / „Mm” erau citite literă cu literă de vocile de telefon
     if(rvq || Math.random() < .65) callSay(c, F[Math.floor(Math.random() * F.length)], 0, undefined, rvq);
   }, 1100);
   try{ await run; } catch(e){}
@@ -14130,6 +14136,7 @@ function callDiag(c){
   if(set && set.lib) cl += ` · ${((set.scripted || []).length)} replici cu voce fixă importate (redare doar la potrivire exactă)`;
   out.push(['🎬 Clipurile', cl]);
   const w = rvWhy(cc);
+  out.push(['🌐 Limba apelului', callSharonEnglish(c) ? 'engleză (expresii ocazionale în spaniolă); chatul scris neschimbat' : 'limba personajului']);
   out.push(['🎙️ Vocea', (w ? 'a telefonului: ' + w : 'reală · ' + rvLabel(cc) + (RV.cur ? ' · vorbește' : RV.q.length ? ` · ${RV.q.length} în coadă` : '')) + (RV.lastErr ? ` · ultima eroare: ${RV.lastErr}` : '')]);
   const busyMin = S.rwBusyAt ? Math.round((Date.now() - S.rwBusyAt) / 60e3) : null;
   if(S.rwLastErr && Date.now() - S.rwLastErr.at < 864e5) out.push(['⚠️ Ultima eroare Runware', `${S.rwLastErr.why} (${new Date(S.rwLastErr.at).toTimeString().slice(0, 5)}): ${S.rwLastErr.msg}`]);   // 14.0
@@ -14161,7 +14168,7 @@ function callHangup(c){
   if(busy && live && live.ch === c.ch) busy.abort();
   const clip = c.video && ccPlay(c, 'bye', true);
   callState('își ia la revedere…', 'speak');
-  const set = CALL_BYE[langOf(c.c).slice(0, 2)] || CALL_BYE.en, w = set[Math.floor(Math.random() * set.length)];
+  const set = CALL_BYE[callSpeechLang(c).slice(0, 2)] || CALL_BYE.en, w = set[Math.floor(Math.random() * set.length)];
   c.capOn = false; const off = capAppend(c, w); c.interrupted = false; callSay(c, w, off);
   toast('Atinge încă o dată ca să închizi imediat.', 1800);
   c.hangT = setTimeout(() => { if(call === c){ endCall(); history.back(); } }, clip ? 2700 : 1700);
