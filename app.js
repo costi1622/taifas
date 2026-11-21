@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.12';
+const APP_VER = '14.9.13';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -11853,9 +11853,17 @@ function startCall(opts = {}){
     c.tick = setInterval(() => { if(call !== c) return; const s = Math.floor((Date.now() - c.t0) / 1000), t = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); $('#clTime').textContent = t; $('#clTimeV').textContent = t; }, 500);
     poke();
     const u = S.userName.trim() || 'el';
+    // 14.9.13: user-first on outgoing video calls; no generated intro.
+    if(c.video && !c.incoming){
+      c.state='idle';
+      c.ccOpening='utilizatorul începe apelul video';
+      callState('conectat · spune tu primul salut', 'listen');
+      callListen();
+    } else {
     callReply({pro:true, note: c.incoming
       ? `(Notă de regie, nu o menționa ca atare: TU l-ai sunat pe ${u} ${c.video ? 'pe video' : 'pe telefon'} și el tocmai a răspuns. Începe tu: salută-l și spune firesc de ce suni${opts.reason ? ' („' + opts.reason + '”)' : ' (ți-era dor să-i auzi vocea, ai ceva să-i povestești sau ai o întrebare, după ce faci acum)'}. ${callFix(c)}.)`
       : `(Notă de regie, nu o menționa ca atare: ${u} te sună acum ${c.video ? 'pe video' : 'pe telefon'} și tu răspunzi. Salută-l scurt, în felul tău și după ce faci acum.${c.sleepy ? ' Apelul te-a trezit: ești somnoroasă, cu lumina stinsă, vorbești încet și pe scurt.' : ''}${c.video && Math.random() < .35 ? ' Poți pomeni în treacăt că-ți potrivești telefonul („stai să mă pun bine”).' : ''} ${callFix(c)}.)`});
+    }
   }, c.incoming ? 700 : 2600 + Math.random() * 2400 + (c.sleepy ? 5000 + Math.random() * 5000 : 0));
 }
 function callState(t, cls){ const el = $('#clState'); if(el){ el.textContent = t; el.className = cls || ''; } const v = $('.callv'); if(v) v.dataset.st = cls || ''; if(call) ambLevel(call, cls === 'listen' ? .7 : 1); }
@@ -14190,6 +14198,7 @@ function callDiag(c){
   if(c.ccVoiceLast) cl += ` · ultima replică video: ${c.ccVoiceLast}`;
   out.push(['🎬 Clipurile', cl]);
   const w = rvWhy(cc);
+  if(c.ccOpening) out.push(['🎤 Inițiativa apelului', c.ccOpening]);
   out.push(['🌐 Limba apelului', callSharonEnglish(c) ? 'engleză (expresii ocazionale în spaniolă); chatul scris neschimbat' : 'limba personajului']);
   out.push(['🎙️ Vocea', (w ? 'a telefonului: ' + w : 'reală · ' + rvLabel(cc) + (RV.cur ? ' · vorbește' : RV.q.length ? ` · ${RV.q.length} în coadă` : '')) + (RV.lastErr ? ` · ultima eroare: ${RV.lastErr}` : '')]);
   const busyMin = S.rwBusyAt ? Math.round((Date.now() - S.rwBusyAt) / 60e3) : null;
