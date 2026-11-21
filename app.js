@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.11';
+const APP_VER = '14.9.12';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -11919,6 +11919,36 @@ function ccScriptMatch(c, text){
   if(!norm) return null;
   return (set && set.scripted || []).find(x => ccScriptNorm(x.text) === norm) || null;
 }
+// 14.9.12: conservative, local contextual selection for prerecorded greetings.
+// Only a verified greeting clip may replace a short greeting response. This deliberately
+// avoids fuzzy matching of arbitrary sentences, which could misrepresent the character.
+function ccContextPick(c, heard){
+  if(!c || !c.video || !ccIsLib(c) || c.guest || c.scriptStop || c._smartClipUsed) return null;
+  const set=ccSet(c), items=set && set.scripted || [];
+  const msg=ccScriptNorm(heard);
+  if(!msg || msg.length>145 || /\b(not|don't|stop|sad|upset|angry|help|emergency|hurt|problem|why|how|when|where)\b/.test(msg)) return null;
+  const greeting=/\b(hi|hello|hey|good morning|good evening|missed you|miss you|nice to see you|glad to see you)\b/.test(msg)
+    || /\b(buna|salut|neata|dor de tine|mi a fost dor)\b/.test(msg);
+  if(!greeting) return null;
+  return items.find(x=>{const t=ccScriptNorm(x.text);return /\b(hey|hello|hi)\b/.test(t) && /\b(happy to see you|good to see you|nice to see you)\b/.test(t) && x.k;}) || null;
+}
+async function ccContextReply(c, item){
+  if(call!==c || !item || c.interrupted) return false;
+  c._smartClipUsed=true; // At most once per call, even if playback fails.
+  c.state='speak'; callState('vorbește · video Animas', 'speak');
+  c.capOn=false;
+  const off=capAppend(c,item.text);
+  try{ttsCancel();}catch(e){}
+  const ok=await ccScriptPlay(c,item,item.text,off);
+  if(call!==c || c.interrupted) return true;
+  if(!ok){c.ccSmartLast='salut contextual: clip indisponibil; răspuns dinamic';return false;}
+  c.ccSmartLast='salut contextual: redare completă în apel';
+  c.ch.msgs.push({id:uid(),role:'ai',text:item.text,ts:Date.now(),call:true,video:true,seen:true});
+  await saveChat(c.c,c.ch).catch(()=>{});
+  const cap=$('#clCap');if(cap)cap.querySelectorAll('.kw').forEach(w=>w.classList.add('lit'));
+  c.lastSpeakEnd=Date.now();c.state='idle';callListen();
+  return true;
+}
 // 14.9.4: orice clip cu voce are limită de timp și fallback la TTS dinamic.
 // Nu ținem un apel în așteptare dacă playerul nu trimite evenimentul ended.
 // 14.9.10: media diagnostics shared by the call player and the isolated preview.
@@ -12049,6 +12079,14 @@ async function callReply(opts = {}){
     await sleep(300);
   }
   if(call !== c) return;
+  // 14.9.12: choose a suitable prerecorded greeting before starting the streamed
+  // LLM/TTS pipeline; never interrupt a generated sentence midway.
+  if(!opts.pro && !opts.fix && c.lastHeard && c.ch.msgs.length && c.ch.msgs[c.ch.msgs.length-1].role==='user'){
+    const clip=ccContextPick(c,c.lastHeard);
+    if(clip && await ccContextReply(c,clip)) return;
+    if(call!==c || c.interrupted) return;
+    c.state='think'; callState('se gândește…', 'think'); c.capOn=false; const cap=$('#clCap'); if(cap) cap.innerHTML='';
+  }
   const n0 = c.ch.msgs.length;
   const pres = opts.pres ? `. Ce ai observat chiar acum la el în apel (reacționează firesc, doar dacă se potrivește, nu ca la o notă): ${opts.pres}` : '';   // 9.23
   const gN = c.guest ? `. ${c.guest.name} e și ea în apel cu voi și vă aude; dacă ${S.userName.trim() || 'el'} i se adresează ei, las-o pe ea să răspundă` : '';   // 9.98 (11)
