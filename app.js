@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.6';
+const APP_VER = '14.9.7';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -16479,6 +16479,10 @@ async function init(){
   setTimeout(lifeSweep, 15e3); setTimeout(() => storySweep(false), 30e3);
   setInterval(() => { if(!document.hidden){ lifeSweep(); storySweep(false); } }, 45 * 60e3);
   document.addEventListener('visibilitychange', () => { if(!document.hidden) setTimeout(() => storySweep(false), 20e3); });
+  const voiceImportButton = $('#stLibVoiceInspect');
+  if(voiceImportButton) voiceImportButton.addEventListener('click', () => {
+    libVoiceInspect().catch(err => { console.error('Animas voice import:', err); toast('Importul clipurilor cu voce a eșuat: ' + (err?.message || err), 6000); });
+  });
   $('#stUpd').onclick = () => checkUpdate(true);
   if($('#stSocMap')) $('#stSocMap').onclick = () => socMapSheet();   // 9.98 (12)
   setTimeout(() => checkUpdate(false), 8000);
