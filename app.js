@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.4';
+const APP_VER = '14.9.5';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -13865,19 +13865,19 @@ async function libSync0(){
       const mine = sets.filter(s => s.tid === cc.id), have = cc.libSets || {};
       if(db) for(const sid of Object.keys(have)) if(!mine.some(s => s.id === sid)){ libDrop(cc, sid); changed = true; }   // șters în Animas
       for(const s of mine){
-        if(have[s.id] && have[s.id].upd === s.upd && have[s.id].voiceImport === 1 && have[s.id].voiceSig === (clipsA || (clipsA = (await libGet(db, 'clips')) || [])).filter(x => x && x.charId === cc.id && x.start === s.frame && x.callStudio && x.callStudio.mode === 'scripted').map(x => x.id).sort().join('|')){ n++; continue; }
+        if(have[s.id] && have[s.id].upd === s.upd && have[s.id].voiceImport === 2 && have[s.id].voiceSig === (clipsA || (clipsA = (await libGet(db, 'clips')) || [])).filter(x => x && x.charId === s.charId && x.start === s.frame && x.callStudio && x.callStudio.mode === 'scripted').map(x => x.id).sort().join('|')){ n++; continue; }
         const fb = await libGet(db, s.frame); if(!(fb instanceof Blob)) continue;
         clipsA = clipsA || (await libGet(db, 'clips')) || [];
         // 14.9.3: clipurile cu dialog fix sunt separate de rolurile reutilizabile.
         // Niciun clip cu voce nu intră în selecția aleatoare de mișcări.
         const scripted = [];
         for(const cl of clipsA){
-          if(!cl || !cl.vid || !cl.callStudio || cl.callStudio.mode !== 'scripted' || cl.charId !== cc.id) continue;
+          if(!cl || !cl.vid || !cl.callStudio || cl.callStudio.mode !== 'scripted' || cl.charId !== s.charId) continue;
           if(cl.start !== s.frame || !cl.callStudio.dialogue || !CC_LIB_TALK.includes(cl.callStudio.role)) continue;
           let blob = await libGet(db, cl.vid);
           if(!(blob instanceof Blob) || blob.size < 1000) continue;
           if(!/^video\//.test(blob.type)) blob = new Blob([blob], {type:'video/mp4'});
-          scripted.push({k:await saveImg(blob), text:cl.callStudio.dialogue, role:cl.callStudio.role, id:cl.id});
+          scripted.push({k:await saveImg(blob), text:cl.callStudio.dialogue, role:cl.callStudio.role, id:cl.id, lang:/[ăâîșț]/i.test(cl.callStudio.dialogue)?'ro':'en'});
         }
         const v = {};
         for(const kind of CC_LIB_KINDS){
@@ -13897,13 +13897,32 @@ async function libSync0(){
         const chks = Object.values(s.chk || {});
         const in_bikini = chks.some(x => x && x.in_bikini === true);
         const outfit_desc = (chks.find(x => x && x.outfit_desc) || {}).outfit_desc || '';
-        cc.libSets[s.id] = {upd:s.upd, fk, envs, n:Object.keys(v).length, place:s.place || 'casa', in_bikini, outfit_desc, at:Date.now(), voiceImport:1, voiceSig:scripted.map(x=>x.id).sort().join('|')};
+        cc.libSets[s.id] = {upd:s.upd, fk, envs, n:Object.keys(v).length, place:s.place || 'casa', in_bikini, outfit_desc, at:Date.now(), voiceImport:2, voiceSig:scripted.map(x=>x.id).sort().join('|')};
         changed = true; n++;
       }
     }
   } finally { try{ db && db.close(); }catch(e){} }
   if(changed){ await saveChars(); libHintDraw(); }
   return {n, changed};
+}
+// 14.9.5: diagnostic și previzualizare manuală a replicilor fixe, independent de dialogul generat.
+async function libVoiceInspect(){
+  try{
+    const r=await libSync();
+    const entries=chars.flatMap(c=>[c,c.duo&&c.duo.b].filter(Boolean)).flatMap(c=>Object.values(c.callClips||{}).filter(x=>x&&x.lib).flatMap(set=>(set.scripted||[]).map(x=>({character:c.name,clip:x}))));
+    if(!entries.length) return toast('Nu am găsit replici fixe. Verifică Animas și că ambele aplicații folosesc aceeași origine web.',6500);
+    const opts=entries.map((e,i)=>`<option value="${i}">${esc(e.character)} · ${esc(e.clip.role)} · ${esc(e.clip.text.slice(0,65))}</option>`).join('');
+    openSheet(`<h3>🎙 Clipuri cu voce din Animas</h3><p>${entries.length} clipuri cu voce importate. Testul nu schimbă dialogul din apel.</p><label>Clip<select id="libVoiceChoice">${opts}</select></label><button id="libVoiceTest">▶ Testează videoclipul</button><div id="libVoicePlayer"></div><button data-close>Închide</button>`);
+    const b=document.getElementById('libVoiceTest');
+    if(b) b.onclick=async()=>{
+      const n=Number(document.getElementById('libVoiceChoice').value), e=entries[n], target=document.getElementById('libVoicePlayer');
+      if(!e||!target)return;
+      const url=await imgUrl(e.clip.k);
+      target.replaceChildren();
+      const video=document.createElement('video'); video.controls=true;video.playsInline=true;video.preload='metadata';video.style.width='100%';video.src=url;target.appendChild(video);
+      video.play().catch(()=>{});
+    };
+  }catch(e){toast('Importul nu a reușit: '+(e.message||e),6500);}
 }
 function libHintDraw(){
   const h = $('#stLibHint'); if(!h) return;
