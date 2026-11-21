@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9';
+const APP_VER = '14.9.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -11941,12 +11941,27 @@ function capAppend(c, text){
   cap.scrollTop = cap.scrollHeight; cap.classList.toggle('ovf', cap.scrollHeight > cap.clientHeight + 2);   /* 12.4: ultimele rânduri */
   return off;
 }
-async function callReply(opts){
+async function callReply(opts = {}){
   const c = call; if(!c) return;
   { const r0 = c.rec; c.rec = null; try{ r0 && r0.abort(); }catch(e){} }   // nicio ascultare veche nu mai rămâne pornită peste răspuns
   c._rid = (c._rid || 0) + 1;   // 9.70: replicile rămase din răspunsul vechi (încă la poartă) nu mai pornesc
   c.state = 'think'; c.capOn = false; c.interrupted = false; callState('se gândește…', 'think'); $('#clCap').innerHTML = '<span class="cdots"><i></i><i></i><i></i></span>';
-  while(busy && call === c) await sleep(300);
+  // 14.9.1: nu lăsăm apelul blocat la infinit dacă o operațiune anterioară nu eliberează busy.
+  const waitStarted = Date.now(); let abortedBusy = null;
+  while(busy && call === c){
+    if(Date.now() - waitStarted >= 60000){
+      // Oprim doar generarea din aceeași conversație; nu întrerupem o sarcină din alt chat.
+      if(live && live.ch === c.ch && busy){ abortedBusy = busy; try{ abortedBusy.abort(); }catch(e){} }
+      const recoverUntil = Date.now() + 8000;
+      while(busy && busy === abortedBusy && Date.now() < recoverUntil && call === c) await sleep(250);
+      if(busy){
+        if(call === c){ c.state = 'idle'; callState('Răspunsul anterior încă rulează. Încearcă din nou.', 'err'); setTimeout(() => { if(call === c && c.state === 'idle') callListen(); }, 1800); }
+        return;
+      }
+      break;
+    }
+    await sleep(300);
+  }
   if(call !== c) return;
   const n0 = c.ch.msgs.length;
   const pres = opts.pres ? `. Ce ai observat chiar acum la el în apel (reacționează firesc, doar dacă se potrivește, nu ca la o notă): ${opts.pres}` : '';   // 9.23
@@ -13914,20 +13929,22 @@ function ccPlay(c, kind, force){
   /* 14.8: trecere lină: clipul vechi rămâne vizibil până când cel nou are primul cadru pe ecran; cel nou intră deasupra (ultimul în
      pagină, înainte de granulație), apoi cel vechi se stinge sub el. Înainte, cel vechi se stingea imediat → se vedea imaginea statică. */
   const old = L.cur && L.cur !== v ? L.cur : null;
-  if(old){ const cvd = v.parentNode, gr = cvd && cvd.querySelector('.cgrain'); if(cvd && v.nextSibling !== gr) try{ cvd.insertBefore(v, gr); }catch(e){} }
+  const cvd = v.parentNode; if(cvd) cvd.classList.add('clip-active');
+  if(old){ const gr = cvd && cvd.querySelector('.cgrain'); if(cvd && v.nextSibling !== gr) try{ cvd.insertBefore(v, gr); }catch(e){} }
   try{ v.currentTime = 0; }catch(e){}
   v.classList.remove('out', 'fast'); L.cur = v; L.last[kind] = performance.now(); L.lastAny = performance.now();
   if(force && (kind === 'ras' || kind === 'priv')) L.hold = performance.now() + 2600;   // o reacție se vede până la capăt
   let shown = false;
   const show = () => { if(shown) return; shown = true; if(L.cur !== v){ return; } v.classList.add('on'); if(old) setTimeout(() => { if(L.cur !== old) ccOff(c, old, true); }, 300); };
   const ready = () => { if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => show()); setTimeout(show, 260); };
-  const p = v.play(); if(p && p.then) p.then(ready).catch(() => { if(L.cur === v){ L.cur = old && old.classList.contains('on') ? old : null; } }); else show();
+  const p = v.play(); if(p && p.then) p.then(ready).catch(() => { if(L.cur === v){ L.cur = old && old.classList.contains('on') ? old : null; } if(!L.cur && cvd) cvd.classList.remove('clip-active'); }); else show();
   return true;
 }
 function ccOff(c, v, fast){
   const L = c && c.cl; if(!L || !v || v === 1) return;
-  v.classList.toggle('fast', !!fast); v.classList.add('out'); v.classList.remove('on'); if(L.cur === v) L.cur = null; L.lastAny = performance.now();
-  setTimeout(() => { if(!v.classList.contains('on')) try{ v.pause(); }catch(e){} }, 600);
+  const wasCurrent = L.cur === v, cvd = v.parentNode;
+  v.classList.toggle('fast', !!fast); v.classList.add('out'); v.classList.remove('on'); if(wasCurrent) L.cur = null; L.lastAny = performance.now();
+  setTimeout(() => { if(!v.classList.contains('on')) try{ v.pause(); }catch(e){} if(wasCurrent && cvd && (!L.cur || L.cur === 1)) cvd.classList.remove('clip-active'); }, 420);
 }
 // când ce rulează: cât vorbești tu, dă din cap; cât se gândește, se gândește; în liniște, ce face ea; cât vorbește ea, fața din telefon
 function ccRun(c){

@@ -1230,7 +1230,10 @@ img.avl{animation:avBreath 10s ease-in-out infinite alternate,avIn .7s ease-out 
 .callv .cself{top:calc(96px + var(--safe-t,0px))}
 .callv .vtop{right:126px!important}
 .callv .cend{inset:0}
-.callv .cvid video.cclip{filter:var(--cf,none)}   /* 12.6: lumina ei și pe clipuri */
+.callv .cvid video.cclip{filter:var(--cf,none)}
+/* 14.9.1: canvas-ul facial conține întregul cadru de referință; nu-l suprapunem peste clipurile Animas. */
+.callv .cvid.clip-active canvas.cface{opacity:0!important;transition:opacity .28s ease-out!important}
+.callv .cvid:not(.clip-active) canvas.cface.on{opacity:1;transition:opacity .35s ease-in!important}   /* 12.6: lumina ei și pe clipuri */
 /* 12.5: schimbarea imaginii e o tăietură scurtă (cu o clipă de focus), nu două fețe una peste alta */
 html .callv .cvid img,html .callv .cvid img.ex{transition:opacity .2s ease-out,transform .09s ease-out,filter .25s!important}
 html .callv.vid .cvid.rig img{transition:opacity .2s ease-out,filter .25s!important}
