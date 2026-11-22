@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.1';
+const APP_VER = '14.14.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -591,10 +591,18 @@ ${look || '(goală)'}
 Răspunde STRICT cu JSON, fără alt text:
 {"corecturi":["fiecare corectură, scurt: «era X, în poză e Y» sau «adăugat: …» sau «scos: …»"],"aspect":"descrierea completă corectată, în română, 5-8 propoziții","look":"the full corrected English tag description, max 70 words, face and hair first"}
 Dacă descrierea se potrivește perfect, "corecturi" e o listă goală.`;
-  const out = await stream('Ești un verificator atent: compari texte cu imagini și găsești orice nepotrivire.', [{role:'user', text:ask, image:b64}], {max:1500, aux:true, tag:'profil'});   // 9.80: pe Haiku
-  const j = parseJSON(out);
-  return {fixes: (Array.isArray(j.corecturi) ? j.corecturi : []).map(x => faraLiniute(String(x).trim())).filter(Boolean),
-    aspect: faraLiniute(String(j.aspect || '').trim()) || aspect, look: String(j.look || '').trim() || look};
+  for(let attempt = 0; attempt < 2; attempt++){
+    const meta = {};
+    const text = attempt ? ask + '\nReturnează doar un obiect JSON valid, cu cheile corecturi, aspect și look.' : ask;
+    const out = await stream('Compară descrierea cu imaginea. Răspunde cu JSON.', [{role:'user',text,image:b64}], {max:1500,aux:true,tag:'profil',meta});
+    if(meta.stop === 'refusal') throw new Error('Serviciul AI a refuzat analiza imaginii. Descrierea ta a rămas salvată în editor.');
+    let j;
+    try{ j = parseJSON(out); }catch(e){ continue; }
+    if(!j || !Array.isArray(j.corecturi) || typeof j.aspect !== 'string' || typeof j.look !== 'string') continue;
+    return {fixes:j.corecturi.filter(x => typeof x === 'string').map(x => faraLiniute(x.trim())).filter(Boolean),
+      aspect:faraLiniute(j.aspect.trim()) || aspect,look:j.look.trim() || look};
+  }
+  throw new Error('Serviciul AI nu a întors o comparație validă după două cereri. Poți păstra sau edita manual descrierea.');
 }
 async function draftCharacter(d){
   const ask = `Creez un personaj pentru o aplicație de conversație.
@@ -2696,6 +2704,15 @@ async function bodyInPhoto(blob){
     const body = [5, 6, 11, 12].every(ok) && [13, 14].some(ok), full = body && [15, 16].some(ok); return {body, full}; }
   catch(e){ return {body:false, full:false}; } finally { URL.revokeObjectURL(u); }
 }
+async function confirmBodyReference(blob){
+  if((await bodyInPhoto(blob)).body) return true;
+  return new Promise(resolve => {
+    const root = openSheet('<h4>Telefonul nu a putut măsura corpul din poză</h4><div class="pad"><p>Dacă fotografia arată personajul corect, o poți păstra ca reper vizual.</p><div class="btns"><button class="btn" data-close>Renunță</button><button class="btn pri" data-keep-body>Folosește poza</button></div></div>');
+    root.querySelector('[data-keep-body]').onclick = () => { resolve(root.isConnected ? 'visual' : false); closeSheet(); };
+    const observer = new MutationObserver(() => { if(!root.isConnected){ observer.disconnect(); resolve(false); } });
+    observer.observe(document.body,{childList:true});
+  });
+}
 async function edUseAsBody(blob, why){
   const E = ed; if(!E) return false;
   let box = null; try{ const fs = await faceDescs(blob); if(fs.length){ const f = fs.sort((a, b) => b.a - a.a)[0]; box = {x:f.box.x / f.W, y:f.box.y / f.H, w:f.box.w / f.W, h:f.box.h / f.H}; } }catch(e){}
@@ -2717,8 +2734,8 @@ function edIdCard(){
     ${own && !ed.ownBody ? '<div class="btns"><button type="button" class="btn sm pri" id="edAddFull">🧍 Adaugă și o poză cu tot corpul</button></div><input type="file" id="edFullFile" accept="image/*" hidden>' : ''}`;
   const b = el.querySelector('#edAddFull'); if(b){ b.onclick = () => el.querySelector('#edFullFile').click();
     el.querySelector('#edFullFile').onchange = async e => { const f = e.target.files[0]; if(!f) return; let bl; try{ bl = await toJpeg(f, 2048, .92); }catch(er){ toast('Nu pot citi poza.'); return; }
-      const v = await bodyInPhoto(bl); if(!v.body){ toast('În poza asta nu se vede corpul (umeri, șolduri, genunchi). Alege una cu tot corpul.', 4000); return; }
-      await edUseAsBody(bl, 'separata'); setEdStatus('✓ Poza întreagă e modelul de corp: pozele din chat iau corpul exact de aici.', 'ok'); }; }
+      const E = ed, accepted = await confirmBodyReference(bl); if(!accepted || ed !== E) return;
+      if(await edUseAsBody(bl,'separata')){ storeStudioDraft(); setEdStatus(accepted === 'visual' ? 'Reper vizual ales. Silueta nu a putut fi măsurată.' : 'Reper corp întreg ales.','ok'); } }; }
 }
 /* ═════════ 9.89 ═════════
    (1) PROFIL → „🧍 Poza întreagă”: o vezi, o refaci din portret, o refaci cu alt corp (editorul de corp) sau urci poza ta întreagă;
@@ -2777,10 +2794,13 @@ async function pfFullSheet(c){
   $('#pffUp').onclick = () => $('#pffFile').click();
   $('#pffFile').onchange = async e => {
     const f = e.target.files[0]; if(!f) return; let bl; try{ bl = await toJpeg(f, 2048, .92); }catch(er){ toast('Nu pot citi poza.'); return; }
-    const vb = await bodyInPhoto(bl); if(!vb.body){ toast('În poza asta nu se vede corpul (umeri, șolduri, genunchi). Alege una cu tot corpul.', 4000); return; }
+    const accepted = await confirmBodyReference(bl); if(!accepted) return;
     let box = null; try{ const fs = await faceDescs(bl); if(fs.length){ const x = fs.sort((a, b) => b.a - a.a)[0]; box = {x:x.box.x / x.W, y:x.box.y / x.H, w:x.box.w / x.W, h:x.box.h / x.H}; } }catch(er){}
-    await saveFull(c, {blob:bl, chk:{box}}); c.fullOwn = true; await saveChars(); closeSheet(); toast('🧍 Poza ta întreagă e modelul de corp. Fișa de corp se reface în fundal.', 3500);
-    pfAfterFull(c);
+    await saveFull(c, {blob:bl,chk:{box},keepPrevious:true}); c.fullOwn = true; await saveChars(); closeSheet();
+    if(accepted === 'visual'){
+      toast('Poza a fost salvată ca reper vizual. Silueta nu a putut fi măsurată.',4000);
+      if(profIs(c)) charProfile(profId,false);
+    }else{ toast('Reperul de corp a fost salvat. Fișa se pregătește în fundal.',3500); pfAfterFull(c); }
   };
 }
 function pfAfterFull(c){
@@ -4203,6 +4223,10 @@ async function bodyNormBlob(im, kp){
        (segmentarea MediaPipe), lățimea la piept, talie și șolduri raportată la umeri; se compară cu poza întreagă. */
 async function bodySig(blob0, nn = false){
   const blob = (await personCrop(blob0).catch(() => null)) || blob0;   // 9.94 (A); 13.6 (4): nn = deja îndreptată (nu se mai îndreaptă o dată): pe persoana decupată (umerii, șoldurile, genunchii se găsesc mai sigur)
+  const first = await measureBodyContour(blob,nn);
+  return first || (blob !== blob0 ? await measureBodyContour(blob0,nn) : null);
+}
+async function measureBodyContour(blob, nn){
   const u = URL.createObjectURL(blob);
   try{
     const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight;
@@ -4229,12 +4253,14 @@ async function bodySig(blob0, nn = false){
     return {s:sig.map(r3), len:r3(len / S2), hd, w, leg, sit, yaw, sw:r3(S2 / len)};
   }catch(e){ bodySigWhy = 'eroare la măsurare: ' + String(e && e.message || e).slice(0, 80); return null; } finally { URL.revokeObjectURL(u); }
 }
-async function refBodySig(c){
+async function refBodySig(c, force = false){
   const k = c.photoFull || (c.photo ? 'p:' + c.photo : '');   // 9.83 (4): fără poză întreagă, poza de profil, dacă se văd umerii și șoldurile
   if(!k) return null;
-  if(c.bodySig && c.bodySig.k === k && c.bodySig.v3 && (c.bodySig.v || (c.bodySig.ver === APP_VER && Date.now() - (c.bodySig.at || 0) < 6 * 36e5))) return c.bodySig.v;   // 10.3: o măsurare ratată se reîncearcă   // 9.85: conturul în 7 puncte; 9.94: pe persoana decupată
+  if(!force && c.bodySig && c.bodySig.k === k && c.bodySig.v3 && (c.bodySig.v || (c.bodySig.ver === APP_VER && Date.now() - (c.bodySig.at || 0) < 6 * 36e5))) return c.bodySig.v;
   const b = await DB.get(c.photoFull || c.photo).catch(() => null); if(!b) return null;
-  bodySigWhy = ''; const v = await bodySig(b); c.bodySig = {k, v, v2:true, v3:true, ver:APP_VER, at:Date.now(), why:v ? undefined : bodySigWhy || undefined}; saveChars(); return v;
+  bodySigWhy = ''; const v = await bodySig(b);
+  if((c.photoFull || (c.photo ? 'p:' + c.photo : '')) !== k) return null;
+  c.bodySig = {k, v, v2:true, v3:true, ver:APP_VER, at:Date.now(), why:v ? undefined : bodySigWhy || undefined}; saveChars(); return v;
 }
 // distanța siluetelor: diferența relativă medie (0 = identic; ~0,1 = puțin diferit; 0,25+ = alt corp)
 // 9.83 (4): + lungimea trunchiului și lățimea capului față de umeri (cântărite mai puțin: depind de poză și de unghi)
@@ -4315,7 +4341,9 @@ async function fullVariants(c, base, signal, draw = () => {}, n = 2, o = {}){   
 async function saveFull(c, v){
   const old = c.photoFull;
   c.photoFull = await saveImg(v.blob); c.fullBox = v.chk && v.chk.box || null; delete c.bodyFull; delete c.bodySig; delete c.fullOwn;
-  if(old && old !== c.photoFull) await delImg(old).catch(() => {});
+  if(old && old !== c.photoFull){
+    if(v.keepPrevious) keepStudioReference(c,'body',old); else await delImg(old).catch(() => {});
+  }
   delete c.bsheetTry;   // 11.0 (C4): fișa de corp veche rămâne până la completarea pachetului, când se compară cu poza întreagă nouă
   await saveChars();
   ensureBodyText(c).catch(() => false);
@@ -4525,9 +4553,10 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
       if(error.name === 'AbortError') throw error;
       return null;
     });
-    if(bodyUnknown && checked?.body == null) throw failure('Poza a rămas nepublicată: corpul nu se poate verifica. Cere un cadru cu silueta clar vizibilă.');
+    if(bodyUnknown && checked?.body == null && !opt.allowBodyUnknown) throw failure('Poza a rămas nepublicată: corpul nu se poate verifica. Cere un cadru cu silueta clar vizibilă.');
     if(checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
     if(fixed && (checked?.asked == null || checked.asked < 8)) throw failure('Poza a rămas nepublicată: ținuta fixă nu a trecut verificarea.');
+    if(bodyUnknown && checked?.body == null) return 'Corpul nu a putut fi verificat în acest cadru.';
   }
 }
 function identityRank(c, result, bodyExpected){
@@ -7788,8 +7817,13 @@ async function fidGo(c, btn){
   const K = kitState(c), photo = (c.stil || 'photo') === 'photo';
   if(K.ok && auditFresh(c) && auditOpen(c).length){ auditSheet(c); return; }
   const say = t => { if(btn.isConnected) btn.innerHTML = '<span class="spin"></span> ' + esc(t); };
+  const label = btn.textContent;
   btn.disabled = true;
   try{
+    if(photo && c.photoFull && (!c.bodySig?.v || c.bodySig.k !== c.photoFull)){
+      say('Măsor din nou poza întreagă…');
+      await refBodySig(c,true).catch(() => null);
+    }
     if(K.items.some(x => x.k === 'corptext' && !x.ok)){
       say('Descriu corpul din poza întreagă…');
       await ensureBodyText(c).catch(() => false);
@@ -7802,12 +7836,20 @@ async function fidGo(c, btn){
     }
     if(photo && c.photo){ say('Măsor portretul…'); try{ await lookRefOf(c); }catch(e){} }
     let r = null;
-    if(photo && c.photo && aiReady() && !auditFresh(c)){ say('Compar descrierea cu pozele…'); r = await auditRun(c); }
+    if(photo && c.photo && aiReady() && !auditFresh(c)){
+      say('Compar descrierea cu pozele…');
+      try{ r = await auditRun(c); }catch(e){
+        if(profIs(c)) drawPics(c);
+        toast('Verificarea AI a descrierii nu s-a terminat. Reperele deja măsurate au rămas disponibile.',5500);
+        return;
+      }
+    }
     if(profIs(c)) drawPics(c);
     const K2 = kitState(c), left = K2.items.filter(x => !x.ok && !x.warn);
     if(r && r.n) auditSheet(c);
     else toast(left.length === 1 && left[0].k === 'corptext' ? 'Corpul nu a putut fi descris din acest reper. Verifică cheia Claude și dacă poza întreagă arată clar silueta.' : left.length ? 'Repere rămase: ' + left.map(x => x.l.replace(/^\S+\s/, '')).join(', ') + '.' : '✅ Reperele sunt complete și descrierea se potrivește cu pozele.', 5500);
   }catch(e){ toast(e.message || 'N-a mers.', 4000); if(profIs(c)) drawPics(c); }
+  finally{ if(btn.isConnected){ btn.disabled = false; btn.textContent = label; } }
 }
 // fața decupată din portret (al doilea reper) + un singur buton care recitește tot portretul: trăsăturile, părul, semnele și locul feței
 function drawFaceRef(c, box){
@@ -11448,7 +11490,9 @@ async function askPhoto0(spont, target, mode, opt = {}){
     // 9.92: motorul unic: generarea + garanția + finisarea (și pentru editări și pozele împreună)
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && (!peopleIn.self || peopleIn.duo))})
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt});
-    if(c.strictIdentity && c.photo && !duoBoth && !peopleIn && !edited) await verifyStudioPhoto(c, R.blob, shot, busy.signal, sceneOpt);
+    const bodyNotice = c.strictIdentity && c.photo && !duoBoth && !peopleIn && !edited
+      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true}) : '';
+    if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
     if(gdiag){ gdiag.tm = {...tm.s, total:performance.now() - tm.t0}; gdiag.rwc = rwCalls.filter(x => x.i > rwC0).map(({i, ...x}) => x); if(gdiag.mdl === 'Klein 9B') gdiag.mdl = kleinLbl(); }   // 13.3: tot, inclusiv pașii de după (garanția, măsurarea, finisarea)
     const k = await saveImg(blob);
@@ -15430,6 +15474,16 @@ const CR_MINOR = /\b([1-9]|1[0-7])\s*(de\s*)?ani\b|\b([1-9]|1[0-7])\s*(years?|yo
 const CR_ZONES = [['gen', 'Vârstă și gen', 'ex. femeie, 28 de ani'], ['fata', 'Față', 'formă, ochi, sprâncene, nas, buze, ten, pistrui, alunițe, machiaj'], ['par', 'Păr', 'culoare, lungime, textură, coafură, breton'],
   ['corp', 'Corp: alte detalii', 'orice altceva despre corp'], ['maini', 'Mâini și detalii', 'unghii, inele, brățări, tatuaje și piercinguri (cu locul), ochelari'], ['tinuta', 'Ținută', 'haine, culori, accesorii'],
   ['incaltaminte', 'Încălțăminte', 'ex. sandale albe'], ['poza', 'Poziție', 'ex. în picioare, relaxată, o mână în buzunar'], ['loc', 'Loc', 'ex. o terasă la apus'], ['lumina', 'Lumină', 'ex. lumină caldă de apus']];
+const CR_ZONE_PRESETS = {
+  fata:['Machiaj natural','Machiaj retro','Smokey eyes','Ruj vișiniu','Pistrui vizibili','Privire directă, expresie jucăușă'],
+  par:['Bob ondulat','Ondulații lejere','Coc relaxat','Bucle definite','Împletituri','Păr lung, dat pe un umăr'],
+  maini:['Manichiură nude','Unghii vișinii','Inele minimaliste','Brățări discrete'],
+  tinuta:['Costum croit','Rochie de seară','Rochie de satin','Rochie cu spatele gol','Top corset cu blazer','Lenjerie elegantă, pentru un personaj adult','Boudoir adult, halat de mătase'],
+  incaltaminte:['Botine','Sandale cu barete','Pantofi cu toc','Balerini','Pantofi sport'],
+  poza:['Portret peste umăr','În picioare, greutatea pe un picior','Așezat, postura relaxată','Sprijinit de un perete','Contact vizual, zâmbet discret'],
+  loc:['Atelier foto','Cafenea retro','Balcon la apus','Interior cu perdele translucide'],
+  lumina:['Fereastră laterală','Clarobscur de studio','Lumină caldă, difuză','Lumină de contur','Neon discret']
+};
 const CR_BODY = [['build', 'Constituție', ['slabă', 'suplă', 'atletică', 'medie', 'curbilinie', 'plinuță', 'plină', 'musculoasă']], ['figure', 'Forma corpului', ['clepsidră', 'pară', 'măr', 'dreptunghi', 'triunghi inversat']], ['tone', 'Tonus', ['moale', 'normal', 'tonifiat', 'definit']], ['shoulders', 'Umeri', ['înguști', 'medii', 'lați']],
   ['neck', 'Gât', ['scurt', 'mediu', 'lung']], ['posture', 'Postură', ['dreaptă', 'relaxată']], ['torsoLen', 'Trunchi: lungime', ['scurt', 'mediu', 'lung']],
   ['bust', 'Bust / piept: mărime', ['plat', 'mic', 'mediu', 'plin', 'mare', 'foarte mare']], ['bustShape', 'Bust: formă', ['rotund', 'natural, în formă de lacrimă', 'ridicat, ferm', 'ușor lăsat', 'depărtat', 'apropiat']],
@@ -15467,9 +15521,20 @@ function crDrawZones(){
   const box = $('#edZones'); if(!box || !ed || !ed.cr) return;
   box.innerHTML = CR_ZONES.map(([k, l, ph]) => k === 'corp'
     ? `<div class="crz body"><label>🧍 Corp</label><div id="edBody"></div><textarea data-z="corp" rows="2" placeholder="${esc(ph)}">${esc(ed.cr.z.zones.corp || '')}</textarea></div>`
-    : `<div class="crz"><label>${esc(l)}</label><textarea data-z="${k}" rows="${k === 'fata' || k === 'tinuta' ? 2 : 1}" placeholder="${esc(ph)}">${esc(ed.cr.z.zones[k] || '')}</textarea></div>`).join('');
+    : `<div class="crz"><label>${esc(l)}</label>${CR_ZONE_PRESETS[k] ? `<select data-zone-preset="${k}" aria-label="Idei pentru ${esc(l)}"><option value="">Adaugă o idee</option>${CR_ZONE_PRESETS[k].map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select>` : ''}<textarea data-z="${k}" rows="${k === 'fata' || k === 'tinuta' ? 2 : 1}" placeholder="${esc(ph)}">${esc(ed.cr.z.zones[k] || '')}</textarea></div>`).join('');
   crDrawBody(); crBodyEvents();
   box.oninput = e => { const k = e.target.dataset && e.target.dataset.z; if(!k || !ed || !ed.cr) return; ed.cr.z.zones[k] = e.target.value; crZoneChanged(); };
+  box.onchange = e => {
+    const select = e.target.closest('[data-zone-preset]');
+    if(!select?.value || !ed?.cr) return;
+    const key = select.dataset.zonePreset, input = box.querySelector('[data-z="' + key + '"]');
+    if(!input) return;
+    input.value = [input.value.trim(),select.value].filter(Boolean).join(', ');
+    ed.cr.z.zones[key] = input.value;
+    select.value = '';
+    crZoneChanged();
+    storeStudioDraft();
+  };
 }
 function crZoneChanged(){ if(ed && ed.cr) $('#edZoneHint').textContent = crHasZ(ed.cr.z) ? 'Se generează după zone. Schimbă orice zonă și apasă din nou „Generează”.' : ''; }
 // 9.26: cereri JSON robuste pentru creator: dacă AI-ul răspunde fără JSON, se mai cere o dată, mai strict; un refuz e spus clar
