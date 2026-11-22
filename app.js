@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.13.1';
+const APP_VER = '14.13.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2792,6 +2792,24 @@ async function pfBodySheet(c){
 const KIT_V = 2;   // 9.99: unghiurile noi + pașaportul verificat pe toate pozele
 const kitKey = c => [c.photo || '', c.photoFull || ''].join('|');
 const bodyTextOk = c => !!(c && c.bodyFull && c.photoFull && c.bodyFull.k === c.photoFull && c.bodyFull.t);   // 13.6 (2)
+const bodyTextJobs = new Map();
+function ensureBodyText(c){
+  if(!c?.photoFull || bodyTextOk(c) || looksYoung(c)) return Promise.resolve(false);
+  const portrait = c.photo, key = c.photoFull, jobKey = c.id + '|' + portrait + '|' + key;
+  if(bodyTextJobs.has(jobKey)) return bodyTextJobs.get(jobKey);
+  const job = (async () => {
+    const blob = await DB.get(key).catch(() => null);
+    if(!blob) return false;
+    const described = aiReady() ? await crBodyRead(blob,c.id).catch(() => '') : '';
+    const text = described || bodyRatioText(await refBodySig(c).catch(() => null));
+    if(!text || c.photo !== portrait || c.photoFull !== key) return false;
+    c.bodyFull = {k:key,t:text,source:described ? 'vision' : 'local'};
+    await saveChars();
+    return true;
+  })().finally(() => bodyTextJobs.delete(jobKey));
+  bodyTextJobs.set(jobKey,job);
+  return job;
+}
 function kitState(c){
   if(!c || !c.photo) return {ok:false, items:[], miss:['portretul']};
   const photo = (c.stil || 'photo') === 'photo', fb = c.faceBox && c.faceBox.k === c.photo, items = [], miss = [];
@@ -2800,7 +2818,7 @@ function kitState(c){
   add('pasaport', '🪪 Trăsăturile citite (față, păr, corp, semne)', !!(fb && c.faceBox.phys !== undefined), fb ? 'citite' : 'se citesc la prima poză');
   add('amprenta', '🧬 Amprenta feței', !!(c.faceEmb && c.faceEmb.d && c.faceEmb.d.length), c.faceEmb && c.faceEmb.d && c.faceEmb.d.length ? c.faceEmb.d.length + ' fețe de referință' + (c.refSet && c.refSet.e ? ' + ' + c.refSet.e.filter(x => (x.kind === 'unghi' || x.kind === 'aproape') && x.d && !x.out).length + ' pe unghiuri' : '') : 'se măsoară în telefon');
   if(photo){
-    if(c.photoFull && !looksYoung(c)) add('corptext', '📝 Corpul descris din poza întreagă', bodyTextOk(c), bodyTextOk(c) ? 'descris (intră în fiecare poză)' : 'se citește');   // 13.6 (2)
+    if(c.photoFull && !looksYoung(c)) add('corptext', '📝 Corpul descris din poza întreagă', bodyTextOk(c), bodyTextOk(c) ? (c.bodyFull.source === 'local' ? 'proporții măsurate local' : 'descris din poza întreagă') : 'descriere indisponibilă');
     add('intreaga', '🧍 Poza întreagă (modelul de corp)', !!c.photoFull, c.photoFull ? (c.fullOwn ? 'poza ta (exactă)' : 'generată din portret') : 'lipsește: corpul ar fi aproximativ');
     const sv = sheetOf(c).length, bv = bsheetOf(c).length, kf = c.photoFull || '';
     const sTried = !sv && c.sheetTry && c.sheetTry.k === c.photo, bTried = !bv && c.bsheetTry && c.bsheetTry.k === kf;
@@ -2878,10 +2896,8 @@ async function kitBuild0(c, o = {}){
   kitBusy.add(c.id); const portrait = c.photo; let k0 = kitKey(c); const step = o.onStep || (() => {}); if(o.gen) keepAwake(true);   // 11.1 (V4)
   try{
     if(aiReady()){ step('pasaport'); try{ await identityOf(c); }catch(e){} }
-    const bodyText = aiReady() && c.photoFull && !bodyTextOk(c) && !looksYoung(c) ? (async () => {
-      const k = c.photoFull, b = await DB.get(k).catch(() => null), t = b ? await crBodyRead(b, c.id) : '';
-      if(t && c.photo === portrait && c.photoFull === k){ c.bodyFull = {k, t}; await saveChars(); }
-    })().catch(() => {}) : null;
+    const originalBody = c.photoFull;
+    const bodyText = ensureBodyText(c).catch(() => false);
     step('amprenta');
     await Promise.all([refDescs(c).catch(() => {}), bodyText]);
     try{ await ageLook(c); }catch(e){}   // 9.94 (D)
@@ -2893,6 +2909,7 @@ async function kitBuild0(c, o = {}){
         if(c.photo !== portrait) return false;
         if(!c.photoFull){ step('intreaga'); if(o.force) delete c.autoFullTried; await autoFull(c).catch(() => {}); }
         if(c.photo !== portrait) return false;
+        if(c.photoFull !== originalBody) await ensureBodyText(c).catch(() => false);
         k0 = kitKey(c);
         const valid = () => kitKey(c) === k0;
         step('aproape'); try{ await closeGen(c, false); }catch(e){}
@@ -4279,7 +4296,7 @@ async function saveFull(c, v){
   if(old && old !== c.photoFull) await delImg(old).catch(() => {});
   delete c.bsheetTry;   // 11.0 (C4): fișa de corp veche rămâne până la completarea pachetului, când se compară cu poza întreagă nouă
   await saveChars();
-  if(aiReady()) (async () => { try{ const k = c.photoFull, t = await crBodyRead(v.blob, c.id); if(c.photoFull === k){ c.bodyFull = {k, t}; await saveChars(); } }catch(e){} })();   // corpul citit din ea, în fundal
+  ensureBodyText(c).catch(() => false);
 }
 let autoFullBusy = false;
 async function autoFull(c){
@@ -4474,13 +4491,21 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const failure = message => Object.assign(new Error(message), {photoKind:'local'});
   const face = (await localFace(blob, c)).d;
   if(face == null || face > idMax(c)) throw failure('Poza a rămas nepublicată: fața nu a trecut verificarea de fidelitate.');
+  let bodyUnknown = false;
   if(c.photoFull && framingOf(shot).k !== 'close'){
     const body = await bodyMatch(c, await bodySig(blob).catch(() => null)).catch(() => null);
-    if(body == null || body > bodyGate(c)) throw failure('Poza a rămas nepublicată: corpul nu a putut fi confirmat față de reperul întreg.');
+    if(body != null && body > bodyGate(c)) throw failure('Poza a rămas nepublicată: proporțiile măsurate diferă de reperul de corp.');
+    bodyUnknown = body == null;
   }
-  if(identityOutfit(c, shot, opt) !== shot){
-    const wardrobe = await checkPhoto(c, blob, identityOutfit(c, shot, opt), signal, false, ['The visible parts of this fixed outfit match: ' + c.outfitLock]);
-    if(wardrobe?.asked == null || wardrobe.asked < 8 || wardrobe.body != null && wardrobe.body < 8) throw failure('Poza a rămas nepublicată: ținuta sau proporțiile vizibile nu au trecut verificarea.');
+  const dressedShot = identityOutfit(c,shot,opt), fixed = dressedShot !== shot;
+  if(bodyUnknown || fixed){
+    const checked = await checkPhoto(c,blob,dressedShot,signal,false,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : []).catch(error => {
+      if(error.name === 'AbortError') throw error;
+      return null;
+    });
+    if(bodyUnknown && checked?.body == null) throw failure('Poza a rămas nepublicată: corpul nu se poate verifica. Cere un cadru cu silueta clar vizibilă.');
+    if(checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
+    if(fixed && (checked?.asked == null || checked.asked < 8)) throw failure('Poza a rămas nepublicată: ținuta fixă nu a trecut verificarea.');
   }
 }
 function identityRank(c, result, bodyExpected){
@@ -7742,7 +7767,12 @@ async function fidGo(c, btn){
   const say = t => { if(btn.isConnected) btn.innerHTML = '<span class="spin"></span> ' + esc(t); };
   btn.disabled = true;
   try{
-    if(!K.ok && S.imgProv !== 'none'){
+    if(K.items.some(x => x.k === 'corptext' && !x.ok)){
+      say('Descriu corpul din poza întreagă…');
+      await ensureBodyText(c).catch(() => false);
+    }
+    const remaining = kitState(c);
+    if(remaining.items.some(x => x.k !== 'corptext' && remaining.miss.includes(x.l)) && S.imgProv !== 'none'){
       if(kitBusy.has(c.id)) for(let i = 0; i < 240 && kitBusy.has(c.id); i++) await sleep(500);
       say('Completez reperele…');
       await kitBuild(c, {gen:true, force:true, toast:false, onStep:k => { if(k) say((K.items.find(x => x.k === k) || {l:k}).l); }}).catch(() => {});
@@ -7753,7 +7783,7 @@ async function fidGo(c, btn){
     if(profIs(c)) drawPics(c);
     const K2 = kitState(c), left = K2.items.filter(x => !x.ok && !x.warn);
     if(r && r.n) auditSheet(c);
-    else toast(left.length ? '⏳ N-au ieșit încă: ' + left.map(x => x.l.replace(/^\S+\s/, '')).join(', ') + '. Încearcă din nou peste câteva minute.' : '✅ Reperele sunt complete și descrierea se potrivește cu pozele.', 4500);
+    else toast(left.length === 1 && left[0].k === 'corptext' ? 'Corpul nu a putut fi descris din acest reper. Verifică cheia Claude și dacă poza întreagă arată clar silueta.' : left.length ? 'Repere rămase: ' + left.map(x => x.l.replace(/^\S+\s/, '')).join(', ') + '.' : '✅ Reperele sunt complete și descrierea se potrivește cu pozele.', 5500);
   }catch(e){ toast(e.message || 'N-a mers.', 4000); if(profIs(c)) drawPics(c); }
 }
 // fața decupată din portret (al doilea reper) + un singur buton care recitește tot portretul: trăsăturile, părul, semnele și locul feței
