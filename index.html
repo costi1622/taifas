@@ -2134,6 +2134,41 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 .studioPreviewCard>img,.studioEmptyPortrait {display:grid;place-items:center;width:100%;height:clamp(150px,33dvh,340px);object-fit:cover;object-position:50% 27%;background:var(--card)}
 .studioPreviewCard h3,.studioPreviewCard p {margin:10px 14px}
 .studioSuggestionText {white-space:pre-line;line-height:1.5;max-height:55dvh;overflow:auto}
+
+/* Fișa personajului */
+#vProf .pfTop.solid {position:relative;flex:none;background:var(--bg2);border-bottom:1px solid var(--line)}
+#vProf #pfBody {padding-top:0;padding-bottom:calc(22px + var(--safe-b));max-width:760px;margin-inline:auto}
+#vProf .profileOverview {position:relative;margin:12px 14px 10px;border:1px solid var(--line);border-radius:25px;overflow:hidden;background:var(--bg2)}
+#vProf .profileOverview .pfHero {height:clamp(165px,35dvh,355px);border-radius:0}
+#vProf .profileOverview .pfHero img {height:100%;object-position:50% 27%;will-change:auto}
+#vProf .profileOverview .pfHero::after {pointer-events:none;background:linear-gradient(transparent 68%,#1115)}
+.profileIntro {padding:14px 16px 0}
+.profileIntro h1 {font-size:clamp(1.55rem,6vw,2.25rem);line-height:1.08;letter-spacing:-.045em;overflow-wrap:anywhere}
+.profileIntro p {color:var(--tx2);margin-top:7px;font-size:.9rem;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.profileActions {display:grid;grid-template-columns:1.4fr 1fr;gap:8px;padding:12px 16px 16px}
+.profileActions .btn {min-height:44px}
+.profileTabs {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;margin:0 14px 12px;padding:4px;border:1px solid var(--line);border-radius:16px;background:var(--bg2)}
+.profileTabs button {min-height:42px;padding:4px 2px;text-align:center;font-size:clamp(.72rem,3.5vw,.9rem);font-weight:700;border-radius:12px;color:var(--tx2)}
+.profileTabs button.on {background:var(--card);color:var(--tx);box-shadow:inset 0 0 0 1px var(--line)}
+.profileSectionHead {display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.profileSectionHead h3 {margin:0}
+.profileReferences,.profileAlbumTiles {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-block:10px}
+.profileAlbumTiles {grid-template-columns:repeat(3,minmax(0,1fr))}
+.profileReference {display:flex;min-width:0;flex-direction:column;align-items:flex-start;overflow:hidden;text-align:left;border:1px solid var(--line);border-radius:15px;background:var(--bg2)}
+.profileReference img,.profileRefEmpty {display:grid;place-items:center;width:100%;aspect-ratio:4/5;object-fit:cover;object-position:50% 25%;background:var(--card);font-size:2rem;color:var(--tx2)}
+#pfReferenceBody img {object-fit:contain;object-position:center;background:var(--card)}
+.profileReference b,.profileReference small {margin:8px 9px 0;overflow-wrap:anywhere}
+.profileReference small {margin-bottom:10px;color:var(--tx2);font-size:.71rem;line-height:1.35}
+.profileWardrobe {display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);line-height:1.45}
+.profileWardrobe span {color:var(--tx2);text-align:right;overflow-wrap:anywhere}
+#pfVerifyStudio {width:100%;margin-top:8px;min-height:44px}
+.profileAlbumTiles button {position:relative;overflow:hidden;aspect-ratio:1;border-radius:12px;background:var(--card)}
+.profileAlbumTiles img {width:100%;height:100%;object-fit:cover}
+.profileAlbumTiles span {position:absolute;right:6px;bottom:6px;color:#fff;background:#191b20dc;border-radius:18px;padding:3px 6px;font-size:.78rem}
+.profileFold {margin:9px 15px;border:1px solid var(--line);border-radius:15px;background:var(--bg2);overflow:hidden}
+.profileFold summary {min-height:44px;padding:12px;color:var(--tx);font-weight:700;cursor:pointer}
+.profileFold .pfSec {margin:0 9px 9px}
+#vProf .profileLatest {width:calc(100% - 28px);margin:0 14px 10px}
 </style>
 </head>
 <body>
@@ -2163,7 +2198,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 
 <!-- PROFIL -->
 <section id="vProf" class="view" hidden>
-  <div class="pfTop"><button class="ib" data-back aria-label="Înapoi">‹</button><span id="pfTopName"></span><button class="ib" id="pfMoreTop" aria-label="Mai mult">⋯</button><button class="ib" id="pfEditTop" aria-label="Editează">✏️</button></div>
+  <div class="pfTop solid"><button class="ib" data-back aria-label="Înapoi">‹</button><span id="pfTopName"></span><button class="ib" id="pfMoreTop" aria-label="Mai mult">⋯</button><button class="ib" id="pfEditTop" aria-label="Editează">✏️</button></div>
   <div class="scroll" id="pfScroll"><div id="pfBody"></div></div>
 </section>
 

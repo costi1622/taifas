@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.13.2';
+const APP_VER = '14.14.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -7704,6 +7704,7 @@ function drawPicsFor(c){
   drawPics(pc);
 }
 function drawPics(c){
+  drawProfileReferenceStatus(c);
   const box = $('#pfPics'); if(!box) return;
   const why = S.imgProv === 'none' ? 'Pozele sunt oprite în Setări → Poze; pornește-le acolo.' : !c.photo ? 'Are nevoie de o poză de profil (după ea se păstrează fața).' : '';   // 11.5: fără comutator, pornite la toate
   box.innerHTML = `<p class="hint" style="margin-top:0">${why ? why + ' ' : ''}${esc(c.name)} îți poate trimite poze în chat: când vrea, când i-o ceri, plus cele spontane (Setări → Poze) și cele din statusuri. Fața vine din poza de profil.</p>`;
@@ -10923,24 +10924,71 @@ async function jumpTo(cid, tid, mid){
 /* profilul personajului */
 let profId = null;
 /* 8.5: profilul pe file (Despre / Poze / Memorie) + etichete sub nume */
-let profTab = 'despre';
+let profTab = 'profil';
 function pfChips(c){
   const online = c.lastAt && Date.now() - c.lastAt < 10 * 60e3, lf = lifeNow(c), mood = c.moodNow && Date.now() - c.moodNow.ts < 12 * 36e5 ? c.moodNow.t : '';
   const ch = [online ? '<span class="on">● online</span>' : '', c.rel ? `<span>💞 ${esc(relOf(c).name)}</span>` : '', lf && lf.w ? `<span>${LIFE_E[lf.b]} ${esc(lf.w)}</span>` : '', mood ? `<span>${esc(mood)}</span>` : ''].filter(Boolean).join('');
   return ch ? `<div class="hchips pfchips">${ch}</div>` : '';
 }
+function profileSectionTab(section){
+  if(section.dataset.profilePanel) return section.dataset.profilePanel;
+  if(section.id === 'pfMixSec' || section.querySelector('#pfPics,#pfAv,#pfStk,#pfVName') || section.classList.contains('pfDuo')) return 'studio';
+  if(section.querySelector('#pfPrefs,#pfMem,#pfJrn,#pfFacts,#pfRulesL')) return 'memorie';
+  return 'profil';
+}
 function pfTabsInit(){
-  const body = $('#pfBody'), tabs = $('#pfTabs'); if(!body || !tabs) return;
-  const of = sec => sec.querySelector('#pfPics,#pfAv,#pfStk,.pfGal') ? 'poze' : sec.querySelector('#pfPrefs,#pfMem,#pfJrn,#pfFacts') ? 'memorie' : 'despre';
-  const secs = [...body.querySelectorAll('.pfSec')];
-  secs.forEach(x => x.dataset.pt = of(x));
-  const gal = secs.find(x => x.querySelector('.pfGal')), pics = secs.find(x => x.querySelector('#pfPics'));
-  if(gal && pics) pics.before(gal);          // galeria e prima în „Poze”
-  if(pics) pics.querySelector('h3') && (pics.querySelector('h3').innerHTML = '<span>🎯 Identitate și repere</span>');
-  const set = t => { profTab = t; tabs.querySelectorAll('[data-pt]').forEach(b => b.classList.toggle('on', b.dataset.pt === t)); secs.forEach(x => x.hidden = x.dataset.pt !== t); };
-  tabs.querySelectorAll('[data-pt]').forEach(b => b.onclick = () => { set(b.dataset.pt); const y = tabs.offsetTop - 70; if($('#pfScroll').scrollTop > y) $('#pfScroll').scrollTo({top:y, behavior:'smooth'}); });
-  set(profTab);
-  const isc = $('#pfIdSc'); if(isc) isc.onclick = () => { const b = tabs.querySelector('[data-pt="poze"]'); if(b) b.click(); setTimeout(() => { const f = $('#pfFid'); if(f) f.scrollIntoView({behavior:'smooth', block:'start'}); }, 80); };   // 11.6 (F6)
+  const body = $('#pfBody'), tabs = $('#pfTabs');
+  const sections = [...body.querySelectorAll(':scope > .pfSec')];
+  const fold = (title, tab, selectors) => {
+    const nodes = sections.filter(section => section.matches(selectors) || section.querySelector(selectors));
+    if(!nodes.length) return;
+    const group = document.createElement('details'), summary = document.createElement('summary');
+    group.className = 'profileFold';
+    group.dataset.profilePanel = tab;
+    summary.textContent = title;
+    group.append(summary);
+    nodes[0].before(group);
+    group.append(...nodes);
+  };
+  fold('Viață, locuri și legături', 'profil', '#pfCity,#pfLife,#pfAgenda,#pfSoc');
+  fold('Fișe și verificări de identitate', 'studio', '#pfPics');
+  fold('Stări și stickere', 'studio', '#pfAv,#pfStk');
+  fold('Setări avansate', 'studio', '#pfMixSec');
+  fold('Fapte și preferințe', 'memorie', '#pfFacts,#pfPrefs');
+  fold('Jurnal și amintiri', 'memorie', '#pfJrn,#pfMem');
+  const panels = [...body.querySelectorAll(':scope > .pfSec,:scope > [data-profile-panel]')];
+  for(const section of panels) section.dataset.profilePanel = profileSectionTab(section);
+  const select = tab => {
+    profTab = tab;
+    tabs.querySelectorAll('[data-pt]').forEach(button => {
+      const active = button.dataset.pt === tab;
+      button.classList.toggle('on', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+    panels.forEach(section => section.hidden = section.dataset.profilePanel !== tab);
+  };
+  tabs.onclick = e => {
+    const button = e.target.closest('[data-pt]');
+    if(!button || button.dataset.pt === profTab) return;
+    select(button.dataset.pt);
+    $('#pfScroll').scrollTop = 0;
+  };
+  if(!tabs.querySelector('[data-pt="' + profTab + '"]')) profTab = 'profil';
+  select(profTab);
+}
+function profileReferenceStatus(c){
+  return {
+    face:!c.photo ? 'Lipsește portretul' : c.faceEmb?.k?.split('|')[1] === c.photo && c.faceEmb.d?.length ? 'Amprentă disponibilă' : 'Portret ales',
+    body:!c.photoFull ? 'Lipsește reperul întreg' : !bodyTextOk(c) ? 'Reper ales · descriere indisponibilă' :
+      c.bodyFull.source === 'local' ? 'Proporții măsurate local' : 'Descris din poza întreagă'
+  };
+}
+function drawProfileReferenceStatus(c){
+  if(profId !== c.id) return;
+  const state = profileReferenceStatus(c);
+  const face = $('#pfStudioFaceStatus'), body = $('#pfStudioBodyStatus');
+  if(face) face.textContent = state.face;
+  if(body) body.textContent = state.body;
 }
 /* 14.3: 👯 editorul de duo. Două feluri: personaje noi (câte o filă pentru fiecare: poza de profil, nume, pe scurt, personalitate,
    aspect, cum vorbește) sau două personaje de-ale tale (pozele, fișele și identitatea lor se refolosesc; chaturile lor rămân neatinse).
@@ -11135,51 +11183,47 @@ function pfMixStat(chats){
 }
 async function charProfile(id, push = true){
   const c = charById(id); if(!c) return;
-  if(profId !== id) duoPfK = 0; profId = id; profAlt = new Set();
+  if(profId !== id){ duoPfK = 0; profTab = 'profil'; }
+  profId = id; profAlt = new Set();
   const chats = await allChats(c);
-  const picsM = chats.flatMap(ch => ch.msgs.filter(m => m.img && m.role === 'ai').map(m => ({k:m.img, ts:m.ts, scene:m.scene}))).sort((a, b) => b.ts - a.ts);
-  { const have = new Set(picsM.map(y => y.k)); for(const fp of feedCache.filter(x => x.cid === id && x.img && !have.has(x.img))) picsM.push({k:fp.img, ts:fp.ts, scene:fp.scene, story:fp.story}); }   // 11.7
-  picsM.sort((a, b) => b.ts - a.ts);
+  if(profId !== id) return;
   const media = characterMedia(chats, feedCache, id), featured = media[0];
-  const pics = picsM.map(x => x.k), picMeta = Object.fromEntries(picsM.map(x => [x.k, x]));
-  if(push) profTab = pics.length ? 'poze' : 'despre';
-  // 8.9: momente (ca evidențierile de pe Instagram): pozele grupate pe zile
-  const hiDays = []; for(const x of picsM){ const d = dayKey(x.ts); let g = hiDays.find(h => h.d === d); if(!g){ if(hiDays.length >= 10) continue; g = {d, items:[]}; hiDays.push(g); } g.items.push(x); }
-  const hiLabel = d => { const n = daysSince(new Date(d + 'T12:00').getTime()); return n === 0 ? 'Azi' : n === 1 ? 'Ieri' : fmtD({day:'numeric', month:'short'}, new Date(d + 'T12:00')); };
-  const hasStory = storyLive().some(x => x.cid === id), storyUn = storyLive().some(x => x.cid === id && !x.sv);
+  if(push) profTab = 'profil';
+  const hasStory = storyLive().some(x => x.cid === id);
   const msgs = chats.reduce((n, ch) => n + ch.msgs.filter(m => !m.err && (m.text || m.img)).length, 0);
   let first = c.created || Date.now(); for(const ch of chats) for(const m of ch.msgs) if(m.ts && m.ts < first) first = m.ts;   // 11.7: fără lista întreagă desfăcută în argumente
   const days = Math.max(1, Math.ceil((Date.now() - first) / 864e5));
   const spent = ((await DB.get('usage') || {}).chars || {})[id] || 0;
+  if(profId !== id) return;
   const u = S.userName.trim() || 'tine';
   const fromChat = !$('#vChat').hidden && cur && cur.id === id;
   $('#pfTopName').textContent = c.name;
   $('#pfBody').innerHTML = `
-    <div class="pfHero">${duoOn(c) ? `<div class="pfDuoHero">${[0, 1].map(k => `<div class="dh">${duoPic(c, k) ? `<img data-k="${esc(duoPic(c, k))}" data-view="${esc(duoPic(c, k))}" alt="">` : `<div class="ph" style="background:${k ? 'linear-gradient(135deg,#2f8fd8,#1c5a8c)' : colorFor(c)}">${esc(duoNm(c, k)[0])}</div>`}</div>`).join('')}</div>` : c.photo ? `<img data-k="${esc(photoNow(c))}" data-view="${esc(photoNow(c))}" alt="">` : `<div class="ph" style="background:${colorFor(c)}">${esc(c.name[0])}</div>`}${c.photoFull ? '<button type="button" class="pfFull" id="pfFullBtn">🧍 Poza întreagă</button>' : c.photo && S.imgProv !== 'none' ? '<button type="button" class="pfFull" id="pfMakeFull">🧍 Fă-i poza întreagă</button>' : ''}</div>
-    <div class="igHead">
-      <button class="igAv${hasStory ? ' ring' + (storyUn ? ' un' : '') : ''}" id="pfAvBtn" aria-label="${hasStory ? 'Vezi story-ul' : 'Poza de profil'}">${avatarHTML(c)}</button>
-      <div class="igStats${!duoOn(c) && idScore(c) ? ' n4' : ''}">
-        <div><b>${msgs.toLocaleString('ro-RO')}</b><small>mesaje</small></div>
-        <div><b>${days}</b><small>${days === 1 ? 'zi' : 'zile'}</small></div>
-        <div><b>${pics.length}</b><small>${pics.length === 1 ? 'poză' : 'poze'}</small></div>
-        ${(() => { const sc = duoOn(c) ? null : idScore(c); return sc ? `<div class="idsc" id="pfIdSc" role="button"><b>${sc.n}</b><small>identitate</small></div>` : ''; })()}
+    <div class="profileOverview" data-profile-panel="profil">
+    <div class="pfHero">${duoOn(c) ? `<div class="pfDuoHero">${[0, 1].map(k => `<div class="dh">${duoPic(c, k) ? `<img data-k="${esc(duoPic(c, k))}" data-view="${esc(duoPic(c, k))}" alt="">` : `<div class="ph" style="background:${k ? 'linear-gradient(135deg,#2f8fd8,#1c5a8c)' : colorFor(c)}">${esc(duoNm(c, k)[0])}</div>`}</div>`).join('')}</div>` : c.photo ? `<img data-k="${esc(c.photo)}" data-view="${esc(c.photo)}" alt="">` : `<div class="ph" style="background:${colorFor(c)}">${esc(c.name[0])}</div>`}</div>
+      <div class="profileIntro"><h1>${esc(c.name)}</h1>${c.tag || c.persona ? `<p>${esc(c.tag || c.persona)}</p>` : ''}</div>
+      <div class="profileActions"><button class="btn pri" id="pfChat">Conversație</button><button class="btn" id="pfCall">Apel</button></div>
+    </div>
+    <nav class="profileTabs" id="pfTabs" aria-label="Secțiunile fișei"><button data-pt="profil">Profil</button><button data-pt="album">Album</button><button data-pt="studio">Studio</button><button data-pt="memorie">Memorie</button></nav>
+    ${featured ? `<button class="profileLatest" data-profile-panel="profil" id="pfLatest"><img data-k="${esc(featured.poster)}" data-t="m" alt=""><span><b>${featured.kind === 'video' ? 'Cel mai recent clip' : 'Cea mai recentă fotografie'}</b><small>${esc(when(featured.ts))}</small></span><span aria-hidden="true">›</span></button>` : ''}
+    ${c.persona && !duoOn(c) ? `<details class="profileFold" data-profile-panel="profil"><summary>Povestea personajului</summary><div class="pfSec"><p>${esc(c.persona)}</p></div></details>` : ''}
+    <section class="pfSec profileAlbumPanel" data-profile-panel="album">
+      <div class="profileSectionHead"><h3>Fotografii și clipuri</h3><button class="btn sm" id="pfAlbum">Deschide albumul</button></div>
+      ${media.length ? `<div class="profileAlbumTiles">${media.slice(0,6).map((item,i) => `<button data-pf-media="${i}" aria-label="${item.kind === 'video' ? 'Redă clipul' : 'Vezi fotografia'}"><img data-lk="${esc(item.poster)}" data-t="g" alt="">${item.kind === 'video' ? '<span aria-hidden="true">▶</span>' : ''}</button>`).join('')}</div>` : '<p>Fotografiile și clipurile apar aici după prima conversație cu imagini.</p>'}
+      <button class="btn sm" id="pfMoments">Amintiri</button>
+    </section>
+    <section class="pfSec profileStudioPanel" data-profile-panel="studio">
+      <div class="profileSectionHead"><h3>Repere de identitate</h3><button class="btn sm" id="pfStudioEdit">Editează</button></div>
+      <div class="profileReferences">
+        <button class="profileReference" id="pfReferencePortrait">${c.photo ? `<img data-lk="${esc(c.photo)}" data-t="m" alt="">` : '<div class="profileRefEmpty">＋</div>'}<b>Portret principal</b><small id="pfStudioFaceStatus"></small></button>
+        <button class="profileReference" id="pfReferenceBody">${c.photoFull ? `<img data-lk="${esc(c.photoFull)}" data-t="m" alt="">` : '<div class="profileRefEmpty">＋</div>'}<b>Reper corp întreg</b><small id="pfStudioBodyStatus"></small></button>
       </div>
-    </div>
-    <div class="igBio"><h1>${esc(c.name)}</h1>${c.tag ? `<p class="igTag">${esc(c.tag)}</p>` : ''}${duoOn(c) ? '' : c.persona ? `<p class="clamp3" id="pfAbout">${esc(c.persona)}</p><button class="more" id="pfMore" hidden>mai mult</button>` : ''}${pfChips(c)}</div>
+      <p class="profileWardrobe"><b>Ținută</b><span>${esc(c.outfitLock || 'Liberă')}</span></p>
+      <p class="profileWardrobe"><b>Verificare strictă</b><span>${c.strictIdentity ? 'Activă' : 'Oprită'}</span></p>
+      ${c.photo ? '<button class="btn pri" id="pfVerifyStudio">Completează și verifică</button>' : ''}
+    </section>
     ${duoOn(c) ? duoCardsHTML(c) : ''}
-    <div class="igActs">
-      <button class="btn pri" id="pfChat">Conversație</button>
-      <button class="btn" id="pfCall">Apel</button>
-      <button class="btn" id="pfAlbum">Album</button>
-      <button class="btn" id="pfGift" aria-label="Cadou">🎁</button>
-      <button class="btn" id="pfPhone" aria-label="Telefonul lui">📱</button>
-      <button class="btn" id="pfFav" aria-label="Favorit">${c.fav ? '★' : '☆'}</button>
-    </div>
-    ${featured ? `<button class="profileLatest" id="pfLatest"><img data-k="${esc(featured.poster)}" data-t="m" alt=""><span><b>${featured.kind === 'video' ? 'Cel mai recent clip' : 'Cea mai recentă fotografie'}</b><small>${esc(when(featured.ts))}</small></span><span aria-hidden="true">›</span></button>` : ''}
-    ${hiDays.length ? `<div class="igHi">${hiDays.map((h, k) => `<button data-hi="${k}"><span><img data-k="${esc(h.items[0].k)}" data-t="s" alt=""></span><small>${esc(hiLabel(h.d))}</small></button>`).join('')}</div>` : ''}
-    <div class="pftabs ig" id="pfTabs"><button data-pt="poze"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Poze</button><button data-pt="despre">✨ Despre</button><button data-pt="memorie">🧠 Memorie</button></div>
-    <div class="pfSec igGrid"><div class="pfGal">${pics.length ? pics.map(k => `<button data-view="${esc(k)}">${picMeta[k].story ? '<i>📸</i>' : ''}<img data-lk="${esc(k)}" data-t="g" alt="" loading="lazy"></button>`).join('') : ''}</div>${pics.length ? '' : `<p class="igEmpty">📷<br>Încă nicio poză de la ${esc(c.name)}.<br><small>Cere-i una din ＋ în conversație.</small></p>`}</div>
-    ${c.aspect && !duoOn(c) ? `<div class="pfSec"><h3>Cum arată</h3><p>${esc(c.aspect)}</p></div>` : ''}
+        ${c.aspect && !duoOn(c) ? `<div class="pfSec" data-profile-panel="studio"><h3>Cum arată</h3><p>${esc(c.aspect)}</p></div>` : ''}
     <div class="pfSec"><h3><span>💞 Relația voastră</span></h3><div class="relbox"><span class="lv" id="pfRelName"></span><small id="pfRelSub"></small><button class="btn sm" id="pfRelSet" style="margin-left:auto">Schimbă</button></div><div class="relbar"><i id="pfRelBar"></i></div><div id="pfBond" class="bond"></div></div>
     <div class="pfSec"><h3><span>📌 Regulile voastre</span><button class="btn sm" id="pfRules">Vezi / adaugă</button></h3><ul class="facts" id="pfRulesL"></ul></div>
     <div class="pfSec"><h3><span>👯 Oameni pe care îi cunoaște</span><button class="btn sm" id="pfSocMap">🕸️ Harta</button></h3><div id="pfSoc"></div></div>
@@ -11202,7 +11246,7 @@ async function charProfile(id, push = true){
       <ul class="facts" id="pfFacts"></ul>
       <div class="addfact"><input id="pfFactIn" placeholder="Adaugă ceva ce să știe"><button class="btn sm" id="pfFactAdd">＋</button><button class="btn sm" id="pfFactScan" title="Caută fapte noi în conversație">🔄</button></div>
     </div>
-    <div class="pfFoot">Creat pe ${fmtD({day:'numeric', month:'long', year:'numeric'}, new Date(c.created || first))} · cost estimat ${usd(spent)}</div>`;
+`;
   const body = $('#pfBody');
   if(duoOn(c)) duoCardsWire(c);   // 9.64
   $('#pfMix').onclick = async e => { const b = e.target.closest('[data-mx]'); if(!b) return; const v = b.dataset.mx;   // 9.66
@@ -11212,9 +11256,13 @@ async function charProfile(id, push = true){
   // 9.15: grila de poze se încarcă după ce s-a așezat profilul (nu în timpul glisării), din miniaturi
   afterShow(() => { body.querySelectorAll('img[data-lk]').forEach(i => { i.dataset.k = i.dataset.lk; i.removeAttribute('data-lk'); }); hydrate(body); });
   show('vProf', push);
-  $('#pfScroll').scrollTop = 0; profScroll();
-  const ab = $('#pfAbout'); if(ab) requestAnimationFrame(() => { if(ab.scrollHeight > ab.clientHeight + 4){ $('#pfMore').hidden = false; $('#pfMore').onclick = () => { ab.classList.remove('clamp3'); $('#pfMore').hidden = true; }; } });
-  body.onclick = e => { const v = e.target.closest('[data-view]'); if(v) viewImg(v.dataset.view, pics.includes(v.dataset.view) ? pics : [v.dataset.view], picMeta); };
+  $('#pfScroll').scrollTop = 0;
+  body.onclick = e => {
+    const tile = e.target.closest('[data-pf-media]');
+    if(tile){ showCharacterAlbum(c,media,media[Number(tile.dataset.pfMedia)]); return; }
+    const picture = e.target.closest('[data-view]');
+    if(picture) viewImg(picture.dataset.view,[picture.dataset.view]);
+  };
   const drawFacts = () => {
     $('#pfFacts').innerHTML = (c.facts || []).length ? c.facts.map((f, k) => `<li><span>${f.k === 'urm' ? '🗓️ ' : f.k === 'gluma' ? '😄 ' : f.k === 'lex' ? '💬 ' : ''}${esc(f.t)}</span><button data-fx="${k}" aria-label="Șterge">✕</button></li>`).join('')
       : `<li><span style="color:var(--tx3)">Încă nimic. Se completează singur din conversații, la câteva mesaje.</span></li>`;
@@ -11257,32 +11305,36 @@ async function charProfile(id, push = true){
   drawPrefs();
   drawLife(c); drawAgenda(c); drawMem(c); drawPicsFor(c); drawAv(c); drawStk(c);   // 14.4
   pfTabsInit();
+  drawProfileReferenceStatus(c);
+  $('#pfStudioEdit').onclick = () => openEditor(id);
+  $('#pfReferencePortrait').onclick = () => c.photo ? viewImg(c.photo,[c.photo]) : openEditor(id);
+  $('#pfReferenceBody').onclick = () => c.photo || c.photoFull ? pfFullSheet(c) : openEditor(id);
+  const verify = $('#pfVerifyStudio');
+  if(verify) verify.onclick = async () => { await fidGo(c,verify); drawProfileReferenceStatus(c); };
+  $('#pfMoments').onclick = () => openAlbum(c);
   const showWx = () => weatherOf(c).then(w => { const el = $('#pfWx'); if(el) el.textContent = w ? `Acum în ${w.city}: ${wxLine(w)}. Intră în conversații și în poze.` : (c.city ? 'Nu găsesc orașul ăsta. Încearcă alt nume.' : 'Vremea reală de acolo intră în conversații și în poze (Open-Meteo, gratuit).'); }).catch(() => { const el = $('#pfWx'); if(el) el.textContent = 'Nu pot citi vremea acum (internet?).'; });
   showWx();
   $('#pfCitySave').onclick = async () => { c.city = $('#pfCity').value.trim(); delete c.geo; delete wxMem[c.id]; await saveChars(); showWx(); toast(c.city ? '📍 ' + c.city : 'Oraș șters'); };
-  $('#pfMoreTop').onclick = () => sheet([['📤', 'Exportă cardul personajului', () => exportCard(c)], ['🧬', 'Duplică personajul', () => duplicateChar(c)], ['🗑️', 'Șterge personajul', () => deleteChar(c), 'dan']]);
+  $('#pfMoreTop').onclick = () => sheet([
+    ...(hasStory ? [['◉', 'Vezi story-ul', () => openStories(id)]] : []),
+    ['☆', c.fav ? 'Scoate din favorite' : 'Adaugă la favorite', async () => { c.fav = !c.fav; await saveChars(); toast(c.fav ? 'Adăugat la favorite' : 'Scos de la favorite'); }],
+    ['🎁', 'Trimite un cadou', async () => { await openChat(id, !fromChat); if(cur?.id === id && !$('#vChat').hidden) giftSheet(); }],
+    ['📱', 'Telefonul personajului', () => openPhone(c)],
+    ['▤', 'Statistici', () => openSheet(`<h4>Statistici · ${esc(c.name)}</h4><div class="pad"><p>${msgs.toLocaleString('ro-RO')} mesaje · ${days} zile · ${media.length} elemente în album</p><p>Cost estimat ${usd(spent)}</p></div>`)],
+    ['📤', 'Exportă cardul personajului', () => exportCard(c)],
+    ['🧬', 'Duplică personajul', () => duplicateChar(c)],
+    ['🗑️', 'Șterge personajul', () => deleteChar(c), 'dan']
+  ]);
   $('#pfVPlay').onclick = () => voiceSample(c, $('#pfVPlay'));
   $('#pfVPick').onclick = () => pickVoice(c, () => { $('#pfVName').textContent = voiceLabel(c); });
-  $('#pfFav').onclick = async () => { c.fav = !c.fav; await saveChars(); $('#pfFav').textContent = c.fav ? '★' : '☆'; toast(c.fav ? '⭐ Adăugat la favorite' : 'Scos de la favorite'); };
   $('#pfEditTop').onclick = () => openEditor(id);
-  $('#pfPhone').onclick = () => openPhone(c);
   $('#pfCall').onclick = async () => {
     await openChat(id, !fromChat);
     if(cur?.id === id && !$('#vChat').hidden) callChoice();
   };
   $('#pfAlbum').onclick = () => showCharacterAlbum(c, media);
   if(featured) $('#pfLatest').onclick = () => showCharacterAlbum(c, media, featured);
-  $('#pfGift').onclick = async () => { if(!fromChat) await openChat(id); else history.back(); setTimeout(giftSheet, 350); };
-  $('#pfAvBtn').onclick = () => { if(storyLive().some(x => x.cid === id)) openStories(id); else if(c.photo){ const k = photoNow(c); viewImg(k, [...new Set([k, c.photo])]); } };   // 9.27: poza de acum (avatarul viu), apoi cea de bază
-  body.querySelectorAll('[data-hi]').forEach(b => b.onclick = e => { e.stopPropagation(); const h = hiDays[+b.dataset.hi]; openStories(id, h.items.slice().reverse().map(x => ({id:'h' + x.k, cid:id, ts:x.ts, text:'', img:x.k, scene:x.scene}))); });
   $('#pfChat').onclick = () => { if(fromChat) history.back(); else openChat(id); };
-  { const fb = $('#pfFullBtn'); if(fb) fb.onclick = e => { e.stopPropagation(); pfFullSheet(c); }; const mf = $('#pfMakeFull'); if(mf) mf.onclick = e => { e.stopPropagation(); pfFullSheet(c); }; }   // 9.24–9.25
-}
-function profScroll(){
-  const sc = $('#pfScroll'), y = sc.scrollTop, img = $('#pfBody .pfHero img, #pfBody .pfHero .ph');
-  if(img) img.style.transform = `translateY(${Math.max(0, y * .45)}px) scale(${1 + Math.max(0, -y) / 400})`;
-  const h = $('#pfBody .pfHero');
-  $('#vProf .pfTop').classList.toggle('solid', !!h && y > h.offsetHeight - 120);
 }
 
 // target = mesajul-poză de refăcut; mode: 'same' (aceeași scenă, altă variantă) sau 'new' (altă scenă)
@@ -17239,7 +17291,6 @@ function bind(){
   $('#fCam').onchange = e => { pickedImage(e.target.files[0]); e.target.value = ''; };
   $('#chMenu').onclick = chatMenu;
   $('#chWho').onclick = () => charProfile(cur.id);
-  $('#pfScroll').addEventListener('scroll', profScroll, {passive:true});
   $('#btnMic').onclick = toggleMic;
   $('#btnSearch').onclick = () => openSearch();
   $('#btnSugg').onclick = () => { if(!aiReady()){ toast('Adaugă cheia în Setări.'); return; } if(busy){ toast('Așteaptă răspunsul.'); return; } suggest(); };
