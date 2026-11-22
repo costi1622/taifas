@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.13.0';
+const APP_VER = '14.13.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1934,6 +1934,7 @@ async function sheetGen(c, force, onStep, o = {}){
   if(!sheetOn(c) || sheetBusy) return false;
   await sheetTidy(c).catch(() => {});   // 12.2
   await sheetRemeasure(c).catch(() => {});   // 11.9
+  if(sheetBusy) return false;
   const all = Object.keys(SHEET_VIEWS), have = sheetOf(c);
   // 9.99: forțat = toată fișa; altfel doar unghiurile care lipsesc (fișele vechi primesc unghiurile noi); o.only = doar acelea
   const want = o.only ? o.only.filter(a => SHEET_VIEWS[a]) : force ? all.slice() : all.filter(a => { const h = have.find(x => x.ang === a); return !h || !h.k2 || h.weak || (h.bv || 0) !== bodyVer(c); });   // 11.2: și cele făcute pentru alt corp; 11.4: și rezervele ⚠️   // 11.0: și varianta a doua
@@ -2347,7 +2348,7 @@ async function bsheetGen(c, force, onStep, o = {}){
       const noFace = pose === 'side' || pose === 'back', noBody = BSHEET_NOBODY.has(pose), tol = BSHEET_TOL[pose] || BODY_SHEET_OK;   // 11.0
       let keep = null, loose = null, weak = null, stop = false; const BT = o.redo ? 9 : 3;   // 11.5: la ✕, până la 9 variante (câte 3 deodată)
       for(let t = 0; t < BT && !stop; ){
-        let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, o.redo ? Math.min(3, BT - t) : t === 0 ? 2 : 3 - t); }catch(e){ if(t) break; t++; continue; }
+        let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil'}, o.redo ? Math.min(3, BT - t) : t === 0 ? (o.firstPass ? 1 : 2) : 3 - t); }catch(e){ if(t) break; t++; continue; }
         t += Math.max(1, bs.length);
         for(let b of bs){
           addUsage(c.id, imgPrice(), 'img', null, 'fisa');
@@ -2841,28 +2842,66 @@ document.addEventListener('visibilitychange', () => {
   if(done.length || run.length) toast([done.length ? '✅ Gata cât ai lipsit: ' + done.join(', ') : '', run.length ? '▶️ Continui: ' + run.join(', ') + (rwDirect() ? ' (Runware a lucrat mai departe)' : '') : ''].filter(Boolean).join(' · '), 5500);
 });
 async function kitBuild(c, o = {}){ return o.gen && c && c.photo && !kitBusy.has(c.id) ? jobRun(`pachetul de identitate al lui ${c.name}`, () => kitBuild0(c, o)) : kitBuild0(c, o); }
+const KIT_FACE_FIRST = ['l34','r34','smile','high'];
+const KIT_BODY_FIRST = ['waist','waist34','34','sit'];
+async function kitBuildSheets(c, o, step, valid){
+  const wait = async () => {
+    for(let i = 0; i < 240 && sheetBusy && valid(); i++) await sleep(500);
+    return !sheetBusy && valid();
+  };
+  const face = async only => {
+    if(!await wait()) return false;
+    step('fisa');
+    return sheetGen(c, !!o.force && !sheetOf(c).length, () => step('fisa'), only ? {only} : {}).catch(() => false);
+  };
+  const body = async only => {
+    if(!await wait()) return false;
+    step('fisaCorp');
+    return bsheetGen(c, !!o.force && !bsheetOf(c).length, () => step('fisaCorp'), only ? {only,firstPass:true} : {}).catch(() => false);
+  };
+  const staged = !o.force && !sheetOf(c).length && !bsheetOf(c).length && !c.sheetTry && !c.bsheetTry;
+  let faceReady = false, bodyReady = false;
+  if(staged){
+    faceReady = await face(KIT_FACE_FIRST.filter(k => SHEET_VIEWS[k]));
+    bodyReady = await body(KIT_BODY_FIRST.filter(k => BSHEET_VIEWS[k]));
+    if(valid() && o.toast && (faceReady || bodyReady)) toast(`🧩 ${c.name}: primele repere sunt disponibile. Continui cu restul.`, 3500);
+  }
+  const faceRest = staged ? Object.keys(SHEET_VIEWS).filter(k => !KIT_FACE_FIRST.includes(k)) : null;
+  const bodyRest = staged ? Object.keys(BSHEET_VIEWS).filter(k => !KIT_BODY_FIRST.includes(k)) : null;
+  const faceDone = await face(faceRest);
+  const bodyDone = await body(bodyRest);
+  if(valid() && o.toast && (faceReady || bodyReady || faceDone || bodyDone)) toast(`🧩 ${c.name}: reperele noi sunt salvate în profil.`, 3000);
+}
 async function kitBuild0(c, o = {}){
   if(!c || !c.photo || kitBusy.has(c.id) || S.imgProv === 'none') return false;
   if(typeof call !== 'undefined' && call && !o.force){ setTimeout(() => kitEnsure(c, o), 60e3); return false; }   // nu în timpul unui apel: telefonul are nevoie de el
-  kitBusy.add(c.id); const k0 = kitKey(c), step = o.onStep || (() => {}); if(o.gen) keepAwake(true);   // 11.1 (V4)
+  kitBusy.add(c.id); const portrait = c.photo; let k0 = kitKey(c); const step = o.onStep || (() => {}); if(o.gen) keepAwake(true);   // 11.1 (V4)
   try{
     if(aiReady()){ step('pasaport'); try{ await identityOf(c); }catch(e){} }
-    if(aiReady() && c.photoFull && !bodyTextOk(c) && !looksYoung(c)){ step('corptext'); try{ const k = c.photoFull, b = await DB.get(k).catch(() => null), t = b ? await crBodyRead(b, c.id) : ''; if(t && c.photoFull === k){ c.bodyFull = {k, t}; await saveChars(); } }catch(e){} }   // 13.6 (2)
-    step('amprenta'); try{ await refDescs(c); }catch(e){}
+    const bodyText = aiReady() && c.photoFull && !bodyTextOk(c) && !looksYoung(c) ? (async () => {
+      const k = c.photoFull, b = await DB.get(k).catch(() => null), t = b ? await crBodyRead(b, c.id) : '';
+      if(t && c.photo === portrait && c.photoFull === k){ c.bodyFull = {k, t}; await saveChars(); }
+    })().catch(() => {}) : null;
+    step('amprenta');
+    await Promise.all([refDescs(c).catch(() => {}), bodyText]);
     try{ await ageLook(c); }catch(e){}   // 9.94 (D)
     step('verificare'); try{ await refMigrate(c); }catch(e){}   // 11.0 (C4)
     if((c.stil || 'photo') === 'photo'){
       if(o.gen){
         // 9.93: dacă o fișă se face deja în fundal, așteaptă-o (înainte: butonul nu făcea nimic, pentru că locul era ocupat)
         for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
+        if(c.photo !== portrait) return false;
         if(!c.photoFull){ step('intreaga'); if(o.force) delete c.autoFullTried; await autoFull(c).catch(() => {}); }
-        step('aproape'); try{ const s3 = await closeGen(c, false); if(s3 && o.toast) toast(`🔍 ${c.name}: portretul de aproape e gata.`, 2500); }catch(e){}   // 10.5 (R2); 11.0: înaintea fișelor (le folosesc ca al doilea reper)
-        for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
-        step('detalii'); try{ await detailGen(c); }catch(e){}   // 11.0 (A2)
-        step('fisa'); const s1 = await sheetGen(c, !!o.force && !sheetOf(c).length, () => step('fisa')).catch(() => false); if(s1 && o.toast) toast(`🧩 ${c.name}: fișa feței e gata.`, 2500);   // forțat doar ce lipsește
-        for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
-        step('fisaCorp'); const s2 = await bsheetGen(c, !!o.force && !bsheetOf(c).length, () => step('fisaCorp')).catch(() => false); if(s2 && o.toast) toast(`🧍 ${c.name}: fișa corpului e gata.`, 2500);
-        for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
+        if(c.photo !== portrait) return false;
+        k0 = kitKey(c);
+        const valid = () => kitKey(c) === k0;
+        step('aproape'); try{ await closeGen(c, false); }catch(e){}
+        if(!valid()) return false;
+        await kitBuildSheets(c, o, step, valid);
+        if(!valid()) return false;
+        step('detalii'); try{ await detailGen(c); }catch(e){}
+        for(let i = 0; i < 240 && sheetBusy && valid(); i++) await sleep(500);
+        if(!valid()) return false;
         step('consens'); try{ const n3 = await consFix(c); if(n3 && o.toast) toast(`🤝 ${c.name}: ${n3} ${n3 === 1 ? 'unghi refăcut' : 'unghiuri refăcute'} (ieșiseră din grup).`, 3000); }catch(e){}   // 10.5 (R3)
         step('slabe'); try{ const n4 = await weakFix(c); if(n4 && o.toast) toast(`🧩 ${c.name}: ${n4} ${n4 === 1 ? 'unghi slab refăcut' : 'unghiuri slabe refăcute'}.`, 3000); }catch(e){}   // 13.6 (3)
         if(aiReady()){ step('pasaport2'); try{ await passportMulti(c); }catch(e){} }   // 9.99 (4)
@@ -4246,12 +4285,13 @@ let autoFullBusy = false;
 async function autoFull(c){
   if(S.autoFull === 'off' || autoFullBusy || !c || !c.photo || c.photoFull || c.autoFullTried || S.imgProv === 'none' || (c.stil && c.stil !== 'photo')) return false;
   if(!rwFor(S.wkChat || S.wkModel) && capLeft() < (neurPerPhoto(S.wkChat || S.wkModel) || 5000) * 3) return false;   // nu consumă ultima parte din limita zilnică
+  const portrait = c.photo;
   autoFullBusy = true; c.autoFullTried = Date.now(); await saveChars();
   try{
     const base = await DB.get(c.photo); if(!base) return false;
     const vars = (await fullVariants(c, base, null)).filter(v => v.st === 'ok' && v.chk && v.chk.faces === 1);
     const pick = vars.filter(v => v.sameD != null && v.sameD < .5 && !(v.chk.miss || []).some(m => /picior|tăiat/.test(m))).sort((a, b) => a.sameD - b.sameD)[0];
-    if(pick && charById(c.id) && !c.photoFull){ await saveFull(c, pick); if(!preKitOf(c)) toast(`🧍 ${c.name} are acum și o poză întreagă (model pentru corp în pozele din chat). O vezi în profil.`, 4500); return true; }
+    if(pick && charById(c.id) && c.photo === portrait && !c.photoFull){ await saveFull(c, pick); if(!preKitOf(c)) toast(`🧍 ${c.name} are acum și o poză întreagă (model pentru corp în pozele din chat). O vezi în profil.`, 4500); return true; }
   }catch(e){} finally { autoFullBusy = false; }
   return false;
 }
@@ -7768,9 +7808,15 @@ function drawAv(c){
   const cg = $('#avClipGo'); if(cg) cg.onclick = () => avClipsGen(c, nClip >= nCan);
   const cq = $('#avClipQ'); if(cq) cq.onchange = () => { S.avClipQ = cq.value; saveSettings(); drawAv(c); };
 }
+const avatarBuilds = new Set();
 async function genAvatars(c, all = true){ return jobRun(`avatarele vii ale lui ${c.name}`, () => genAvatars0(c, all)); }   // 13.4
 async function genAvatars0(c, all = true){
   if(busy){ toast('Așteaptă să termine răspunsul.'); return; }
+  if(avatarBuilds.has(c.id)){ toast('Stările acestui personaj se generează deja.'); return; }
+  avatarBuilds.add(c.id);
+  try{ await genAvatarStates(c,all); }finally{ avatarBuilds.delete(c.id); }
+}
+async function genAvatarStates(c, all){
   const todo = AV_V.filter(v => all || !(c.avs && c.avs[v[0]])), tot = todo.length;   // 12.3: doar cele noi, dacă le ai pe celelalte
   const b = $('#avGen'); if(b){ b.disabled = true; b.innerHTML = `<span class="spin"></span> 0/${tot}`; }
   const photo = c.photo; if(!photo || !(await DB.get(photo))){ toast('Nu găsesc poza de profil.'); if(b){ b.disabled = false; b.textContent = '✨ Generează variantele'; } return; }
@@ -7778,12 +7824,16 @@ async function genAvatars0(c, all = true){
   //       „Cum arată, pentru poze”, poză de telefon reală, fără înfrumusețare); fiecare e măsurată în telefon față de personaj
   //       și se păstrează cea mai apropiată din cel mult 3 încercări (se oprește la prima sub 0,42)
   const avs = {...(c.avs || {})}; let ok = 0; const rw0 = rwDay().usd;
-  for(const [k, , desc] of todo){
-    if(c.photo !== photo) break;
+  const wardrobe = c.outfitLock || '';
+  let stopped = false;
+  const current = () => c.photo === photo && (c.outfitLock || '') === wardrobe;
+  const concurrency = rwFor(sceneModel()) && rwCapLeft() >= 6 * rwPer() ? 2 : 1;
+  await pool(todo, concurrency, async ([k, , desc]) => {
+    if(stopped || !current()) return;
     try{
       const shot = `close-up selfie, head and shoulders, the face large and sharp, ${desc}, natural real moment, looking at the camera`;
       let bl = null, bd = 9;
-      for(let t = 0; t < 3; t++){
+      for(let t = 0; t < 3 && !stopped && current(); t++){
         const r = await scenePhoto(c, shot, null, t ? 'keep exactly the face of the reference: same face shape, eyes, nose, lips, skin and age' : '', {why:'profil'});
         addUsage(c.id, imgPrice(), 'img', null, 'avatar');
         const d = (await localFace(r.blob, c)).d;
@@ -7791,17 +7841,23 @@ async function genAvatars0(c, all = true){
         if(d < bd){ bl = r.blob; bd = d; }
         if(d < .42) break;
       }
+      if(!bl || !current()) return;
       try{ const R = await finishPerson(c, {blob:bl, fd:bd < 9 ? bd : null}, shot, null, {kind:'avatar', tag:'avatar'}); bl = R.blob; }catch(e){}   // 9.92: garanția + finisarea
       try{ if(bl.type === 'image/png') bl = await toJpeg(bl, 1024, .9); }catch(e){}
-      const old = avs[k]; avs[k] = await saveImg(bl); if(old) delImg(old).catch(() => {});
+      if(!current()) return;
+      if(c.strictIdentity) await verifyStudioPhoto(c, bl, shot, null, {});
+      if(!current()) return;
+      const next = await saveImg(bl);
+      if(!current()){ delImg(next).catch(() => {}); return; }
+      const old = avs[k]; avs[k] = next; if(old) delImg(old).catch(() => {});
       if(c.avClips && c.avClips[k]){ const oc = c.avClips[k], cc = {...c.avClips}; delete cc[k]; c.avClips = cc; if(oc.k) delImg(oc.k).catch(() => {}); }   // 12.3: clipul era al pozei vechi
       ok++;
       c.avs = {...avs}; await saveChars();
       if(b && document.body.contains(b)) b.innerHTML = `<span class="spin"></span> ${ok}/${tot}`;
-    }catch(e){ toast('O variantă n-a mers: ' + e.message, 3500); if(e.cap) break; }
-  }
+    }catch(e){ toast('O variantă n-a mers: ' + e.message, 3500); if(e.cap || isImagePolicyError(e)) stopped = true; }
+  });
   const spent = rwDay().usd - rw0;   // 9.37
-  if(ok){ c.avLive = true; await saveChars(); toast(`🖼️ ${ok} variante gata. Avatarul viu e pornit.${spent > 0 ? ' Cost Runware: ' + usd4(spent) + '.' : ''}`, 4500); }
+  if(ok && current()){ c.avLive = true; await saveChars(); toast(`🖼️ ${ok} variante gata. Avatarul viu e pornit.${spent > 0 ? ' Cost Runware: ' + usd4(spent) + '.' : ''}`, 4500); }
   avRefresh(c);
 }
 // 9.26: după avatarele vii (sau pornit/oprit): profilul întreg, Acasă și antetul chatului arată imediat poza de acum
