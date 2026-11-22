@@ -2121,6 +2121,19 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 @media(prefers-reduced-motion:reduce) {
   .mediaAlbum,.mediaAlbum.out,.callv .cvid,.callv .cvid video.cclip.on { animation:none!important; transition:none!important; }
 }
+
+.studioSources {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:6px 0 16px}
+.studioSources button {min-width:0;min-height:90px;text-align:left;padding:14px;border:1px solid var(--line);border-radius:17px;background:var(--bg2);color:var(--tx)}
+.studioSources button.on {border-color:var(--acc);background:var(--card)}
+.studioSources b,.studioSources span {display:block}
+.studioSources span {color:var(--tx2);font-size:.81rem;margin-top:5px}
+#edStudioWork.studio-upload #edStart,.studio-source-hidden {display:none!important}
+#edStudioWork .photo {height:clamp(180px,39dvh,360px)}
+.studioTools {flex-wrap:wrap;gap:6px}
+.studioPreviewCard {width:min(100%,380px);margin:0 auto 12px;overflow:hidden;border:1px solid var(--line);background:var(--bg2);border-radius:22px}
+.studioPreviewCard>img,.studioEmptyPortrait {display:grid;place-items:center;width:100%;height:clamp(150px,33dvh,340px);object-fit:cover;object-position:50% 27%;background:var(--card)}
+.studioPreviewCard h3,.studioPreviewCard p {margin:10px 14px}
+.studioSuggestionText {white-space:pre-line;line-height:1.5;max-height:55dvh;overflow:auto}
 </style>
 </head>
 <body>
@@ -2261,10 +2274,17 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
     <h2 id="edTitle">Personaj nou</h2>
     <div style="display:flex;gap:6px;align-items:center"><button type="button" class="btn sm" id="edMode" aria-pressed="false">⚙️ Avansat</button><button class="btn sm pri" id="edSave">Salvează</button></div>
   </header>
-  <div class="steps" id="edSteps"><button type="button" data-s="1"><b>1</b>Poza</button><button type="button" data-s="2"><b>2</b>Cine e</button><button type="button" data-s="3"><b>3</b>Replici</button></div>
+  <div class="steps" id="edSteps"><button type="button" data-s="1"><b>1</b>Aspect</button><button type="button" data-s="2"><b>2</b>Personaj</button><button type="button" data-s="3"><b>3</b>Voce</button><button type="button" data-s="4"><b>4</b>Verifică</button></div>
   <div class="status" id="edStatus"></div>
   <div class="scroll" id="edScroll"><div class="form">
     <div class="step" data-step="1">
+      <div class="studioSources" id="edSource">
+        <button type="button" data-studio="upload"><b>Încarcă un portret</b><span>Pornește de la imaginea ta.</span></button>
+        <button type="button" data-studio="describe"><b>Creează din descriere</b><span>Alege portretul dintre variante.</span></button>
+        <button type="button" data-studio="surprise"><b>Personaj surpriză</b><span>Pornește de la o atmosferă.</span></button>
+        <button type="button" data-studio="import"><b>Importă un card Taifas</b><span>Deschide un personaj salvat.</span></button>
+      </div>
+      <div id="edStudioWork" hidden>
       <section class="ed-start" id="edStart">
     <div class="ed-start-head"><div><b>✨ Creează rapid</b><div class="hint">Alege o bază, apoi personalizează. Opțiunile complete rămân disponibile.</div></div><span class="ed-start-icon">✦</span></div>
     <label>Personalitate de pornire</label>
@@ -2274,8 +2294,18 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
     <div class="ed-start-actions"><button type="button" class="btn sm" id="edQuickFill">✨ Completează ce lipsește</button><span class="hint" id="edPresetStatus" aria-live="polite">Nu suprascrie câmpurile deja completate.</span></div>
   </section>
       <div class="sec">
-        <button type="button" class="photo" id="edPhoto"><span><b>＋</b>Urcă o poză<br>AI-ul o descrie 1:1</span></button>
+        <button type="button" class="photo" id="edPhoto"><span><b>＋</b>Urcă o poză<br>Alege portretul de referință</span></button>
         <input type="file" id="edFile" accept="image/*" hidden>
+        <div class="btns studioTools">
+          <button type="button" class="btn sm" id="edAnalyze">Analizează portretul cu AI</button>
+          <button type="button" class="btn sm" id="edUploadBody">Încarcă un reper corp întreg</button><input type="file" id="edBodyFile" accept="image/*" hidden>
+          <button type="button" class="btn sm" id="edUseBody">Folosește poza și pentru corp</button>
+          <button type="button" class="btn sm" id="edReferenceHistory" hidden>Repere anterioare</button>
+        </div>
+        <label for="edOutfit">Ținută fixă în poze</label>
+        <textarea id="edOutfit" maxlength="500" rows="2" placeholder="ex. aceeași rochie verde, croi drept, pantofi negri"></textarea>
+        <label class="chk"><input id="edStrict" type="checkbox"> Verifică strict fidelitatea înainte de afișarea fotografiilor solo</label>
+        <p class="hint">Portretul fixează fața. Reperul întreg ajută la păstrarea proporțiilor, inclusiv bustul, talia și șoldurile. Verificarea ținutei poate folosi analiza AI.</p>
         <div class="crea own" id="edOwn" hidden>
           <label>📷 Din poza ta</label>
           <div class="hint">Poza ta se citește pe zone și pe butoanele de corp (doar ce se vede). Corectezi ce nu e bine; la salvare intră în „Cum arată, pentru poze” și în pozele din chat, ca la creator.</div>
@@ -2294,7 +2324,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
           <div class="hint" id="edZoneHint"></div>
           <div class="crseg" id="edFrame"><button type="button" data-v="full">🧍 Corp întreg</button><button type="button" data-v="34">Trei sferturi</button><button type="button" data-v="portrait">Portret</button></div>
           <div class="crseg" id="edStyle"><button type="button" data-v="photo">Foto</button><button type="button" data-v="anime">Anime</button><button type="button" data-v="illustration">Ilustrație</button><button type="button" data-v="3d">3D</button></div>
-          <button type="button" class="btn pri crgo" id="edGen4">🎨 Generează 4 variante</button>
+          <button type="button" class="btn pri crgo" id="edGen1">Generează o variantă</button><button type="button" class="btn crgo" id="edGen4">Compară 4 variante</button>
           <button type="button" class="btn dan crgo" id="edStop" hidden>⏹ Oprește</button>
           <div class="crgrid" id="edVars"></div>
           <div class="crchosen" id="edChosen" hidden>
@@ -2322,6 +2352,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       </div>
     </div>
 
+    </div>
     <div class="step" data-step="2" hidden>
       <div class="sec">
         <div class="lblrow"><label for="edPersona">Personalitate și poveste</label><button type="button" class="btn sm" id="edDraft">✨ Completează</button></div>
@@ -2363,7 +2394,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
           <option value="es">Spaniolă</option><option value="fr">Franceză</option>
           <option value="it">Italiană</option><option value="de">Germană</option>
         </select>
-        <div class="edPrev" id="edPrev"></div>
+        <button type="button" class="btn sm" id="edVoiceSample">Ascultă vocea din apel</button><div class="edPrev" id="edPrev"></div>
       </div>
       <div class="sec">
         <h3>Culori în conversație</h3>
@@ -2379,6 +2410,10 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
         <select id="edStil" hidden><option value="photo">Fotografie realistă</option><option value="anime">Anime</option><option value="illustration">Ilustrație</option><option value="3d">3D</option></select>
       </details>
       <div class="btns" id="edDelWrap"><button type="button" class="btn dan" id="edDel">Șterge personajul</button></div>
+    </div>
+    <div class="step" data-step="4" hidden><div class="studioReview" id="edReview"></div>
+      <label class="chk"><input id="edPrepareRefs" type="checkbox"> Pregătește automat repere suplimentare după salvare</label>
+      <p class="hint">Generarea reperelor poate consuma credite. Poți face asta și mai târziu din profil.</p>
     </div>
   </div></div>
   <div class="wiz"><button type="button" class="btn" id="edBack">‹ Înapoi</button><button type="button" class="btn pri" id="edNext">Continuă ›</button></div>

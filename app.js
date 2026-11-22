@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.12.0';
+const APP_VER = '14.13.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -568,12 +568,13 @@ const DESC_PROMPT = `Descrie persoana sau personajul din imagine cât mai fidel,
 Include, unde se vede: vârsta aparentă, forma feței, ochii (culoare, formă), sprâncenele, nasul, buzele, tenul, părul (culoare, lungime, textură, coafură), părul facial, constituția și înălțimea aparentă, semnele distinctive (alunițe, pistrui, tatuaje, piercinguri, ochelari), hainele și accesoriile, expresia și postura.
 Descrie doar ce se vede, fără presupuneri despre personalitate. Nu inventa ce nu se vede.
 Răspunde STRICT cu JSON, fără alt text:
-{"aspect":"descrierea în română, la persoana a III-a, 5-8 propoziții naturale","look":"the same physical description in English as comma-separated tags for an image generator, max 70 words, face and hair first","stil":"photo|anime|illustration|3d","nume":["3 prenume diferite care s-ar potrivi cu înfățișarea și stilul persoanei; amestecă românești și internaționale"]}`;
+{"aspect":"descrierea în română, la persoana a III-a, 5-8 propoziții naturale","look":"the same physical description in English as comma-separated tags for an image generator, max 70 words, face and hair first","outfit":"only visible clothing and accessories, colors, cut and materials, without extrapolating off frame; empty if no clothing is visible","stil":"photo|anime|illustration|3d","nume":["3 prenume diferite care s-ar potrivi cu înfățișarea și stilul persoanei; amestecă românești și internaționale"]}`;
 async function describePhoto(blob){
   const b64 = await blobToB64(blob);
   const out = await stream('Ești un observator atent care descrie imagini cu precizie.', [{role:'user', text:DESC_PROMPT, image:b64}], {max:1200, aux:true, tag:'profil'});   // 9.80: pe Haiku (vede bine pozele, de ~20× mai ieftin)
   const j = parseJSON(out);
   return {aspect: faraLiniute(String(j.aspect || '').trim()), look: String(j.look || '').trim(), stil: ['photo','anime','illustration','3d'].includes(j.stil) ? j.stil : 'photo',
+    outfit:typeof j.outfit === 'string' ? j.outfit.trim().slice(0,500) : '',
     names: (Array.isArray(j.nume) ? j.nume : []).map(x => String(x).trim()).filter(x => x && x.length < 30).slice(0, 3)};
 }
 async function verifyPhoto(blob, aspect, look){
@@ -1832,7 +1833,15 @@ function fallbackShot(c, ch, exclude){
   return parts.length > 2 ? parts.join(', ') : '';
 }
 // promptul final + generarea; poza de profil e reperul pentru orice poză (identitate), scena vine din descriere
+function identityOutfit(c, shot, opt = {}){
+  if(!c.outfitLock || opt.requestedExposure && opt.requestedExposure !== 'clothed' || exposureMode(shot) !== 'clothed') return shot;
+  return shot + '. Fixed wardrobe: ' + c.outfitLock + '. Keep this outfit across locations and poses, including its colors, layers and cut. Preserve the character’s baseline chest volume, waist, hips and build under the fabric; change only the pose, lighting and setting described.';
+}
 async function scenePhoto(c, shot, signal, fix, opt = {}){
+  shot = identityOutfit(c, shot, opt);
+  if(c.strictIdentity && c.photoFull){
+    fix = [fix, 'Keep the same visible body proportions from the character references, including chest volume relative to shoulders and ribcage, waist, hips, build and limb proportions. Preserve the requested framing while adapting the pose and perspective.'].filter(Boolean).join('. ');
+  }
   const stil = STIL_TAG[c.stil || 'photo'], fr = framingOf(shot);
   const full = c.photo ? await DB.get(c.photo) : null;
   let id = null; if(full && aiReady()) try{ id = await identityOf(c); }catch(e){}
@@ -2665,9 +2674,10 @@ async function bodyInPhoto(blob){
   catch(e){ return {body:false, full:false}; } finally { URL.revokeObjectURL(u); }
 }
 async function edUseAsBody(blob, why){
-  if(!ed) return false;
+  const E = ed; if(!E) return false;
   let box = null; try{ const fs = await faceDescs(blob); if(fs.length){ const f = fs.sort((a, b) => b.a - a.a)[0]; box = {x:f.box.x / f.W, y:f.box.y / f.H, w:f.box.w / f.W, h:f.box.h / f.H}; } }catch(e){}
-  ed.fullBlob = blob; ed.fullBox = box; ed.fullTouched = true; ed.bodyFull = null; ed.ownBody = why;
+  if(ed !== E) return false;
+  E.fullBlob = blob; E.fullBox = box; E.fullTouched = true; E.bodyFull = null; E.ownBody = why;
   edIdCard(); return true;
 }
 function edIdCard(){
@@ -4419,6 +4429,19 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
       if(c.pfDist.d != null) r.gen.pf = Math.round((refDistance ?? c.pfDist.d) * 1000) / 1000; }
   }catch(e){}
   return r;
+}
+async function verifyStudioPhoto(c, blob, shot, signal, opt){
+  const failure = message => Object.assign(new Error(message), {photoKind:'local'});
+  const face = (await localFace(blob, c)).d;
+  if(face == null || face > idMax(c)) throw failure('Poza a rămas nepublicată: fața nu a trecut verificarea de fidelitate.');
+  if(c.photoFull && framingOf(shot).k !== 'close'){
+    const body = await bodyMatch(c, await bodySig(blob).catch(() => null)).catch(() => null);
+    if(body == null || body > bodyGate(c)) throw failure('Poza a rămas nepublicată: corpul nu a putut fi confirmat față de reperul întreg.');
+  }
+  if(identityOutfit(c, shot, opt) !== shot){
+    const wardrobe = await checkPhoto(c, blob, identityOutfit(c, shot, opt), signal, false, ['The visible parts of this fixed outfit match: ' + c.outfitLock]);
+    if(wardrobe?.asked == null || wardrobe.asked < 8 || wardrobe.body != null && wardrobe.body < 8) throw failure('Poza a rămas nepublicată: ținuta sau proporțiile vizibile nu au trecut verificarea.');
+  }
 }
 function identityRank(c, result, bodyExpected){
   const face = result.fd == null ? 1 : result.fd > idMax(c) ? 3 : 0;
@@ -8212,7 +8235,7 @@ function avSoft(c){
 setInterval(avTick, 60e3);
 
 /* ───────── 🗂️ carduri de personaj ───────── */
-const CARD_FIELDS = ['city', 'name', 'tag', 'aspect', 'look', 'stil', 'persona', 'speech', 'greet', 'accent', 'bg', 'aiPortrait', 'voice', 'vPitch', 'life', 'lifeOff', 'avLive', 'sendPics', 'home', 'appPrompt', 'appEn', 'frame', 'fullBox', 'appZones'];
+const CARD_FIELDS = ['city', 'name', 'tag', 'aspect', 'look', 'stil', 'persona', 'speech', 'greet', 'accent', 'bg', 'aiPortrait', 'voice', 'vPitch', 'life', 'lifeOff', 'avLive', 'sendPics', 'home', 'appPrompt', 'appEn', 'frame', 'fullBox', 'appZones', 'outfitLock', 'strictIdentity', 'callLang'];
 async function exportCard(c){
   toast('Pregătesc cardul…');
   const out = {app:'taifas-card', v:1, date:new Date().toISOString(), char:{}};
@@ -8226,12 +8249,12 @@ async function exportCard(c){
   download(file, file.name);
 }
 // 8.20: un card venit de la altcineva e tratat ca date străine: doar tipurile așteptate, cu lungimi limitate
-const CARD_TXT = {name:60, tag:160, city:80, aspect:3000, look:1200, persona:6000, speech:600, greet:1500, stil:20, bg:20, appPrompt:2500, appEn:3000, frame:10};
+const CARD_TXT = {outfitLock:500, callLang:10, name:60, tag:160, city:80, aspect:3000, look:1200, persona:6000, speech:600, greet:1500, stil:20, bg:20, appPrompt:2500, appEn:3000, frame:10};
 function cleanCardField(k, v){
   const txt = (x, n) => String(x).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u202A-\u202E\u2066-\u2069]/g, '').slice(0, n).trim();
   if(CARD_TXT[k]) return typeof v === 'string' || typeof v === 'number' ? txt(v, CARD_TXT[k]) : undefined;
   if(k === 'accent') return typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v) ? v : undefined;
-  if(k === 'aiPortrait' || k === 'lifeOff' || k === 'avLive' || k === 'sendPics') return typeof v === 'boolean' ? v : undefined;
+  if(k === 'strictIdentity' || k === 'aiPortrait' || k === 'lifeOff' || k === 'avLive' || k === 'sendPics') return typeof v === 'boolean' ? v : undefined;
   if(k === 'vPitch') return isFinite(+v) ? Math.max(.5, Math.min(2, +v)) : undefined;
   if(v && typeof v === 'object'){   // voce, program, casă: obiecte simple, mici, doar cu text și numere
     const j = JSON.stringify(v, (kk, x) => typeof x === 'string' ? txt(x, 600) : (typeof x === 'number' || typeof x === 'boolean' || x === null || typeof x === 'object') ? x : undefined);
@@ -11265,6 +11288,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     // 9.92: motorul unic: generarea + garanția + finisarea (și pentru editări și pozele împreună)
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && (!peopleIn.self || peopleIn.duo))})
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt});
+    if(c.strictIdentity && c.photo && !duoBoth && !peopleIn && !edited) await verifyStudioPhoto(c, R.blob, shot, busy.signal, sceneOpt);
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
     if(gdiag){ gdiag.tm = {...tm.s, total:performance.now() - tm.t0}; gdiag.rwc = rwCalls.filter(x => x.i > rwC0).map(({i, ...x}) => x); if(gdiag.mdl === 'Klein 9B') gdiag.mdl = kleinLbl(); }   // 13.3: tot, inclusiv pașii de după (garanția, măsurarea, finisarea)
     const k = await saveImg(blob);
@@ -14384,7 +14408,7 @@ const CC_PLACE = {casa:'at home in the living room', pat:'in bed at home, leanin
   parc:'outdoors in a park', cafenea:'sitting in a cafe', masina:'sitting in a parked car', birou:'at the office desk', plaja:'at the beach'};
 const CALL_FRAME_DAYS = 3;
 const callHarness = () => !!(window.__said && !window.__callFrameTest);   // rularea automată a testelor vechi: ca înainte
-function callFrameOf(cc, env){ { const L = libFrameOf(cc, env); if(L) return L; } const f = cc && cc.callFrames && cc.callFrames[env]; return f && f.k && f.ph === cc.photo && f.d != null && f.d <= idMax(cc) ? f.k : null; }   // 14.5: rămâne cât poza de profil e aceeași (înainte: 3 zile)
+function callFrameOf(cc, env){ { const L = libFrameOf(cc, env); if(L && !cc.outfitLock) return L; } const f = cc && cc.callFrames && cc.callFrames[env]; return f && f.k && f.ph === cc.photo && (f.outfit || '') === (cc.outfitLock || '') && f.d != null && f.d <= idMax(cc) ? f.k : null; }
 function callPicsNow(cc, ch){
   if(callHarness()) return ccPlacePics(cc, ch, callPics(cc, ch));
   if(!cc.photo) return [];
@@ -14396,10 +14420,11 @@ function callFrameCan(){ return S.imgProv !== 'none' && aiReady(); }
 async function callFrameMake(cc, ch, env, signal = null, o = {}){
   let w = ch && ch.where && Date.now() - (ch.where.ts || 0) < 6 * 36e5 ? ch.where : {};
   if(o.place) w = {...w, place:o.place, room:''};   // 14.2: camera în care se mută
-  const out = w.outfit || '';
+  const out = cc.outfitLock || w.outfit || '';
   const place = [w.place, w.room].filter(Boolean).join(', ').slice(0, 160) || CC_PLACE[env] || CC_PLACE.casa;
   const shot = `front camera selfie during a video call, the phone held at arm's length, head and shoulders in frame, the face large, sharp and well lit, looking straight into the camera, ${place}${out ? ', wearing ' + out : ''}${w.light ? ', ' + w.light : ''}, natural real moment, ordinary phone front camera photo`;
   const portrait = cc.photo;
+  const wardrobe = cc.outfitLock || '';
   let bl = null, bd = 9;
   for(let t = 0; t < 3; t++){
     const r = await scenePhoto(cc, shot, signal, t ? 'keep exactly the face of the reference: same face shape, eyes, nose, lips, skin and age' : '', {why:'apel'});
@@ -14413,11 +14438,15 @@ async function callFrameMake(cc, ch, env, signal = null, o = {}){
   try{ const R = await finishPerson(cc, {blob:bl, fd:bd < 9 ? bd : null}, shot, signal, {kind:'avatar', tag:'apel'}); bl = R.blob; }catch(e){}
   const finalDistance = (await localFace(bl, cc)).d;
   if(cc.photo !== portrait || finalDistance == null || finalDistance > idMax(cc)) return null;
+  if(cc.strictIdentity && wardrobe){
+    try{ await verifyStudioPhoto(cc, bl, shot, signal, {}); }
+    catch(e){ if(e.name === 'AbortError') throw e; return null; }
+  }
   try{ if(bl.type === 'image/png') bl = await toJpeg(bl, 1024, .9); }catch(e){}
   const k = await saveImg(bl);
-  if(cc.photo !== portrait){ await delImg(k).catch(() => {}); return null; }
+  if(cc.photo !== portrait || (cc.outfitLock || '') !== wardrobe){ await delImg(k).catch(() => {}); return null; }
   const old = cc.callFrames && cc.callFrames[env];
-  cc.callFrames = {...(cc.callFrames || {}), [env]:{k, at:Date.now(), ph:portrait, d:finalDistance}};
+  cc.callFrames = {...(cc.callFrames || {}), [env]:{k, at:Date.now(), ph:portrait, d:finalDistance, outfit:wardrobe}};
   if(old && old.k && old.k !== k){ const set = cc.callClips && cc.callClips[old.k]; if(set){ for(const r of Object.values(set.v || {})) if(r && r.k && !r.reuse) delImg(r.k).catch(() => {}); delete cc.callClips[old.k]; } delImg(old.k).catch(() => {}); }
   await saveChars();
   return k;
@@ -15394,7 +15423,7 @@ function crInit(c){
 }
 function crDrawFrame(){ $$('#edFrame button').forEach(b => b.classList.toggle('on', b.dataset.v === ed.cr.frame)); }
 function crStyleSync(){ const v = crStil(); $$('#edStyle button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); $$('#edLookPresets button').forEach(b => b.classList.toggle('on', b.dataset.look === v)); }   // 9.79: și presetările de sus
-function crBusyUI(on){ $('#edGen4').hidden = !!on; $('#edStop').hidden = !on; $('#edEnrich').disabled = !!on; const g = $('#edAdjGo'); if(g) g.disabled = !!on; const m = $('#edMore'); if(m) m.disabled = !!on; }
+function crBusyUI(on){ $('#edGen1').hidden = $('#edGen4').hidden = !!on; $('#edStop').hidden = !on; $('#edEnrich').disabled = !!on; const g = $('#edAdjGo'); if(g) g.disabled = !!on; const m = $('#edMore'); if(m) m.disabled = !!on; }
 // rulare cu „⏹ Oprește”: un AbortController pe tot lotul
 async function crRun(label, fn){
   const E = ed, R = ed && ed.cr; if(!R || R.busy) return;
@@ -15424,7 +15453,8 @@ function crEnrich(){
     setEdStatus('✓ Descrierea e pe zone. Corectează orice (și corpul), apoi „Generează”.', 'ok');
   });
 }
-function crGenerate(){
+function crGenerate(count = 4){
+  const n = count === 1 ? 1 : 4;
   if(!crGuard()) return;
   const ro = $('#edPrompt').value.trim(), manual = ed.cr.manual && $('#edPromptEn').value.trim();
   if(!crHasZ(ed.cr.z) && ro.length < 8 && !manual){ toast('Scrie întâi cum arată (câteva detalii) sau completează zonele.'); $('#edPrompt').focus(); return; }
@@ -15440,12 +15470,12 @@ function crGenerate(){
       R.en = crCompose(R.parts, R.z); R.enFor = key; $('#edPromptEn').value = R.en;
     }
     if(CR_MINOR.test(R.en)){ setEdStatus('Personajele din Taifas sunt adulte. Corectează vârsta.', 'err'); return; }
-    const frame = R.frame, FR = CR_FRAMES[frame], model = crModel(4, FR.size), run = ++R.run;
+    const frame = R.frame, FR = CR_FRAMES[frame], model = crModel(n, FR.size), run = ++R.run;
     for(const v of R.vars) if(!v.keep && v.url) URL.revokeObjectURL(v.url);
     R.vars = R.vars.filter(v => v.keep);
-    const fresh = [0, 1, 2, 3].map(() => ({id:uid(), st:'gen', frame, prompt:crPrompt(R.en, frame, R.manual ? '' : crFaceMix(R.z)), kind:'nou'}));
+    const fresh = Array.from({length:n}, () => ({id:uid(), st:'gen', frame, prompt:crPrompt(R.en, frame, R.manual ? '' : crFaceMix(R.z)), kind:'nou'}));
     R.vars = fresh.concat(R.vars); R.chosen = R.vars.findIndex(v => v.keep); crRender();
-    setEdStatus(`<span class="spin"></span> Generez 4 variante (${model === 'ancorat' ? 'Fidel · 9B' : 'Eco'})…`);
+    setEdStatus(`<span class="spin"></span> Generez ${n === 1 ? 'o variantă' : '4 variante'} (${model === 'ancorat' ? 'Fidel · 9B' : 'Eco'})…`);
     await Promise.allSettled(fresh.map(v => crMake(E, run, v, () => genImage(v.prompt, null, signal, null, {model, size:FR.size, quiet:true, why:'profil'}))));
     if(signal.aborted) return;
     await crAfterBatch(E, fresh);
@@ -15476,9 +15506,7 @@ async function crAfterBatch(E, list){
   const tie = !!(best && sec && (sec.note ?? -1) === (best.note ?? -1) && ((sec.chk && sec.chk.match) || 0) === ((best.chk && best.chk.match) || 0));   // 14.6
   if(best && best.note != null && !tie) best.best = true;
   crRender();
-  const auto = best && best.best && R.chosen < 0 && S.crAuto !== 'off';
-  setEdStatus(`✓ ${ok.length} ${ok.length === 1 ? 'variantă gata' : 'variante gata'}${best && best.best ? `. ⭐ = nota cea mai bună (${best.note}/100)` + (auto ? ', o aleg eu; poți alege oricând alta' : '') : ''}. Atinge una ca s-o vezi mare.`, 'ok');
-  if(auto){ const i0 = R.vars.indexOf(best); (async () => { for(let i = 0; i < 80 && R.busy; i++) await sleep(250); if(ed === E && R.chosen < 0 && R.vars[i0] === best) crChoose(i0); })(); }   // 11.6 (F3)
+  setEdStatus(`✓ ${ok.length} ${ok.length === 1 ? 'variantă gata' : 'variante gata'}${best && best.best ? `. ⭐ = nota cea mai bună (${best.note}/100)` : ''}. Alege varianta pe care vrei să o folosești.`, 'ok');
 
 }
 // verificarea din telefon (fără cost): o singură persoană, fața clară, corpul în cadru după încadrarea cerută
@@ -15628,22 +15656,21 @@ async function crChoose(i){
     if(own){   // 9.34: poza ta rămâne poza de profil; varianta ajustată devine poza întreagă (reperul de corp)
       E.fullBlob = v.blob; E.fullBox = v.chk && v.chk.box; E.fullTouched = true; E.bodyFull = null; E.ownBody = ''; edIdCard();
       setEdStatus('✓ Aleasă ca poză întreagă. Poza ta rămâne poza de profil; corpul din pozele din chat vine din varianta asta.', 'ok');
-      E.readP = crReadBack(E, v); done = true; return;
+      done = true; return;
     }
     if(v.frame === 'portrait'){ E.photoBlob = v.blob; E.fullBlob = null; E.fullBox = null; }
     else {
       setEdStatus('<span class="spin"></span> Fac poza de profil (portretul) din poza întreagă…');
-      const p = await crPortraitFrom(E, v); if(ed !== E) return;
+      const p = {blob:await crCropPortrait(v.blob, v.chk?.box || null), how:'crop'}; if(ed !== E) return;
       E.photoBlob = p.blob; E.fullBlob = v.blob; E.fullBox = v.chk && v.chk.box;
       setEdStatus(p.how === 'gen' ? '✓ Aleasă. Portretul pentru profil e făcut din ea (aceeași față).' : '✓ Aleasă. Portretul pentru profil e decupat din ea.', 'ok');
     }
     E.aiPortrait = true; E.fullTouched = true; E.angles = null; E.bodyFull = null; E.ownBody = ''; $('#edAngleView').innerHTML = '';
     await renderEdPhoto(); edIdCard();
-    E.readP = crReadBack(E, v);   // descrierea se recitește din poza aleasă (în fundal; salvarea o așteaptă)
+    
     done = true;
   });
-  if(done && ed && S.crAngles !== 'off') crAngles();
-  if(done && ed){ preKitArm(); edPairDraw(); }   // 11.6 (F1, F3)
+  if(done && ed){ storeStudioDraft(); edPairDraw(); }   // 11.6 (F1, F3)
 }
 async function crPortraitFrom(E, v){
   const p = `${stilLead(crStil())}Edit this exact photo into a close-up portrait of the same person: head and shoulders, the face large and sharp in the frame, looking at the camera, natural expression. Keep the same face and identity, the same hairstyle, skin, makeup, clothes and the same place and light. ${STIL_TAG[crStil()]}`;
@@ -15838,7 +15865,7 @@ async function crSave(c){
     const old = c.photoFull;
     if(ed.fullBlob){ c.photoFull = await saveImg(ed.fullBlob); c.fullBox = ed.fullBox || null; if(ed.ownBody) c.fullOwn = true; else delete c.fullOwn; }
     else { delete c.photoFull; delete c.fullBox; }
-    if(old && old !== c.photoFull) await delImg(old).catch(() => {});
+    if(old && old !== c.photoFull) keepStudioReference(c, 'body', old);
     if(c.photoFull && ed.bodyFull) c.bodyFull = {k:c.photoFull, t:ed.bodyFull}; else delete c.bodyFull;
   }
   else if(ed.adopt && c.photoFull && ed.bodyFull) c.bodyFull = {k:c.photoFull, t:ed.bodyFull};
@@ -16131,7 +16158,96 @@ async function lookRevert(c){
 /* ───────── EDITOR ───────── */
 let ed = null; // {id|null, photoBlob|null, photoKey}
 function edModeSet(adv){ $('#vEdit').classList.toggle('ed-advanced', adv); $('#vEdit').classList.toggle('ed-simple', !adv); $('#edMode').textContent = adv ? '✨ Mod simplu' : '⚙️ Avansat'; $('#edMode').setAttribute('aria-pressed', String(adv)); }
-function openEditor(id){
+const STUDIO_FIELDS = ['edName','edTag','edAspect','edPersona','edLook','edStil','edSpeech','edGreet','edCallLang','edPrompt','edPromptEn','edOutfit','edDuoName','edDuoPersona','edDuoAspect','edDuoSpeech','edDuoRel'];
+let studioDraftWrites = Promise.resolve();
+function studioSource(source){
+  ed.source = source;
+  $('#edSource').hidden = source === 'edit';
+  $('#edStudioWork').hidden = !source;
+  $('#edStudioWork').classList.toggle('studio-upload', source === 'upload');
+  $('#edNext').disabled = !source;
+  $('#edCrea').classList.toggle('studio-source-hidden', source === 'upload' && !ownMode());
+  $('#edSource').querySelectorAll('[data-studio]').forEach(button => button.classList.toggle('on',button.dataset.studio === source));
+}
+function storeStudioDraft(){
+  if(!ed || ed.id || ed.restoring || edSaving || !ed.source) return;
+  const snapshot = {
+    fields:Object.fromEntries(STUDIO_FIELDS.map(id => [id,$('#' + id).value])),
+    step:edStep, source:ed.source, photo:ed.photoBlob, full:ed.fullBlob, box:ed.fullBox,
+    ownBody:ed.ownBody, aiPortrait:ed.aiPortrait, fullTouched:ed.fullTouched, strict:$('#edStrict').checked,
+    duo:$('#edDuo').checked, accent:ed.accent, bg:ed.bg, frame:ed.cr?.frame, prepare:$('#edPrepareRefs').checked,
+    zones:ed.cr?.z ? JSON.parse(JSON.stringify(ed.cr.z)) : null, manual:!!ed.cr?.manual
+  };
+  studioDraftWrites = studioDraftWrites.catch(() => {}).then(() => DB.set('studio-draft',snapshot));
+  studioDraftWrites.catch(() => setEdStatus('Ciorna nu a putut fi scrisă în stocarea locală.', 'err'));
+}
+function restoreStudioDraft(d){
+  for(const id of STUDIO_FIELDS) if(typeof d.fields?.[id] === 'string') $('#' + id).value = d.fields[id];
+  Object.assign(ed,{photoBlob:d.photo instanceof Blob ? d.photo : null, fullBlob:d.full instanceof Blob ? d.full : null, fullBox:d.box,
+    fullTouched:!!d.fullTouched, ownBody:d.ownBody, aiPortrait:!!d.aiPortrait, accent:d.accent || '', bg:d.bg || 'clar'});
+  $('#edStrict').checked = d.strict !== false;
+  $('#edPrepareRefs').checked = !!d.prepare;
+  $('#edDuo').checked = !!d.duo; $('#edDuoBox').hidden = !d.duo;
+  studioSource(['upload','describe','surprise'].includes(d.source) ? d.source : 'describe');
+  if(d.frame && CR_FRAMES[d.frame]) ed.cr.frame = d.frame;
+  if(d.zones) ed.cr.z = d.zones;
+  if(d.manual){ ed.cr.manual = true; ed.cr.enFor = crKey(); }
+  crStyleSync(); drawLook(); renderEdPhoto(); edIdCard(); edGo(d.step || 1);
+  setEdStatus('Ciornă reluată.');
+}
+function studioSuggestion(title, entries){
+  const E = ed, fields = entries.filter(([,value]) => typeof value === 'string' && value.trim());
+  if(!fields.length){ setEdStatus('Nu am primit o sugestie de aplicat.'); return; }
+  setEdStatus('Sugestie gata pentru verificare.');
+  confirmSheet(title + '\n' + fields.map(([id,value]) => {
+    const label = document.querySelector('label[for="' + id + '"]')?.textContent.trim() || id;
+    const old = $('#' + id).value.trim();
+    return label + ': ' + (old && old !== value ? '„' + old + '” → ' : '') + '„' + value + '”';
+  }).join('\n'), 'Aplică sugestia', () => {
+    if(ed !== E) return;
+    for(const [id,value] of fields) $('#' + id).value = value;
+    crStyleSync(); drawEdPreview(); storeStudioDraft();
+  });
+  const titleNode = $('.sheet h4'); if(titleNode) titleNode.classList.add('studioSuggestionText');
+}
+function drawStudioReview(){
+  const E = ed, name = $('#edName').value.trim() || 'Personaj fără nume';
+  const source = $('#edPhoto img');
+  const body = E.fullBlob || charById(E.id)?.photoFull;
+  const language = $('#edCallLang').selectedOptions[0]?.textContent || 'Automat';
+  $('#edReview').innerHTML = `<div class="studioPreviewCard">${source?.src ? `<img src="${esc(source.src)}" alt="">` : '<div class="studioEmptyPortrait">Fără portret</div>'}<h3>${esc(name)}</h3><p>${esc($('#edTag').value)}</p></div>
+    <div class="sec"><h3>În chat</h3><p>${esc($('#edGreet').value || 'Prima replică nu este setată.')}</p><h3>În apel</h3><p>${esc(language)}</p></div>
+    <div class="sec"><h3>Repere</h3><p>${E.photoBlob || E.photoKey ? 'Portret ales' : 'Portret lipsă'} · ${body ? 'Corp întreg disponibil' : 'Corp întreg lipsă'} · ${$('#edOutfit').value.trim() ? 'Ținută fixă setată' : 'Ținută liberă'}</p></div>`;
+}
+function studioVoice(){
+  const character = {...(charById(ed.id) || {}), callLang:$('#edCallLang').value, aspect:$('#edAspect').value, look:$('#edLook').value};
+  if(!window.SpeechSynthesisUtterance || !window.speechSynthesis){ toast('Vocea nu este disponibilă pe acest dispozitiv.'); return; }
+  const lang = callSpeechLang({c:character}), voice = callPhoneVoice(lang,character);
+  if(callAmerican(character) && !voice){ toast('Activează o voce English (United States) în setările telefonului.'); return; }
+  const samples = {en:'Hi, it’s good to see you.',es:'Hola, me alegra verte.',fr:'Bonjour, je suis ravi de te voir.',it:'Ciao, che bello vederti.',de:'Hallo, schön dich zu sehen.',ro:'Bună, mă bucur să te văd.'};
+  const u = new SpeechSynthesisUtterance(samples[lang.slice(0,2)] || samples.ro);
+  u.lang = lang; if(voice) u.voice = voice;
+  if(callAmerican(character)) u._strictVoice = true; else u._rc = character;
+  ttsCancel(); ttsPlay(u);
+}
+function studioReferenceHistory(){
+  const E = ed, c = charById(E?.id);
+  const history = c?.studioReferences || [];
+  if(!history.length) return;
+  const panel = openSheet(`<h4>Repere anterioare</h4><div class="crgrid pad">${history.map((ref,i) =>
+    `<button type="button" class="crv" data-studio-ref="${i}"><img data-k="${esc(ref.key)}" data-t="m" alt=""><span>${ref.kind === 'portrait' ? 'Folosește ca portret' : 'Folosește ca reper corp'}</span></button>`).join('')}</div><button type="button" class="btn" data-close>Închide</button>`);
+  hydrate(panel);
+  panel.onclick = async e => {
+    const button = e.target.closest('[data-studio-ref]'); if(!button) return;
+    const ref = history[Number(button.dataset.studioRef)];
+    const image = ref && await DB.get(ref.key).catch(() => null);
+    if(ed !== E || !(image instanceof Blob)){ toast('Reperul nu mai este disponibil.'); return; }
+    if(ref.kind === 'portrait') await onPhotoPicked(image);
+    else await edUseAsBody(image,'separata');
+    closeSheet();
+  };
+}
+async function openEditor(id){
   preKitDrop();   // 11.6 (F1)
   const c = id ? charById(id) : null;
   edLeaveOK = false;
@@ -16140,6 +16256,8 @@ function openEditor(id){
   edModeSet(S.edAdv === 'on'); $('#edPresetStatus').textContent = 'Nu suprascrie câmpurile deja completate.';
   $('#edStart').hidden = !!c; ed.preset = '';   // 9.79: „Creează rapid” doar la un personaj nou, în pasul 1 (derulează cu formularul)
   $$('#edPersonalityPresets button').forEach(b => b.classList.remove('on')); $$('#edLookPresets button').forEach(b => b.classList.toggle('on', (c?.stil || 'photo') === b.dataset.look));
+  $('#edOutfit').value = c?.outfitLock || ''; $('#edStrict').checked = c ? !!c.strictIdentity : true;
+  $('#edPrepareRefs').checked = false;
   $('#edName').value = c?.name || ''; $('#edTag').value = c?.tag || '';
   $('#edAspect').value = c?.aspect || ''; $('#edPersona').value = c?.persona || '';
   duoFill(c);   // 9.63
@@ -16148,25 +16266,37 @@ function openEditor(id){
   $('#edLook').value = c?.look || ''; $('#edStil').value = c?.stil || 'photo';
   ed.accent = c?.accent || ''; ed.bg = c?.bg || 'clar'; drawLook();
   $('#edDelWrap').hidden = !c;
+  $('#edReferenceHistory').hidden = !c?.studioReferences?.length;
   $('#edNames').innerHTML = '';
+  const E = ed; E.restoring = true;
   edGo(1);
   setEdStatus('');
   renderEdPhoto();
-  crInit(c);   // 9.24
+  crInit(c);
   show('vEdit');
+  studioSource(c ? 'edit' : '');
+  if(!c){
+    await studioDraftWrites.catch(() => {});
+    const saved = await DB.get('studio-draft').catch(() => null);
+    if(ed !== E) return;
+    if(saved) restoreStudioDraft(saved);
+  }
+  E.restoring = false;
   $('#vEdit .scroll').scrollTop = 0;
 }
 let edStep = 1;
 function edGo(n){
-  edStep = Math.max(1, Math.min(3, n));
-  if(edStep >= 2 && ed && !ed.id && ed.photoBlob) preKitArm(1500);   // 11.6 (F1)
+  edStep = Math.max(1, Math.min(4, n));
+
   $$('#vEdit .step').forEach(x => x.hidden = +x.dataset.step !== edStep);
   $$('#edSteps [data-s]').forEach(b => { const k = +b.dataset.s; b.classList.toggle('on', k === edStep); b.classList.toggle('done', k < edStep); });
   $('#edBack').style.visibility = edStep > 1 ? 'visible' : 'hidden';
-  $('#edNext').textContent = edStep < 3 ? 'Continuă ›' : (ed && ed.id ? 'Salvează' : 'Creează personajul');
+  $('#edNext').textContent = edStep < 4 ? 'Continuă ›' : (ed && ed.id ? 'Salvează' : 'Creează personajul');
   $('#edSave').hidden = !(ed && ed.id);
   $('#edScroll').scrollTop = 0;
   if(edStep === 3) drawEdPreview();
+  if(edStep === 4) drawStudioReview();
+  storeStudioDraft();
 }
 async function drawEdPreview(){
   const box = $('#edPrev'); if(!box || !ed) return;
@@ -16201,33 +16331,30 @@ function crReset(){ if(!ed) return; ed.fullTouched = true; ed.fullBlob = null; e
 function setEdStatus(t, cls = ''){ const s = $('#edStatus'); s.className = 'status ' + cls; s.innerHTML = t; }
 async function edPhotoBlob(){ return ed.photoBlob || (ed.photoKey ? await DB.get(ed.photoKey) : null); }
 async function onPhotoPicked(file){
-  if(!file) return;
-  try{ ed.photoBlob = await toJpeg(file, 2048, .92); ed.aiPortrait = false; crReset(); ed.ownBody = ''; ed.photoChk = null; }catch(e){ setEdStatus('Nu pot citi poza.', 'err'); return; }   // 9.88: 2048 px (fața din poza întreagă rămâne clară)
-  if(ed.cr){ ed.cr.vars = ed.cr.vars.filter(x => !x.own); ed.cr.chosen = -1; crRender(); }   // 9.34: poza ta veche nu mai e baza ajustărilor
+  const E = ed; if(!file || !E) return;
+  let photo;
+  try{ photo = await toJpeg(file, 2048, .92); }catch(e){ setEdStatus('Nu pot citi poza.', 'err'); return; }
+  if(ed !== E) return;
+  E.photoBlob = photo; E.aiPortrait = false; E.photoChk = null; crReset();
   await renderEdPhoto();
-  // 9.88 (3): se vede corpul în poza ta → ea e modelul de corp (exact, nu generat)
-  if(ed && S.imgProv !== 'none'){ const E = ed, pb = ed.photoBlob, v = await bodyInPhoto(pb).catch(() => ({})); if(ed === E && ed.photoBlob === pb && v.body) await edUseAsBody(pb, 'aceeasi'); }
-  await edPhotoCheck();   // 11.6 (F2)
-  edIdCard();
-  await runDescribe();
-  if(ed && ed.cr && ownMode()) crReadPhoto(true);   // 9.34: zonele și corpul, din poza ta
-  if(ed){ preKitArm(); edPairDraw(); }   // 11.6 (F1, F3)
+  if(ed !== E) return;
+  studioSource(E.source || (E.id ? 'edit' : 'upload'));
+  edIdCard(); edPairDraw(); storeStudioDraft();
 }
 async function runDescribe(){
-  const b = await edPhotoBlob(); if(!b) return;
+  const E = ed; if(!E) return;
+  const b = await edPhotoBlob(); if(!b || ed !== E) return;
   if(!aiReady()){ setEdStatus('Poza e pusă. Pentru descrierea automată, adaugă cheia în Setări.', 'err'); return; }
   setEdStatus('<span class="spin"></span> Analizez poza…');
   $('#edRedesc').disabled = true;
   try{
-    const E = ed;
     const d = await describePhoto(b);
     if(ed !== E || $('#vEdit').hidden) return;
-    $('#edAspect').value = d.aspect; $('#edLook').value = d.look; $('#edStil').value = d.stil;
-    if(d.names.length){
-      if(!$('#edName').value.trim()){ $('#edName').value = d.names[0]; $('#edTitle').textContent = d.names[0]; }
-      drawNames(d.names);
-    }
-    setEdStatus('✓ Descriere făcută din poză' + (d.names.length ? ', cu nume propuse' : '') + '. Poți corecta orice.', 'ok');
+    studioSuggestion('Analiza portretului', [
+      ['edAspect', d.aspect], ['edLook', d.look], ['edStil', d.stil],
+      ['edOutfit', $('#edOutfit').value.trim() ? '' : d.outfit],
+      ['edName', $('#edName').value.trim() ? '' : d.names[0]]
+    ]);
   }catch(e){ setEdStatus('Descrierea a eșuat: ' + esc(e.message), 'err'); }
   $('#edRedesc').disabled = false;
 }
@@ -16267,6 +16394,7 @@ function surpriseSheet(){
   $('#spGo').onclick = () => { closeSheet(); runSurprise(gen, vibe, stil); };
 }
 async function runSurprise(gen, vibe, stil){
+  const E = ed;
   const vibeTxt = (VIBES.find(x => x[0] === vibe) || ['', ''])[1].replace(/^\S+\s/, '');
   setEdStatus('<span class="spin"></span> Inventez personajul…');
   $('#edSurprise').disabled = true;
@@ -16277,19 +16405,15 @@ Gen: ${gen === 'oricare' ? 'alege tu' : gen}. Atmosferă: ${vibe === 'oricare' ?
 Personajul e adult (peste 25 de ani), cu o meserie sau o ocupație concretă, un trecut, obiceiuri și o ciudățenie simpatică. Fără persoane reale sau celebre.
 Răspunde STRICT cu JSON:
 {"name":"prenume","nume":["încă 3 prenume alternative"],"tag":"o frază scurtă și atrăgătoare pentru card, max 90 de caractere","persona":"personalitate, trecut, ce-i place, cum se poartă, relația cu interlocutorul; 5-8 propoziții, la persoana a II-a (Ești…)","aspect":"înfățișarea, 4-6 propoziții: vârstă, față, ochi, păr, constituție, stil vestimentar","look":"same appearance in English as comma-separated tags for an image generator, max 60 words, face and hair first","speech":"stilul de vorbire în câteva cuvinte","greet":"prima replică, 1-3 propoziții, cu o acțiune între *asteriscuri*, care deschide o situație interesantă"}`}], {max:1500});
+    if(ed !== E || $('#vEdit').hidden) return;
     const j = parseJSON(out);
     const t = k => faraLiniute(String(j[k] || '').trim());
-    $('#edName').value = t('name'); $('#edTitle').textContent = t('name') || 'Personaj nou';
-    $('#edTag').value = t('tag'); $('#edPersona').value = t('persona'); $('#edAspect').value = t('aspect');
-    $('#edSpeech').value = t('speech'); $('#edGreet').value = t('greet');
-    $('#edLook').value = String(j.look || '').trim(); $('#edStil').value = stil;
-    drawNames([t('name'), ...(Array.isArray(j.nume) ? j.nume : []).map(x => String(x).trim())].filter(Boolean).slice(0, 4));
-    if(S.imgProv !== 'none'){   // 9.84: portretul prin creator (4 variante, verificate), nu din generatorul vechi cu o singură poză
-      $('#edPrompt').value = t('aspect'); $('#edStil').value = stil; crStyleSync(); edGo(1); crGenerate(); }
-    else setEdStatus('✓ Personaj inventat. Pornește pozele din Setări ca să-i generezi și portretul.', 'ok');
-    if(navigator.vibrate) try{ navigator.vibrate(15); }catch(_){}
+    studioSuggestion('Personaj surpriză', [
+      ['edName',t('name')], ['edTag',t('tag')], ['edPersona',t('persona')], ['edAspect',t('aspect')],
+      ['edSpeech',t('speech')], ['edGreet',t('greet')], ['edLook',t('look')], ['edStil',stil], ['edPrompt',t('aspect')]
+    ]);
   }catch(e){ setEdStatus('N-a mers: ' + esc(e.message), 'err'); }
-  $('#edSurprise').disabled = false;
+  finally{ $('#edSurprise').disabled = false; }
 }
 async function runVerify(){
   const b = await edPhotoBlob(); if(!b){ toast('Urcă întâi o poză.'); return; }
@@ -16315,20 +16439,23 @@ async function runVerify(){
 }
 async function runDraft(){
   if(!aiReady()){ toast('Adaugă cheia în Setări.'); return; }
+  const E = ed;
   const btn = $('#edDraft'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>';
   try{
     const j = await draftCharacter({name:$('#edName').value.trim(), tag:$('#edTag').value.trim(), aspect:$('#edAspect').value.trim(), persona:$('#edPersona').value.trim()});
-    if(!$('#edName').value.trim() && j.name) $('#edName').value = j.name;
-    if(!$('#edTag').value.trim() && j.tag) $('#edTag').value = j.tag;
-    if(j.persona) $('#edPersona').value = j.persona;
-    if(!$('#edSpeech').value.trim() && j.speech) $('#edSpeech').value = j.speech;
-    if(!$('#edGreet').value.trim() && j.greet) $('#edGreet').value = j.greet;
-    if(!$('#edAspect').value.trim() && j.aspect && j.aspect !== 'lasă gol') $('#edAspect').value = j.aspect;
-    toast('Gata. Ajustează ce vrei.');
+    if(ed !== E || $('#vEdit').hidden) return;
+    studioSuggestion('Propunerea AI', [
+      ['edPersona', j.persona], ['edName', j.name], ['edTag', j.tag],
+      ['edSpeech', j.speech], ['edGreet', j.greet], ['edAspect', j.aspect === 'lasă gol' ? '' : j.aspect]
+    ]);
   }catch(e){ toast('Nu a mers: ' + e.message, 4000); }
-  btn.disabled = false; btn.textContent = '✨ Completează';
+  finally{ btn.disabled = false; btn.textContent = '✨ Completează'; }
 }
 let edSaving = false;
+function keepStudioReference(c, kind, key){
+  const history = c.studioReferences ||= [];
+  if(!history.some(item => item.kind === kind && item.key === key)) history.push({kind,key});
+}
 // 9.63: panoul „👯 Două personaje” din editor
 const DUO_HINT = /(?<!\p{L})(două personaje|doua personaje|doi |două |doua |amândou|amandou|amândoi|amandoi|gemene|gemeni|surori|surorile|frați|frati|frații|fratii|colege de apartament|colegi de apartament|cuplu|prietene cele mai bune|cele mai bune prietene|el și ea|ea și el)(?!\p{L})/iu;
 function duoFill(c){
@@ -16378,7 +16505,7 @@ async function saveEditor(){
 }
 async function saveEditorNow(){
   let name = $('#edName').value.trim();
-  if(!name){ toast('Pune un nume.'); $('#edName').focus(); return; }
+  if(!name){ edGo(1); toast('Pune un nume.'); $('#edName').focus(); return; }
   const duo = duoRead(); if(duo === false) return;   // 9.63
   let c = ed.id ? charById(ed.id) : null;
   const isNew = !c;
@@ -16387,7 +16514,7 @@ async function saveEditorNow(){
   if(isNew){ if(P){ preKit = null; clearTimeout(preKitT); c = P.c; c.created = Date.now(); try{ localStorage.removeItem('taifas-prekit'); }catch(e){} } else c = {id:uid(), created:Date.now()}; chars.push(c); }
   ed.adopt = P;
   if(ed.photoBlob && P) c.aiPortrait = !!ed.aiPortrait;
-  else if(ed.photoBlob){ const old = c.photo; c.photo = await saveImg(ed.photoBlob); if(old) await delPhotoIfUnused(c, old); c.aiPortrait = !!ed.aiPortrait;
+  else if(ed.photoBlob){ const old = c.photo; c.photo = await saveImg(ed.photoBlob); if(old) keepStudioReference(c, 'portrait', old); c.aiPortrait = !!ed.aiPortrait;
     // 9.26: avatarele vii și unghiurile făcute automat erau ale feței vechi: se scot (altfel avatarul și pozele din chat arătau altă persoană)
     if(old && c.avs){ for(const k of Object.values(c.avs)) await delImg(k).catch(() => {}); delete c.avs; c.avLive = false; }
     if(old && c.avClips){ for(const x of Object.values(c.avClips)) if(x && x.k) await delImg(x.k).catch(() => {}); delete c.avClips; }   // 12.3
@@ -16396,7 +16523,7 @@ async function saveEditorNow(){
   await crSave(c);   // 9.24: poza întreagă, corpul, unghiurile, descrierea ta
   const oldGreet = c.greet;
   Object.assign(c, {name, tag:$('#edTag').value.trim(), aspect:$('#edAspect').value.trim(), persona:$('#edPersona').value.trim(),
-    callLang:$('#edCallLang').value, speech:$('#edSpeech').value.trim(), greet:$('#edGreet').value.trim(), look:$('#edLook').value.trim(), stil:$('#edStil').value,
+    outfitLock:$('#edOutfit').value.trim(), strictIdentity:$('#edStrict').checked, callLang:$('#edCallLang').value, speech:$('#edSpeech').value.trim(), greet:$('#edGreet').value.trim(), look:$('#edLook').value.trim(), stil:$('#edStil').value,
     accent:ed.accent || '', bg:ed.bg || 'clar'});
   if(duo){ const o = c.duo || {}; c.duo = {...o, ...duo, a:{...(o.a || {}), ...duo.a}, b:o.bRef ? {...(o.b || {}), ...duo.b} : {...(o.b || {}), ...duo.b}}; duoFix(c); c.name = duo.a.name + ' & ' + duo.b.name; groups.forEach(g => { if(g.members.includes(c.id)) g.members = g.members.filter(x => x !== c.id); }); saveGroups(); }   // 9.63
   else if(c.duo){ c.duo.on = false; }
@@ -16406,9 +16533,12 @@ async function saveEditorNow(){
     const key = chatKey(c.id, c.thread), ch = await DB.get(key);
     if(ch && ch.msgs.length <= 1){ ch.msgs = c.greet ? [greetMsg(c)] : []; await DB.set(key, ch); }
   }
-  const fromChat = ed.fromChat, adopt = ed.adopt; ed = null;
+  const prepare = $('#edPrepareRefs').checked;
+  const fromChat = ed.fromChat; ed = null;
+  if(isNew){ await studioDraftWrites.catch(() => {}); await DB.del('studio-draft').catch(() => {}); }
+  if(prepare && c.photo && S.imgProv === 'worker') kitEnsure(c,{gen:true,toast:true,delay:200});
   // 9.84: fidelitatea se pregătește de la creare: poza întreagă (dacă lipsește), apoi fișa de identitate, în fundal
-  if(c.photo && S.imgProv === 'worker'){ if(adopt && !adopt.done) adopt.p.then(() => kitEnsure(c, {gen:true, toast:true, delay:500})); else kitEnsure(c, {gen:true, toast:true, delay:2500}); }   // 11.6 (F1)   // 9.92: pachetul de identitate (poza întreagă, fișele, măsurătorile), în fundal
+   // 11.6 (F1)   // 9.92: pachetul de identitate (poza întreagă, fișele, măsurătorile), în fundal
   if(fromChat){ history.back(); return; }      // popstate redeschide conversația, actualizată
   history.replaceState({v:'vChat'}, '');
   openChat(c.id, false);
@@ -16881,6 +17011,7 @@ async function exportAll(share){
   toast('Pregătesc backup-ul…');
   const out = {app:'taifas2', v:APP_VER, date:new Date().toISOString(), data:{}};
   for(const k of await DB.keys()){
+    if(k === 'studio-draft') continue;
     let v = await DB.get(k);
     if(String(k).startsWith('aud:')) continue;   // înregistrările vocale nu intră în backup (se refac la nevoie)
     if(/^th[msxyzf]:/.test(String(k))) continue;      // 9.13: nici miniaturile pozelor (se refac singure); 9.87: nici pozele mărite 2×
@@ -16982,7 +17113,7 @@ function bind(){
   $('#setList').addEventListener('click', e => { const r = e.target.closest('[data-p]'); if(r) openSetPanel(r.dataset.p); });
   $('#edSteps').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if(b) edGo(+b.dataset.s); });
   $('#edBack').onclick = () => edGo(edStep - 1);
-  $('#edNext').onclick = () => edStep < 3 ? edGo(edStep + 1) : saveEditor();
+  $('#edNext').onclick = () => edStep < 4 ? edGo(edStep + 1) : saveEditor();
   $('#edGreet').addEventListener('input', drawEdPreview);
   $('#edName').addEventListener('input', drawEdPreview);
   $('#vHome').addEventListener('click', e => {
@@ -17140,6 +17271,34 @@ function bind(){
     if(missing.length) toast('✨ Completare rapidă gata');
   };
   // editor
+  $('#edSource').onclick = e => {
+    const button = e.target.closest('[data-studio]'); if(!button || !ed) return;
+    if(button.dataset.studio === 'import'){ $('#stCardFile').click(); return; }
+    studioSource(button.dataset.studio);
+    if(ed.source === 'surprise') surpriseSheet();
+    storeStudioDraft();
+  };
+  $('#vEdit').addEventListener('input', storeStudioDraft);
+  $('#vEdit').addEventListener('change', storeStudioDraft);
+  $('#edReferenceHistory').onclick = studioReferenceHistory;
+  $('#edUploadBody').onclick = () => $('#edBodyFile').click();
+  $('#edBodyFile').onchange = async e => {
+    const file = e.target.files[0], E = ed; e.target.value = '';
+    if(!file || !E) return;
+    try{
+      const body = await toJpeg(file,2048,.92);
+      if(ed !== E) return;
+      await edUseAsBody(body,'separata');
+      storeStudioDraft();
+    }catch(error){ if(ed === E) setEdStatus('Nu pot folosi poza întreagă.', 'err'); }
+  };
+  $('#edVoiceSample').onclick = studioVoice;
+  $('#edUseBody').onclick = async () => {
+    const E = ed, b = await edPhotoBlob();
+    if(ed !== E || !b){ toast('Alege întâi un portret care arată corpul întreg.'); return; }
+    await edUseAsBody(b,'aceeasi'); storeStudioDraft();
+  };
+  $('#edAnalyze').onclick = runDescribe;
   $('#edPhoto').onclick = () => $('#edFile').click();
   $('#edFile').onchange = e => { onPhotoPicked(e.target.files[0]); e.target.value = ''; };
   $('#edRedesc').onclick = runDescribe;
@@ -17147,7 +17306,13 @@ function bind(){
   $('#edDraft').onclick = runDraft;
   $('#edGen').onclick = () => { if(!$('#edPrompt').value.trim() && $('#edAspect').value.trim()) $('#edPrompt').value = $('#edAspect').value.trim(); edGo(1); setTimeout(() => $('#edCrea').scrollIntoView({block:'start', behavior:'smooth'}), 60); };   // 9.25: un singur loc pentru poză
   // 9.24–9.25: personajul din descriere (poza întreagă)
-  $('#edGen4').onclick = crGenerate;
+  const studioGenerate = n => {
+    const frame = CR_FRAMES[ed.cr.frame], model = crModel(n,frame.size);
+    const estimate = rwFor(model) ? ' Estimarea pentru variantele de bază este ' + usd4(rwPer() * n) + '. Verificările și corecțiile pot adăuga cost.' : '';
+    confirmSheet((n === 1 ? 'Generezi o variantă.' : 'Generezi patru variante.') + estimate, 'Generează', () => crGenerate(n));
+  };
+  $('#edGen4').onclick = () => studioGenerate(4);
+  $('#edGen1').onclick = () => studioGenerate(1);
   $('#edStop').onclick = crStop;
   $('#edEnrich').onclick = crEnrich;
   $('#edQuick').onclick = e => { const b = e.target.closest('[data-q]'); if(!b) return; const t = $('#edPrompt'); t.value = (t.value.trim() ? t.value.trimEnd() + (/[,.]$/.test(t.value.trim()) ? ' ' : ', ') : '') + b.dataset.q; t.focus(); t.setSelectionRange(t.value.length, t.value.length); };
