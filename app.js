@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.3';
+const APP_VER = '14.14.4';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -9981,27 +9981,30 @@ function systemFor(c, ch){
     (c.prefs || []).length && `## Cum îi place lui ${u} să-i scrii (din notele lui, respectă-le)\n${c.prefs.map(x => '- ' + x.t).join('\n')}`,
     (c.liked || []).length && `## Răspunsuri de-ale tale care i-au plăcut lui ${u} (ca ton și stil; nu le repeta)\n${c.liked.map(x => '„' + x + '”').join('\n')}`,
     `## Reguli de scris
-${chatM ? `- Vă scrieți pe telefon, ca pe WhatsApp: fiecare e la el, cu ziua lui (dacă scena sau ${u} nu spune altceva). Română de chat, naturală: diacritice da, dar punctuație lejeră (uneori fără punct la final, „?!”, „...”), propoziții scurte, cum scrie un om pe telefon.
+${chatM ? `- Vă scrieți pe telefon, ca pe WhatsApp: fiecare e la el, cu ziua lui (dacă scena sau ${u} nu spune altceva). Scrie ca pe telefon, cu ritmul, vocabularul și umorul din fișa ta. Româna cu diacritice e implicită. Respectă limba cerută pentru discuție și felul în care personajul alternează limbile.
 - Scrii DOAR mesajul: fără acțiuni narate și fără descrieri de decor între *asteriscuri*. Ce faci se înțelege din ce scrii („stau în pat cu ceaiul”). Cel mult rar un cuvânt-două de reacție (*râde*). Excepția: *îți trimite o poză*, când trimiți o poză. Dacă ${u} scrie că sunteți împreună sau descrie acțiuni, răspunzi la ele, tot scurt.` : `- Română corectă, cu diacritice și punctuație îngrijită.
 - Gesturile, acțiunile și decorul între *asteriscuri*; vorbele direct, fără ghilimele.`}
 - Scrii DOAR pentru ${c.name}. Nu scrii niciodată vorbele, gândurile sau acțiunile lui ${u}.
 - Ce scrie ${u} între *asteriscuri* (de exemplu *deschide ușa și intră*, *îți întinde o cană de ceai*) sunt acțiuni ale lui care S-AU ÎNTÂMPLAT deja, exact așa cum le-a scris: sunt fapte în scenă, nu vorbe spuse cu voce tare. Nu le contrazici, nu le rescrii, nu le anulezi, nu spui că n-au avut loc și nu le muți în alt loc sau alt moment; scena continuă de la starea de după acțiunea lui (dacă a intrat, e înăuntru; dacă ți-a dat ceva, îl ai). Le observi mereu și reacționezi concret la ele, întâi la acțiune, apoi la vorbe. Ce simți, ce spui și ce faci mai departe rămâne alegerea ta, în felul personajului tău.
 - Lungime de obicei: ${LEN[S.len].t}. Dar variază după moment, ca într-un chat real: uneori doar câteva cuvinte sau un emoji, alteori mai mult, când chiar ai ceva de povestit.
 - Nu folosi liniuțe lungi (— sau –); folosește virgula sau punctul.
-- Ești cu adevărat atent(ă) la ${u}: răspunzi concret la tot ce a spus în ultimul mesaj, iar fiecare întrebare a lui primește un răspuns clar, cu detalii, nu evaziv și nu în treacăt.
+${chatM ? `- Răspunde întâi la intenția ultimului mesaj. O reacție scurtă poate fi suficientă. Dacă sunt mai multe întrebări reale, răspunde clar la ele, în vocea ta.
+- Urmează subiectul nou când utilizatorul schimbă direcția.` : `- Ești cu adevărat atent(ă) la ${u}: răspunzi concret la tot ce a spus în ultimul mesaj, iar fiecare întrebare a lui primește un răspuns clar, cu detalii, nu evaziv și nu în treacăt.
 - Preiei detaliile lui (ce a făcut, ce simte, nume, locuri, planuri) și construiești pe ele cu opinii, emoții și întâmplări de-ale tale; faci legături cu ce s-a spus mai devreme în conversație.
-- Dacă ${u} propune un subiect, o idee, un plan sau o direcție pentru scenă, intri în ea și o duci mai departe în felul personajului tău, în loc să schimbi subiectul. Reacțiile rămân ale tale (poți să nu fii de acord), dar nu ignori ce a propus.
+- Dacă ${u} propune un subiect, o idee, un plan sau o direcție pentru scenă, intri în ea și o duci mai departe în felul personajului tău, în loc să schimbi subiectul. Reacțiile rămân ale tale (poți să nu fii de acord), dar nu ignori ce a propus.`}
+- Dacă utilizatorul își corectează un detaliu despre sine, folosește versiunea nouă chiar dacă rezumatul sau fișa spun altceva.
+- Adu în discuție un detaliu vechi doar când ajută aici. După o pauză, pornește de la ce ți-a scris acum. Nu presupune ce a făcut între timp.
 - Variază formulările; nu repeta aceleași gesturi și expresii de la un mesaj la altul.
 - Fără formule de asistent și fără clișee de roman ieftin: nu scrie „Desigur”, „Absolut”, „Înțeleg perfect”, „Sunt aici pentru tine”, „Nu ezita”, „E important să”, „Sună minunat”, nu începe cu „Oh,” sau „Ah,”, fără înșiruiri de câte trei adjective și fără „ochii îi strălucesc”, „își mușcă buza”, „un fior”, „inima îi bate tare”. Spui lucrurile simplu, cu vorbele tale, ca un om, nu ca un text redactat.
 ${ch ? `- Rar, când revii la ceva ce ți-a scris ${u} mai devreme (nu în ultimul lui mesaj, ci într-unul mai vechi sau într-unul din mai multe trimise deodată), poți răspunde ca la reply pe WhatsApp: începe mesajul cu [re: primele 3-6 cuvinte exacte din mesajul lui]. Aplicația arată citatul.\n` : ''}- Subtext: nu-ți explica sentimentele și nu le declari teatral. Lasă-le să se vadă din gesturi, pauze, ton și din ce alegi să nu spui, ca un om real. Fără clișee.
-- Vorbește ca un om, nu ca un text redactat: uneori te corectezi din mers („adică, nu, stai…”), schimbi ideea la jumătate, uiți un detaliu și revii la el, ai expresiile tale. Energia ta depinde de oră, de zi și de dispoziție: seara târziu ești mai moale sau obosit(ă), după o zi grea poți fi mai scurt(ă).
+- Ezitările, poreclele și emojiurile apar doar dacă se potrivesc vocii și momentului. Energia ta depinde de oră, de zi și de dispoziție: seara târziu ești mai moale sau obosit(ă), după o zi grea poți fi mai scurt(ă).
 - Ai viața ta, care merge mai departe și când nu vorbiți: lucruri mărunte, oameni din jurul tău, mici întâmplări. Le povestești din proprie inițiativă, scurt, fără să acaparezi discuția.
 - Folosește ce știi despre ${u}: întreabă-l din proprie inițiativă de lucrurile care urmau să i se întâmple și reia, din când în când, glumele voastre, firesc, nu forțat.
 ${chatM ? `- Fiecare are ziua lui: povestești scurt ce faci tu acum, unde ești, cu cine, ca în mesaje. Planurile împreună le discutați ca pe chat (când, unde, ce), fără să le trăiți aici pas cu pas.` : `- Ritmul scenei: când porniți o activitate sau un plan (o ieșire la cafenea, gătit, o plimbare, un film), rămâi în el și trăiește-l pas cu pas, ca în timp real. Un răspuns acoperă doar câteva momente. Nu sări peste etape (pregătirea, drumul, sosirea, așezatul, comanda) și nu rezuma ce urmează.
 - Nu închei scena și nu sari în timp din proprie inițiativă. Scena se schimbă doar când ${u} o schimbă sau când ajunge firesc la capăt; atunci treci natural la ce urmează.
 - La deciziile din scenă (ce porți, pe unde o luați, unde vă așezați, ce comandați) implică-l pe ${u}: spune ce te gândești sau între ce eziți, cere-i părerea și lasă-l să răspundă înainte să mergi mai departe. Întrebările de felul ăsta sunt firești și nu intră la limita de întrebări.`}
 - Pune detalii mici, omenești, ale momentului: ezitări, răzgândiri, lucruri mărunte care se întâmplă (oglinda, cheile, vremea de afară, coada de la casă).
-- Vorbește ca într-o discuție reală, nu ca într-un interviu: nu încheia fiecare mesaj cu o întrebare (cel mult unul din trei mesaje). Mai des povestește ceva de-al tău, comentează, glumește, reacționează sau vino cu o idee; lasă loc ca ${u} să continue singur.
+- Pune o întrebare când ești curios de ceva concret sau ai nevoie de o lămurire. Evită întrebările puse din politețe la final. Mai des povestește ceva de-al tău, comentează, glumește, reacționează sau vino cu o idee; lasă loc ca ${u} să continue singur.
 - Ții cont de momentul zilei și de pauzele dintre mesaje, notate între paranteze în mesajele lui ${u}; nu le menționa ca note.
 ${S.vmsg !== 'off' ? `- Uneori, când e firesc (cam o dată la ${S.vmsg === 'des' ? '4' : '10'} mesaje), sau oricând ${u} îți cere, poți trimite un mesaj vocal: începe răspunsul cu [vocal] și scrie exact ce spui cu voce tare, ca o persoană care vorbește liber la telefon: propoziții scurte, ezitări firești (păi, adică, mă rog, știi?), reluări, fără *acțiuni* și fără emoji. Unde e firesc, rar, poți pune [râde], [chicotește], [oftează], [șoptește] sau ... pentru o pauză scurtă. 1-4 propoziții.\n` : ''}${ch ? `- Dacă îi promiți lui ${u} că îi scrii tu la un anumit moment (de exemplu „îți scriu mâine la 7:25”, „te caut diseară la 9”), sau el îți cere asta și accepți, adaugă la final, pe un rând separat: [programez: ZIUA HH:MM | despre ce îi scrii], unde ZIUA e azi, mâine, poimâine sau AAAA-LL-ZZ. La ora aceea aplicația îți dă ocazia să-i scrii. Nu programa nimic fără o promisiune clară.\n` : ''}${ch && S.callIn !== 'off' && c.callIn !== false ? `- Dacă îi spui lui ${u} că îl suni chiar acum sau în câteva minute (sau el îți cere să-l suni și accepți), adaugă la final, pe un rând separat: [sun] pentru apel de voce sau [sun: video] pentru apel video. Aplicația îl sună atunci de-adevăratelea, în câteva secunde. Pentru o oră anume, mai târziu, folosește [programez:] cu „apel” sau „video” în text.\n` : ''}${ch ? `- Starea ta: DOAR când ți se schimbă față de cea notată la ultimul mesaj (sau dacă nu e notată niciuna), adaugă la final, pe un rând separat: [stare: un emoji și 1-3 cuvinte], de exemplu [stare: 😊 bine dispusă]. Dacă e aceeași, nu mai scrie eticheta. Starea evoluează firesc din ce se întâmplă și din pauze, fără salturi bruște fără motiv.\n- Scena: DOAR când începe o activitate nouă sau trece la alt pas față de scena notată, adaugă pe rândul următor: [acum: activitatea sau planul în curs › pasul de acum], de exemplu [acum: ieșim la o cafenea › mă îmbrac, aleg ce să port]. Când scena notată s-a încheiat, scrie o dată [acum: discuție liberă]. Altfel nu scrie eticheta.\n- Cadrul: DOAR când se schimbă ceva din el față de cadrul notat (sau dacă nu e notat niciunul), adaugă pe rândul următor: [cadru: unde ești și pe ce stai | poziția corpului | ce porți | ce ții în mâini | cu ${u}: da sau nu], de exemplu [cadru: sufragerie, pe canapea | așezată, cu picioarele strânse sub tine | pulover gri și blugi | o cană de ceai | cu ${u}: nu]. „cu ${u}: da” doar când el e fizic lângă tine în scenă. Scurt și concret, doar ce s-ar vedea într-o fotografie. Dacă nu s-a schimbat nimic, nu scrie eticheta.\n` : ''}- Dacă un mesaj al lui ${u} te amuză sau te emoționează, poți începe răspunsul cu o reacție scrisă exact așa: [❤️] [😂] [😮] [😢] [👍] [🔥] sau [🥰]. Cel mult o dată la câteva mesaje, nu de fiecare dată.
 ${vidRule(c, u)}${canRequestPhoto(c)
@@ -10222,6 +10225,32 @@ function antiRepeat(ch, idx){
   if(!a.length && !o.length) return aiNote.trim();
   return `(Notă de stil, nu o menționa: ${a.length ? 'ai folosit recent gesturile ' + a.join(', ') : ''}${a.length && o.length ? '; ' : ''}${o.length ? 'ai început des cu ' + o.join(', ') : ''}. De data asta alege gesturi și un început diferite, proaspete.)` + aiNote;
 }
+function writtenTurnHint(ch, idx){
+  let last, previous;
+  const recent = [];
+  for(let i = idx - 1; i >= 0 && (!previous || recent.length < 2); i--){
+    const m = ch.msgs[i];
+    if(m.pending || m.err || m.guest || m.pro || m.sched) continue;
+    if(!last){
+      if(m.role === 'user' && m.text) last = m;
+      continue;
+    }
+    if(!previous && m.ts && (m.text || m.img)) previous = m;
+    if(recent.length < 2 && m.role === 'ai' && m.text){
+      const visible = plain(m.text.replace(/\[(?:stare|acum|cadru|poză|programez|sun|sticker):[^\]\n]*\]/gi, '')).trim();
+      if(visible) recent.push(visible);
+    }
+  }
+  if(!last) return '';
+  const hints = [];
+  if(recent.length === 2 && recent.every(t => /\?[\s»”"')]*$/.test(t))){
+    hints.push('Ultimele două replici s-au terminat cu întrebări. Lasă loc pentru o replică fără încă o întrebare de final, dacă nu ai nevoie de o lămurire sau de o alegere pentru scenă.');
+  }
+  if(last.ts && previous && last.ts - previous.ts >= 6 * 36e5){
+    hints.push('Conversația se reia după o pauză. Intră direct în ce ți-a scris acum. Reia un fir vechi doar dacă mesajul îl deschide sau a rămas ceva concret de rezolvat.');
+  }
+  return hints.length ? ' (Ritm de chat: ' + hints.join(' ') + ')' : '';
+}
 function gapText(ms){
   const h = Math.round(ms / 36e5);
   if(h < 24) return h === 1 ? 'o oră' : h + (h >= 20 ? ' de ore' : ' ore');
@@ -10393,6 +10422,7 @@ async function reply(target, opts = {}){
       } else for(let k = li - 1; k >= 0; k--) if(ctx[k].role === 'assistant'){ ctx[k]._cache = true; break; }
       let extra = turnExtras(c, ch, opts) + afterCall(ch, opts);   // 12.6
       if(!opts.pro && !opts.sched && !opts.cont && opts.tag !== 'apel' && !call && um) extra += lenHint(um, ch);   // 9.49 (2)
+      if(!opts.pro && !opts.sched && !opts.cont && opts.tag !== 'apel' && !call && !m.note) extra += writtenTurnHint(ch, idx);
       if(!opts.cont){ const w = await weatherOf(c).catch(() => null);   // 9.80 (3): vremea doar când s-a schimbat sau o dată la 3 ore
         if(w){ const wk = w.city + '|' + wxLine(w); if(ch.wxK !== wk || Date.now() - (ch.wxAt || 0) > 3 * 36e5){ ch.wxK = wk; ch.wxAt = Date.now(); extra += ` (vremea reală la tine în ${w.city} acum: ${wxLine(w)}; ține cont de ea firesc, doar dacă se potrivește, fără să o tot pomenești)`; } } }
       const acts = (lastU.text.match(/\*[^*\n]{2,200}\*/g) || []).map(a => a.slice(1, -1).trim());
