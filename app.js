@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.2';
+const APP_VER = '14.14.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1039,7 +1039,7 @@ async function framePreview(c, ch, m, pl, o){
     if(d.cancel){ const e = new Error('Renunțat'); e.name = 'AbortError'; e.cancelFrame = true; throw e; }
     if(d.go || n === 3) return pl;
     pstage(o.signal, '🎬 Reface cadrul după corectura ta', 26);
-    pl = await planShot(c, ch, {promised:o.promised, exclude:m, signal:o.signal, together:o.together, fix:d.fix || '', cam:d.cam || ''});
+    pl = await planShot(c, ch, {promised:o.promised, exclude:m, signal:o.signal, together:o.together, fix:d.fix || '', cam:d.cam || '', requestedExposure:pl.requestedExposure});
     pl.fixed = (pl.fixed || 0) + 1;
   }
   return pl;
@@ -1085,7 +1085,7 @@ async function sceneOptOf(c, ch, m, pl, together){
 // „🎲 Altă variantă (aceeași scenă)”: decorul vine chiar din poza respinsă, în afară de cazul în care ai respins-o pentru scenă
 async function sceneOptSame(c, target, opt = {}){
   const w = target.where || {}, o = {posture:w.posture || postureFromText(target.scene), pov:POV_RE.test(target.scene || '')};
-  if(['topless', 'full', 'explicit'].includes(target.requestedExposure)) o.requestedExposure = target.requestedExposure;
+  if(['clothed', 'topless', 'full', 'explicit'].includes(target.requestedExposure)) o.requestedExposure = target.requestedExposure;
   try{
     if(sceneRefOn(c, {together:!!target.together}) && opt.miss !== 'scene' && target.img && !target.people && framingOf(target.scene || '').k !== 'close'){
       const b = await DB.get(target.img).catch(() => null), bd = b ? await sceneBackdrop(b) : null; if(bd) o.sref = bd; }
@@ -1206,21 +1206,25 @@ function pDraw(v){
    ajung la planificator cuvânt cu cuvânt, cu prioritate peste starea scenei; el le desface în detalii („asked”), aplicația
    verifică să fie toate în descriere (altfel le adaugă la început), iar verificarea pozei le punctează separat și reface poza
    dacă lipsesc. Regulile de siguranță rămân cum erau. */
-const PHOTO_ASK = /(?:poz[ăaeiă]|pozez|pozeaz|fotografi|(?<!\p{L})foto(?!\p{L})|selfie|vreau s[ăa] te v[ăa]d|vreau s[ăa] v[ăa]d cum ar[ăa]ți|ar[ăa]t[ăa]-?mi cum|f[ăa]-?[țt]i o|trimite-?mi o|trimite-?mi|d[ăa]-?mi o poz|ar[ăa]t[ăa]-?mi|arat[ăa]-?ți|s[ăa]-?mi ar[ăa]ți|s[ăa]-?ți v[ăa]d|vreau[^.!?]{0,40}s[ăa]-?mi ar[ăa]ți|vreau[^.!?]{0,40}s[ăa]-?ți v[ăa]d|vreau s[ăa] [îi]mi trimiți|dezbrac[ăa]-?te|scoate-?ți hainele|f[ăa]r[ăa] haine|nud[aă]?|goal[ăa]|gol complet|topless|bare breasts|bare chest|without a top|shirtless|genital(?:ia)?|genitals|vulva|vagina|penis|p[aă]r[țt]i intime|organe genitale|nuditate explicit[ăa]|explicit nude|f[ăa]r[ăa] sutien|(?:vreau|aș vrea|pot s[ăa]|las[ăa]-?m[ăa] s[ăa])[^.!?]{0,65}(?:poz[ăa]|fotografi|selfie|s[âa]nii?|ț[âa]țele|t[âa]țele|bustul|pieptul|corp(?:ul)?|nud[aă]?|goal[ăa]|dezbr[aă]cat|topless|sutien)|(?:s[âa]nii?|ț[âa]țele|t[âa]țele|bustul|pieptul)[^.!?]{0,40}(?:goi|goale|gol|dezbr[aă]cat|nud|ar[ăa]t|v[ăa]d|poz[ăa]|fotografi|la vedere|f[ăa]r[ăa] sutien))/iu;
+const PHOTO_ASK = /(?:poz[ăaeiă]|pozez|pozeaz|fotografi|(?<!\p{L})foto(?!\p{L})|selfie|\b(?:photos?|pictures?|bust(?:ul)?\s+gol|piept(?:ul)?\s+gol|naked|nude|unclothed|without clothes)\b|vreau s[ăa] te v[ăa]d|vreau s[ăa] v[ăa]d cum ar[ăa]ți|ar[ăa]t[ăa]-?mi cum|f[ăa]-?[țt]i o|trimite-?mi o|trimite-?mi|d[ăa]-?mi o poz|ar[ăa]t[ăa]-?mi|arat[ăa]-?ți|s[ăa]-?mi ar[ăa]ți|s[ăa]-?ți v[ăa]d|vreau[^.!?]{0,40}s[ăa]-?mi ar[ăa]ți|vreau[^.!?]{0,40}s[ăa]-?ți v[ăa]d|vreau s[ăa] [îi]mi trimiți|dezbrac[ăa]-?te|scoate-?ți hainele|f[ăa]r[ăa] haine|nud[aă]?|goal[ăa]|gol complet|topless|bare breasts|bare chest|without a top|shirtless|genital(?:ia)?|genitals|vulva|vagina|penis|p[aă]r[țt]i intime|organe genitale|nuditate explicit[ăa]|explicit nude|f[ăa]r[ăa] sutien|(?:vreau|aș vrea|pot s[ăa]|las[ăa]-?m[ăa] s[ăa])[^.!?]{0,65}(?:poz[ăa]|fotografi|selfie|s[âa]nii?|ț[âa]țele|t[âa]țele|bustul|pieptul|corp(?:ul)?|nud[aă]?|goal[ăa]|dezbr[aă]cat|topless|sutien)|(?:s[âa]nii?|ț[âa]țele|t[âa]țele|bustul|pieptul)[^.!?]{0,40}(?:goi|goale|gol|dezbr[aă]cat|nud|ar[ăa]t|v[ăa]d|poz[ăa]|fotografi|la vedere|f[ăa]r[ăa] sutien))/iu;
 // Clasifică expunerea cerută fără a transforma o cerere de bust gol într-o nuditate integrală.
 function exposureMode(text){
-  const t = String(text || '');
-  // Clasificare separată pentru nuditate anatomică explicită; numai pentru personaje adulte confirmate.
-  // Nu echivalează o cerere de topless cu nuditate integrală.
-  if(/(?:explicit nude|explicit nudity|nuditate explicit[ăa]|genital(?:ia)?|genitals|external genital|visible genitals|vulva|vagina|penis|organe genitale|p[aă]r[țt]i(?:le)? intime(?: la vedere)?)/i.test(t)) return 'explicit';
-  if(/(?:fully nude|completely naked|fully naked|nude|naked|unclothed|without clothes|no clothes|fully undressed|nudity|nuditate|nud[aă]|goal[ăa]|dezbr[aă]cat[ăa]?|scoate-?ți hainele|dezbrac[ăa]-?te|complet goal[ăa]|f[ăa]r[ăa] nimic pe tine|f[ăa]r[ăa] haine|f[ăa]r[ăa] [îi]mbr[aă]c[aă]minte)/i.test(t)) return 'full';
-  if(/(?:topless|bare breasts|bare chest|without a top|shirtless|f[ăa]r[ăa] sutien|s[âa]nii? goi|ț[âa]țele goale|t[âa]țele goale|bustul gol|pieptul gol|s[âa]nii? la vedere|bustul la vedere|ar[ăa]t[ăa]-?mi s[âa]nii?|arat[ăa]-?mi bustul|poz[ăa][^.!?]{0,30}(?:s[âa]nii?|bustul|pieptul)[^.!?]{0,25}(?:gol|goi|goale|f[ăa]r[ăa] sutien))/i.test(t)) return 'topless';
+  const t = String(text || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    .replace(/\b(?:not|no|avoid|without|fara|nu(?: vreau)?)\s+(?:(?:any|full|fully|complete|completely|total|completa|integrala)\s+)*(?:nudity|nuditate|nude|naked|topless|genitals|organe genitale|visible genitals|goala|gol)\b/g, ' ');
+  if(/\b(?:explicit nud(?:e|ity)|nuditate explicita|genital(?:ia|s)?|vulva|vagina|penis|parti(?:le)? intime)\b/.test(t)) return 'explicit';
+  if(/\b(?:topless|bare breasts?|bare chest|without (?:a |your )?top|shirtless|fara sutien|sanii? (?:goi|la vedere)|tatele goale|(?:bust(?:ul)?|piept(?:ul)?) (?:gol|la vedere)|arata-?mi (?:sanii|bustul))\b/.test(t)
+      && !/\b(?:fully nude|completely naked|fully naked|complet go(?:l|ala)|nuditate (?:completa|integrala)|fara haine)\b/.test(t)) return 'topless';
+  if(/\b(?:nude(?!\s+(?:lipstick|makeup|dress|color|shade|heels))|naked|unclothed|without (?:any |your )?clothes|no clothes|fully undressed|nudity|nuditate|nuda?|complet go(?:l|ala)|dezbracat[ae]?|scoate-?ti hainele|dezbraca-?te|fara nimic pe tine|fara haine|fara imbracaminte)\b/.test(t)
+      || /\b(?:te vad|arata-?te|esti|cu tine|poza|selfie)(?: complet)? go(?:l|ala)\b/.test(t)
+      || /^(?:goala|gol)[.!?]*$/.test(t.trim())) return 'full';
   return 'clothed';
 }
 function clearlyAdultCharacter(c){
   if(looksYoung(c)) return false;   // 9.94 (D): aspectul contează, nu doar descrierea
-  const t = [c && c.name, c && c.persona, c && c.look, c && c.aspect, c && c.physEn].filter(Boolean).join(' ');
-  return /\b(adult[aă]?|18\s*(?:\+|ani|years? old)|19\s*(?:ani|years? old)|[2-9]\d\s*(?:ani|years? old)|\d{2}\s+(?:de\s+)?ani|(?:18|[2-9]\d)[ -]year[ -]old|(?:in her|in his)\s+(?:20s|30s|40s|50s|60s|70s|80s|90s)|femeie de \d{2} de ani|b[ăa]rbat de \d{2} de ani)\b/i.test(t);
+  const t = [c?.persona, c?.look, c?.aspect, c?.physEn].filter(Boolean).join(' ')
+    .normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  if(/\b(?:minor[ae]?|underage|(?:[0-9]|1[0-7])(?:\s+(?:de\s+)?ani|\s+years? old|[ -]year[ -]old))\b/.test(t)) return false;
+  return /\b(?:adulta?|(?:1[89]|[2-9]\d)(?:\s+(?:de\s+)?ani|\s+years? old|[ -]year[ -]old)|in (?:her|his|their) [2-9]0s)\b|\b18\s*\+/.test(t);
 }
 function photoAsk(ch, exclude){
   const ms = ch.msgs.filter(x => x !== exclude && !x.err && !x.pending && !x.pendingImg);
@@ -1229,9 +1233,25 @@ function photoAsk(ch, exclude){
   if(!us.some(x => PHOTO_ASK.test(x.text))) return '';
   return us.map(x => (x.reply ? '(replying to: „' + x.reply.text + '”) ' : '') + x.text.trim()).join(' / ').slice(0, 900);
 }
+function photoExposureRequest(text){
+  const mode = exposureMode(text);
+  if(mode !== 'clothed') return mode;
+  const t = String(text || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  if(/\b(?:imbracat[ae]?|fully clothed|keep (?:your|the) clothes on|with (?:your )?clothes on|fara nuditate|no nudity|not naked|not topless)\b/.test(t)) return 'clothed';
+  return '';
+}
+function latestPhotoExposure(ch, exclude){
+  for(let i = ch.msgs.length - 1; i >= 0; i--){
+    const m = ch.msgs[i];
+    if(m === exclude || m.err || m.pending || m.pendingImg) continue;
+    if(m.role === 'ai' && m.img) break;
+    if(m.role === 'user' && m.text) return photoExposureRequest(m.text);
+  }
+  return '';
+}
 // cuvintele importante dintr-un detaliu cerut („red dress” → red, dress): lipsește din descriere dacă niciunul nu apare
 const askMissing = (asked, shot) => { const t = String(shot || '').toLowerCase(); return (asked || []).filter(a => { const w = String(a).toLowerCase().match(/[a-z]{4,}/g) || []; return w.length && !w.some(x => t.includes(x.replace(/(ing|ed|es|s)$/, ''))); }); };
-async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = ''} = {}){
+async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = '', requestedExposure = ''} = {}){
   pstage(signal, '🎬 Își alege locul și cadrul', 22);
   const u = S.userName.trim() || 'User';
   const hist = ch.msgs.filter(x => x !== exclude && x.text && !x.err && !x.pending);
@@ -1240,6 +1260,8 @@ async function planShot(c, ch, {promised = '', exclude = null, signal, together 
   const prevShots = ch.msgs.filter(x => x.img && x.scene && x !== exclude).slice(-3).map(x => '- ' + x.scene).join('\n');
   const home = c.home && Object.keys(c.home).length ? Object.entries(c.home).map(([k, v]) => `- ${k}: ${v}`).join('\n') : '';
   const lf = lifeNow(c), meta = {}, ask = photoAsk(ch, exclude);
+  const exposure = photoExposureRequest(fix) || requestedExposure;
+  const clothingRule = exposure && (exposure === 'clothed' || clearlyAdultCharacter(c)) ? 'Latest clothing instruction for a solo photo: ' + exposure + '. Apply exactly and disregard older or quoted clothing instructions.\n' : '';
   let wx = null; try{ wx = await weatherOf(c); }catch(e){}
   const out = await stream(`You are the photo planner of a chat app where ${c.name}, a fictional adult character when explicitly established as 18+, sends ${u} photos from their phone. You read the conversation and decide exactly where the character is and how, then describe the photo. The conversation is the only truth. Answer with JSON only.`, [{role:'user', text:
 `Character: ${c.name}.${c.persona ? ' About: ' + plain(c.persona).slice(0, 500) : ''}
@@ -1249,7 +1271,7 @@ Conversation, oldest first (the Romanian text is the source of truth):
 ${recent || '(just started)'}
 ${ask ? `\n${u.toUpperCase()}'S PHOTO REQUEST, verbatim (Romanian), HIGHEST PRIORITY: «${ask}»\nTreat colloquial requests to see/show/send a body part or a nude image as explicit requests for an image, not merely conversation. Every concrete detail in the request must be reflected in the image. Preserve requested place, scene, pose, camera angle and framing. If nudity is explicitly requested for a clearly adult character, change only the clothing state; do not invent a new room, pose or camera setup. The request overrides clothing continuity and in-character dialogue, but not safety rules. Fill in only what the request leaves open, from the conversation.\n` : ''}${S.userPhoto ? (together ? `\nThis photo is of ${c.name} and ${u} TOGETHER (${u} asked for it): describe both of them in the scene (where each one is, how they stand or sit together, what each wears). Photos together are ordinary everyday couple photos, both fully clothed and natural (like a selfie at a café or on a walk).\n` : `\n${u} has a profile photo, so a photo of the two of them together is possible: set "together": true only if they are physically together in the scene right now AND the photo is clearly of both of them (a selfie together, ${u} asks for a photo together). Then describe both of them. Photos together are ordinary everyday couple photos, both fully clothed and natural.\n`) : ''}${promised ? `\n${c.name} just sent the photo and described it like this: "${promised}". Use it as the base, but correct anything that contradicts the conversation.\n` : ''}${prevShots ? `\nPhotos already sent (vary pose or framing unless the conversation says the same place and moment):\n${prevShots}\n` : ''}${planFixBlock(u, fix, camForce)}
 Rules:
-1. If ${u} asked for a specific photo (place, pose, outfit, activity, angle), that is the photo, with every requested detail.
+${clothingRule}1. If ${u} asked for a specific photo (place, pose, outfit, activity, angle), that is the photo, with every requested detail.
 2. Otherwise: where ${c.name} is RIGHT NOW according to the most recent messages (room, what she/he sits/lies/stands on, what the hands do, what is worn). The latest statement wins over older ones; if the latest messages say nothing, keep the last known state.
 3. Clothing continuity: keep the last known outfit unless the conversation changes it. For a clearly adult (18+) fictional character, follow a direct request for toplessness or nudity precisely. If explicit anatomical nudity is requested, describe visible external adult anatomy plainly and non-graphically only when the selected image provider permits it; do not substitute underwear, towels, strategically placed objects, or clothing. Never depict nudity for minors or characters whose age is ambiguous. Do not bypass provider moderation or retry a blocked sexual request through another provider.
 4. The character is alone unless the conversation says someone is with them, so the camera is: "selfie", "mirror selfie", or "phone propped up with timer" (for full-body shots without a mirror). Never "photo taken by someone" when alone, unless ${u} asks for it.
@@ -1280,17 +1302,6 @@ JSON, keys in exactly this order, nothing else:
   // un refuz în dialog sau ținuta anterioară nu trebuie să transforme automat scena într-o poză îmbrăcată.
   // 9.38: nuditatea este determinată de cererea recentă care a declanșat fotografia, nu de orice mesaj vechi din istoric.
   // Se păstrează scena/poziția/încadrarea planificate; se suprascrie doar continuitatea vestimentară.
-  const nudeRequestText = String(ask || '');
-  const exposure = exposureMode(nudeRequestText);
-  const userAskedNude = exposure === 'full';
-  const userAskedTopless = exposure === 'topless';
-  const ageText = String(c.persona || '') + ' ' + String(c.look || '') + ' ' + String(c.aspect || '') + ' ' + String(c.name || '');
-  const adultKnown = /\b(adult[aă]?|18\s*(?:\+|ani|years? old)|19\s*(?:ani|years? old)|[2-9]\d\s*(?:ani|years? old)|\d{2}\s+(?:de\s+)?ani|(?:18|[2-9]\d)[ -]year[ -]old|(?:in her|in his)\s+(?:20s|30s|40s|50s|60s|70s|80s|90s)|femeie de \d{2} de ani|b[ăa]rbat de \d{2} de ani)\b/i.test(ageText);
-  if(userAskedNude && adultKnown){
-    shot = `PRIORITY CLOTHING OVERRIDE: the clearly adult fictional character is fully nude, with no clothes, underwear, lingerie, towel, or object covering the body; natural, non-explicit artistic nudity, no sexual act. Preserve the exact scene, room, furniture, body position, activity, camera angle, framing, expression and lighting described here; change only the clothing state to fully nude. Keep the same body proportions and bust size as the body reference. Do not substitute a clothed image. SCENE TO PRESERVE: ${shot}`;
-  } else if(userAskedTopless && adultKnown){
-    shot = `PRIORITY CLOTHING OVERRIDE: the clearly adult fictional character is topless, with bare breasts visibly uncovered and no shirt, bra, bikini top, towel, or object covering the chest. Keep the lower body clothed exactly as the scene describes; do NOT make the character fully nude unless that was explicitly requested. Preserve the exact scene, room, furniture, body position, activity, camera angle, framing, expression and lighting. Keep the same body proportions and bust size as the body reference. Do not substitute a clothed or lingerie image. SCENE TO PRESERVE: ${shot}`;
-  }
   if(shot.length < 15) shot = fallbackShot(c, ch, exclude);
   if(shot.length < 15) throw new Error('Nu am putut descrie poza din conversație. Mai încearcă o dată.');
   if(j.where && typeof j.where === 'object'){
@@ -1305,7 +1316,7 @@ JSON, keys in exactly this order, nothing else:
   const cam = String(j.camera || '');
   const px = planPost(c, ch, j, shot, cam, u); shot = px.shot;   // 10.1: camera din ochii tăi, poziția, mâinile, rezumatul în română
   const people = Array.isArray(j.people) ? j.people.map(x => ({name:String(x && x.name || '').trim().slice(0, 40), relation:String(x && x.relation || '').trim().slice(0, 60), look:String(x && x.look || '').trim().slice(0, 300)})).filter(x => x.name || x.relation).slice(0, 2) : [];
-  return {pov:px.pov, cam:px.cam, posture:px.posture, ro:px.ro, samePlace:px.samePlace, sameOutfit:px.sameOutfit, people, self: j.self !== false, planned: planned.length >= 15 ? planned : shot, asked, shot: cam && !shot.toLowerCase().includes(cam.toLowerCase().split(' ')[0]) ? cam + ', ' + shot : shot, where: ch.where, together: !!S.userPhoto && (together || j.together === true || /"together"\s*:\s*true/.test(out))};
+  return {requestedExposure: exposure, pov:px.pov, cam:px.cam, posture:px.posture, ro:px.ro, samePlace:px.samePlace, sameOutfit:px.sameOutfit, people, self: j.self !== false, planned: planned.length >= 15 ? planned : shot, asked, shot: cam && !shot.toLowerCase().includes(cam.toLowerCase().split(' ')[0]) ? cam + ', ' + shot : shot, where: ch.where, together: !!S.userPhoto && (together || j.together === true || /"together"\s*:\s*true/.test(out))};
 }
 /* ───────── 9.42: motorul „ca în creator” pentru pozele din chat (S.photoEngine = 'creator', implicit) ─────────
    De ce: în chat, generatorul primea până la 4 imagini de model (fața, corpul, unghiurile) și ~250 de cuvinte de reguli care
@@ -4593,9 +4604,8 @@ async function boundedScene(c, shot, signal, opt){
 }
 async function makeScenePhoto0(c, shot, signal, opt = {}){
   try{ await ageLook(c); }catch(e){}   // 9.94 (D)
-  if(opt.requestedExposure && opt.requestedExposure !== 'clothed' && !clearlyAdultCharacter(c)) throw new Error('Pentru acest cadru, fișa personajului trebuie să precizeze clar că este adult (18+).');
+  if([opt.requestedExposure, exposureMode(shot)].some(mode => mode && mode !== 'clothed') && !clearlyAdultCharacter(c)) throw new Error('Pentru acest cadru, fișa personajului trebuie să precizeze clar că este adult (18+).');
   if(looksYoung(c) && (exposureMode(shot) !== 'clothed' || /lingerie|underwear|bikini|thong|swimsuit|bra\b|panties|sexy|seductive|sensual|provocative|lenjerie|chilo[țt]i|sutien|costum de baie|tanga|sexi|seduc[ăa]t|senzual|provocat/i.test(String(shot || '')))) throw new Error('Personajul nu pare clar adult, așa că pozele de felul ăsta sunt oprite pentru el.');
-  if(exposureMode(shot) === 'explicit' && !clearlyAdultCharacter(c)) throw new Error('Pentru nuditate anatomică explicită, fișa personajului trebuie să precizeze clar că este adult (18+).');
   if(S.photoFlow === 'bounded' && opt.kind === 'chat' && !isAuto(opt) && !opt.together && !opt.partner && sceneModel(opt) === 'ancorat' && S.photoEngine !== 'id' && idBoostOn(c, opt) && !useF3()) return boundedScene(c, shot, signal, opt);
   const boost = idBoostOn(c, opt) && !useF3();
   const gen0 = (corr, o) => boost ? idBoost(c, shot, signal, corr, o) : scenePhoto(c, shot, signal, corr, o);
@@ -11452,15 +11462,16 @@ async function askPhoto0(spont, target, mode, opt = {}){
       if(!edited){ const r = await makeScenePhoto(cx, shot, busy.signal, {together:false, asked}); edited = r; }
     }
     else if(target && mode === 'same' && target.scene){ shot = target.scene; where = target.where || null; asked = target.asked || []; sceneOpt = await sceneOptSame(c, target, opt); }
-    else { const tS = performance.now(); let pl = await planShot(c, ch, {promised, exclude:m, signal:busy.signal, together}); tm.s.scena = performance.now() - tS;
+    else { const tS = performance.now(); let pl = await planShot(c, ch, {promised, exclude:m, signal:busy.signal, together, requestedExposure:spont ? '' : latestPhotoExposure(ch, m)}); tm.s.scena = performance.now() - tS;
       { const tC = performance.now(); pl = await framePreview(c, ch, m, pl, {spont, target, mode, promised, together, signal:busy.signal}); const dC = performance.now() - tC; if(dC > 300) tm.s.cadru = dC; }   // 13.3: confirmarea cadrului, separat   // 10.1 (S4): confirmi sau corectezi cadrul
       sceneOpt = await sceneOptOf(c, ch, m, pl, pl.together);   // 10.1 (S5, S8)
       shot = pl.shot; where = pl.where; together = pl.together; asked = pl.asked || []; shot = giftDetail(c, shot, where);
       // 9.56: leagă cererea explicită de expunere din ultimele mesaje de fotografia generată, chiar dacă planificatorul a omis-o.
-      const recentPhotoRequest = photoAsk(ch, m);
-      const requestedExposure = exposureMode(recentPhotoRequest);
-      if(requestedExposure !== 'clothed') sceneOpt.requestedExposure = requestedExposure;
-      if(requestedExposure === 'topless') {
+      const requestedExposure = pl.requestedExposure || 'clothed';
+      if(pl.requestedExposure) sceneOpt.requestedExposure = requestedExposure;
+      if(pl.requestedExposure === 'clothed') {
+        shot = 'PRIORITY OUTFIT: fully clothed. Keep or restore clothing appropriate to the scene. Scene: ' + shot;
+      } else if(requestedExposure === 'topless') {
         shot = `PRIORITY OUTFIT: clearly adult fictional character is topless, bare breasts uncovered, no shirt, bra or chest covering; lower-body clothing stays as described. Preserve body-reference bust size and natural proportions. Do not substitute a clothed image. Scene: ${shot}`;
         asked.push('topless, bare breasts visibly uncovered, no shirt or bra');
       } else if(requestedExposure === 'explicit') {
