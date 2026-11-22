@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.19';
+const APP_VER = '14.10.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2382,7 +2382,7 @@ function bodyPoseOf(shot){
   return 'full';
 }
 /* 13.6 (1): în reperele de corp capul e estompat (MoveNet găsește nasul, ochii, urechile), ca generatorul să nu ia fața de acolo:
-   poza întreagă poate avea altă față decât portretul (la Sharon: 70%), iar amestecul se vedea în pozele de corp. */
+   poza întreagă poate avea altă față decât portretul, iar amestecul se vedea în pozele de corp. */
 const HH_CACHE = new Map();
 async function headHide(blob, key){
   if(!blob) return blob; if(key && HH_CACHE.has(key)) return HH_CACHE.get(key);
@@ -4895,47 +4895,42 @@ function goHome(){
 
 /* ───────── ACASĂ ───────── */
 // 8.9: cardul mare „continuă” + „ce fac acum”
-function homeHeroHTML(recent){
-  if(!recent.length) return '';
-  const c = recent[0], online = c.lastAt && Date.now() - c.lastAt < 10 * 60e3, lf = lifeNow(c);
-  const mood = c.moodNow && Date.now() - c.moodNow.ts < 12 * 36e5 ? shortMood(c.moodNow.t) : '';
-  const sub = [lf && lf.w ? LIFE_E[lf.b] + ' ' + lf.w : '', mood].filter(Boolean).join(' · ');
-  const last = String(c.last || '').replace(/^Tu: /, '');
-  const mine = /^Tu: /.test(c.last || '');
-  let h = `<button class="hhero${c.unread ? ' unr' : ''}" data-open="${c.id}">${duoOn(c) ? duoHalves(c, 'hhbg ph') : c.photo ? `<img class="hhbg" data-k="${esc(photoNow(c))}" alt="">` : `<span class="hhbg ph" style="background:${colorFor(c)}"></span>`}
-    <span class="hhov"><span class="hhtop">${online ? '<i class="on"></i>online' : esc(when(c.lastAt))}${c.unread ? ` · <em>${c.unread === 1 ? 'un mesaj nou' : c.unread + ' mesaje noi'}</em>` : ''}${clockHTML(c, 'hhclk', true)}</span>
-    <b>${esc(c.name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}
-    ${last ? `<span class="hhmsg${mine ? ' mine' : ''}">${mine ? 'Tu: ' : ''}${esc(last)}</span>` : ''}
-    <span class="hhgo">Continuă <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></span></span></button>`;
-  const rest = recent.slice(1, 9);
-  if(rest.length) h += `<div class="hsec">Ce fac acum</div><div class="hnowr">${rest.map(x => {
-    const on = x.lastAt && Date.now() - x.lastAt < 10 * 60e3, l = lifeNow(x), md = x.moodNow && Date.now() - x.moodNow.ts < 12 * 36e5 ? shortMood(x.moodNow.t) : '';
-    const what = charBdayToday(x) ? '🎂 își serbează ziua' : l && l.w ? LIFE_E[l.b] + ' ' + l.w : md || ('💬 ' + when(x.lastAt));
-    return `<button class="hnow${x.unread ? ' unr' : ''}" data-open="${x.id}"><span class="hnav">${avatarHTML(x)}${on ? '<i class="on"></i>' : ''}${x.unread ? `<em>${x.unread > 9 ? '9+' : x.unread}</em>` : ''}</span><span class="hnt"><b>${esc(x.name)}</b><small>${clockHTML(x, 'nclk')}${esc(what)}</small></span></button>`; }).join('')}</div>`;
-  return h;
+function homeHeroHTML(c){
+  if(!c) return '';
+  return `<button class="resumeCard" data-open="${esc(c.id)}">
+    <span class="resumeAvatar">${avatarHTML(c)}</span>
+    <span class="resumeCopy"><small>Reia conversația</small><b>${esc(c.name)}</b><span>${esc(c.last)}</span></span>
+    <span class="resumeArrow" aria-hidden="true">›</span>
+  </button>`;
 }
-let homeTab = 'chars';
+let homeTab = 'chats';
+function showHomeTab(tab){
+  homeTab = tab;
+  renderHome();
+  $('#homeScroll').scrollTop = 0;
+}
 function renderHome(){
-  $$('#nav [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === homeTab));
+  $$('#nav [data-tab]').forEach(b => {
+    const active = b.dataset.tab === homeTab;
+    b.classList.toggle('on', active);
+    if(active) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  $('#feedBack').hidden = homeTab !== 'feed';
+  $('#homeTitle').textContent = homeTab === 'feed' ? 'Noutăți' : homeTab === 'chars' ? 'Personaje' : 'Taifas';
   $('#homeChars').hidden = homeTab !== 'chars';
   $('#homeChats').hidden = homeTab !== 'chats';
   $('#homeFeed').hidden = homeTab !== 'feed';
   if(homeTab === 'feed') renderFeed();
   feedDot();
   const sorted = [...chars].sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (b.lastAt || b.created || 0) - (a.lastAt || a.created || 0));
-  $('#searchWrap').hidden = homeTab !== 'chars' || chars.length < 5;
+  $('#searchWrap').hidden = homeTab !== 'chars' || !chars.length;
   if($('#searchWrap').hidden && homeTab === 'chars') $('#search').value = '';
   const q = $('#search').value.trim().toLowerCase();
   const shown = q ? sorted.filter(c => (c.name + ' ' + (c.tag || '')).toLowerCase().includes(q)) : sorted;
-  const hr = new Date().getHours(), salut = hr < 5 ? 'Noapte bună' : hr < 11 ? 'Bună dimineața' : hr < 18 ? 'Bună ziua' : 'Bună seara';
-  const recent = q ? [] : chars.filter(c => c.last).sort((a, b) => (b.unread ? 1 : 0) - (a.unread ? 1 : 0) || (b.lastAt || 0) - (a.lastAt || 0)).slice(0, 12);
-  const unreadN = chars.reduce((n, c) => n + (c.unread || 0), 0);
-  const top = q || !chars.length ? '' : `<div class="hhello"><b>${salut}${S.userName.trim() ? ', ' + esc(S.userName.trim()) : ''}</b><small>${unreadN ? `Ai ${unreadN === 1 ? 'un mesaj nou' : unreadN + ' mesaje noi'} 💌` : 'Cu cine stai la taifas azi?'}</small></div>` + storyRowHTML()
-    + homeHeroHTML(recent)
-    + `<div class="hsec">Personajele tale <span>${chars.length}</span></div>`;
+  const top = q || !chars.length ? '' : `<h2 class="homeSectionTitle">Personajele tale <span>${chars.length}</span></h2>`;
   const bk = !q && bkDue() ? `<div class="bkslim"><span>💾</span><span class="bkt"><b>Backup: ${esc(bkAgo())}</b><small>Totul stă doar în telefonul ăsta</small></span><button class="btn sm pri" data-bk="share">📤 Drive</button><button class="btn sm" data-bk="dl" aria-label="Salvează">⬇</button><button class="bkx" data-bk="later" aria-label="Mai târziu">✕</button></div>` : '';
   // 9.15: doar cardurile schimbate se refac (înainte, la fiecare întoarcere pe Acasă se refăcea tot, cu pozele decodate din nou)
-  patchKeyed($('#homeChars'), [['bk', bk], ['top', top], ['empty', !chars.length ? `<button class="card empty" data-new><b>Niciun personaj încă</b>Apasă ＋ jos ca să creezi primul personaj, din poză sau din imaginație.</button>` : ''],
+  patchKeyed($('#homeChars'), [['top', top], ['empty', !chars.length ? `<button class="card empty" data-new><b>Niciun personaj încă</b>Apasă ＋ jos ca să creezi primul personaj, din poză sau din imaginație.</button>` : ''],
     ...shown.map(c => ['card:' + c.id, `<button class="card${c.fav ? ' isfav' : ''}" data-open="${c.id}">${c.fav ? '<span class="fav">⭐</span>' : ''}${c.unread ? `<span class="ubadge">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}${c.lastAt && c.last || clockHTML(c) ? `<span class="tl">${c.lastAt && c.last ? `<span class="when">${when(c.lastAt)}</span>` : ''}${clockHTML(c, 'when clk')}</span>` : ''}
       ${duoOn(c) ? duoHalves(c) : c.photo ? `<img${c.avLive && c.avs && fxOn() ? ` class="avl" style="animation-delay:${avDelay(c.id)}"` : ''} data-k="${esc(photoNow(c))}" data-t="m" alt="">${c.avLive && c.avs ? avClipHTML(c, avKeyNow(c)) : ''}` : `<div class="ph" style="background:${colorFor(c)}">${esc(c.name[0] || '?')}</div>`}
       <div class="ov"><b>${esc(c.name)}</b>${c.tag ? `<small>${esc(c.tag)}</small>` : ''}${cardStatus(c)}${c.rel ? `<span class="crel">💞 ${esc(relOf(c).name)}</span>` : ''}${c.last ? `<em class="lm">${esc(c.last)}</em>` : ''}</div></button>`]), ['new', chars.length && !q ? `<button class="card new" data-new><span>＋</span><em>Personaj nou</em></button>` : ''], ['duonew', chars.length && !q ? `<button class="card new duonew" data-duonew><span>👯</span><em>Duo nou</em></button>` : '']].filter(b => b[1]), homeStore.chars);
@@ -4953,10 +4948,12 @@ function renderHome(){
       </button></div>`;
   };
   const grows = groups.length ? [['gl', '<div class="clabel">👥 Grupuri</div>'], ...[...groups].sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0)).map(g => ['grp:' + g.id, groupRowHTML(g)])] : [['gnew', '<button class="gnewrow" data-gnew>👥 Grup nou: vorbește cu mai multe personaje deodată</button>']];
-  patchKeyed($('#homeChats'), [['stories', storyRowHTML()], ...grows, ...(withChat.length
-    ? [...(pinned.length ? [['lp', '<div class="clabel">Fixate</div>'], ...pinned.map(c => ['row:' + c.id, crow(c)]), ...(rest.length ? [['lr', '<div class="clabel">Recente</div>']] : [])] : []), ...rest.map(c => ['row:' + c.id, crow(c)]),
+  const resume = withChat[0];
+  patchKeyed($('#homeChats'), [['bk', bk], ['resume', homeHeroHTML(resume)],
+    ...(withChat.length
+    ? [...(pinned.length ? [['lp', '<div class="clabel">Fixate</div>'], ...pinned.map(c => ['row:' + c.id, crow(c)]), ...(rest.length ? [['lr', '<div class="clabel">Recente</div>']] : [])] : [['lr', '<h2 class="homeSectionTitle">Conversații recente</h2>']]), ...rest.map(c => ['row:' + c.id, crow(c)]),
       ['hint', '<div class="hint" style="text-align:center;margin:14px 0">Glisează spre stânga pe o conversație ca s-o fixezi sau s-o golești.</div>']]
-    : [['none', `<div class="empty">Nicio conversație încă.<br>Alege un personaj din „Acasă".</div>`]])].filter(b => b[1]), homeStore.chats);
+    : [['none', '<div class="homeEmpty"><h2>Începe o conversație</h2><p>Alege din catalog sau creează un personaj.</p><button class="btn pri" data-home-tab="chars">Vezi personajele</button></div>']]), ...grows, ['stories', storyRowHTML()]].filter(b => b[1]), homeStore.chats);
   $$('[data-bk]').forEach(b => b.onclick = e => { e.stopPropagation(); const k = b.dataset.bk; if(k === 'later'){ S.bkSnooze = Date.now() + 2 * 864e5; saveSettings(); renderHome(); } else exportAll(k === 'share'); });
   hydrate($('#vHome')); bindStoryRow($('#vHome'));
 }
@@ -5940,6 +5937,8 @@ async function openChat(id, push = true, tid, dir){
     const box = $('#msgs'), fromBottom = box.scrollHeight - box.scrollTop; msgStart = full0; renderMsgs(false, true); box.scrollTop = box.scrollHeight - fromBottom; }); }
   setBusyUI(!!(busy && live && live.ch === chat));
   $('#sugg').innerHTML = '';
+  $('#intimacyQuick').hidden = true;
+  $('#btnPlus').setAttribute('aria-expanded', 'false');
   clearReply(); jumpCount = 0;
   if((cur.sched || []).some(x => x.at <= Date.now())) runDueSched(); else annCheck(cur).then(async done => { if(!done) done = await bdayCheck(cur); if(!done) maybeProactive(); });
   setTimeout(jrnSweep, 2500);
@@ -6276,7 +6275,7 @@ function giftSheet(){
 let feedCache = [], feedBusy = false; const feedTried = {};
 async function loadFeed(){ feedCache = (await DB.get('feed')) || []; }
 function saveFeed(){ feedCache = feedCache.filter(p => Date.now() - p.ts < 7 * 864e5 || p.keep).slice(0, 80); return DB.set('feed', feedCache).catch(() => {}); }
-function feedDot(){ const b = $('#nav [data-tab="feed"]'); if(!b) return; const n = feedCache.some(p => !p.seen && charById(p.cid)); let d = b.querySelector('.ndot'); if(n && !d){ d = document.createElement('i'); d.className = 'ndot'; b.appendChild(d); } else if(!n && d) d.remove(); }
+function feedDot(){ const b = $('#btnHomeMore'); if(!b) return; const n = feedCache.some(p => !p.seen && charById(p.cid)); let d = b.querySelector('.ndot'); if(n && !d){ d = document.createElement('i'); d.className = 'ndot'; b.appendChild(d); } else if(!n && d) d.remove(); }
 function renderFeed(){
   const box = $('#homeFeed');
   if(S.feed === 'off'){ box.innerHTML = `<div class="empty">Statusurile sunt oprite.<br><button class="btn sm" style="margin-top:12px" id="feedOnBtn">Pornește-le din Setări</button></div>`; $('#feedOnBtn').onclick = () => { openSettings(); openSetPanel('chat'); }; return; }
@@ -10474,9 +10473,10 @@ async function renderCost(){
 }
 
 /* poze: ＋ (cere de la personaj, galerie, cameră), salvare și partajare */
-function plusMenu(){
+function plusMenu(openPresets){
   if(busy && live && live.ch === chat){ toast('Așteaptă răspunsul.'); return; }
   const o = [];
+  if(openPresets) o.push(['💬', 'Apropiere, fotografii și scenă', openPresets], ['◈', 'Editează scena', editScene]);
   if(S.imgProv !== 'none' && duoOn(cur)){ for(const k of [0, 1]) o.push(['📷', `Cere o poză de la ${duoNm(cur, k)}`, () => askPhoto(false, null, null, {who:k})]); o.push(['👯', `O poză cu ${duoNm(cur, 0)} și ${duoNm(cur, 1)} împreună`, () => askPhoto(false, null, null, {who:0, duoBoth:true})]); }   // 14.3
   else if(S.imgProv !== 'none') o.push(['📷', `Cere o poză de la ${cur.name}`, () => askPhoto()]);
   if(vidReady() && canRequestPhoto(cur) && !duoOn(cur)) o.push(['🎬', `Cere un video de la ${cur.name}`, vidSheet]);   // 13.5; 13.8: scenariile
@@ -11411,7 +11411,7 @@ function editMsg(i){
 function chatMenu(){
   const n = threadsOf(cur).length;
   sheet([
-    ['🎬', chat.scene ? 'Scena: ' + chat.scene.slice(0, 32) + (chat.scene.length > 32 ? '…' : '') : 'Setează scena', editScene],
+    ['🔎', 'Caută în conversație', () => openSearch(cur.id)],
     ['🧵', n > 1 ? `Conversații (${n})` : 'Conversații', threadsSheet],
     modeOf(chat) === 'chat' ? ['🎭', 'Treci pe roleplay (*acțiuni*, scenă împreună)', toggleMode] : ['💬', 'Treci pe chat pe telefon (doar mesaje)', toggleMode],
     ['⏰', (() => { const k = (cur.sched || []).filter(x => x.tid === (chat.tid || 'main')).length; return k ? `Mesaje programate (${k})` : 'Mesaje programate'; })(), schedSheet],
@@ -11719,12 +11719,16 @@ const CALL_SPOKEN = u => `Vorbiți în timp real. Scrii doar ce spui cu voce tar
 const CALL_FIX = u => `ești într-un apel vocal la telefon cu ${u}. ` + CALL_SPOKEN(u);
 // 8.13: apel video: vă vedeți. Dacă primește un cadru din camera lui, îl vede ca într-un apel adevărat
 const CALL_FIX_V = u => `ești într-un apel video cu ${u}, vă vedeți pe ecran. ` + CALL_SPOKEN(u) + `. Dacă primești o imagine, e ce vezi chiar acum prin camera lui: poți reacționa firesc la ce vezi (unde e, lumina, ce face, expresia lui), în treacăt, fără s-o descrii ca pe o poză și fără comentarii despre corpul lui`;
-// 14.9.8: limba vorbită în apel este independentă de limba chatului și de recunoașterea microfonului.
-// Aplicăm preferința doar personajului Sharon G.; alte personaje rămân neschimbate.
-const callSharonEnglish = c => !!(c && c.c && /^sharon g\.?$/i.test(String(c.c.name || '').trim()));
-const callSpeechLang = c => callSharonEnglish(c) ? 'en-US' : langOf(c.c);
-const callSpeechRules = c => callSharonEnglish(c) ?
-  '. IMPORTANT — VIDEO CALL SPEECH ONLY: Sharon must speak in natural conversational English throughout this video call, with occasional short Spanish endearments (for example cariño, mi amor). Do not answer in Romanian, even if the caller speaks Romanian. Understand Romanian input and respond in English. Keep the existing character personality, relationship, and story unchanged. This rule applies ONLY to spoken video-call replies; written chat remains unchanged. Do not translate or rewrite earlier chat messages.' : '';
+// Limba vorbită se stabilește din fișa personajului, independent de chat și de microfon.
+const CALL_LANGS = {ro:['Română','ro-RO','Romanian'], ...LANGS, en_es:['Engleză cu expresii în spaniolă','en-US','English']};
+const callLanguage = c => Object.hasOwn(CALL_LANGS, c?.callLang) ? CALL_LANGS[c.callLang] : null;
+const callSpeechLang = c => callLanguage(c.c)?.[1] || langOf(c.c);
+function callSpeechRules(c){
+  const language = callLanguage(c.c);
+  if(!language) return '';
+  const flavor = c.c.callLang === 'en_es' ? ' Occasional short Spanish endearments are fine if they fit the character.' : '';
+  return ' For the spoken reply in this call, respond in natural ' + language[2] + ' even if the caller speaks another language.' + flavor + ' Keep the character voice and reply directly without translation.';
+}
 const callFix = c => (c && c.video ? CALL_FIX_V : CALL_FIX)(S.userName.trim() || 'el') + showNote(c) + callLiveRules(c) + (c && c.video && c.exprReady ? '. Începe fiecare replică cu expresia feței tale de acum, exact așa: [față: zâmbet], [față: râs], [față: surpriză], [față: gânditoare], [față: tristă] sau [față: neutră]' : '');
 const ICO = {
   mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
@@ -11830,7 +11834,7 @@ function startCall(opts = {}){
       <button id="clSee" class="vonly${call.see ? ' off' : ''}" aria-label="Te vede">${ICO.eye}<span>Te vede</span></button>
       <button id="clBarge" class="${call.barge ? 'off' : ''}" aria-label="Întreruperi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8a8 8 0 0 0 16 0v-3a2 2 0 0 0-4 0"/></svg><span>Întrerup</span></button>
       <button id="clDiag" class="vonly" aria-label="Starea apelului"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M11 8v3.5M11 14h.01"/></svg><span>Stare</span></button>
-      <button id="clMore" class="vonly" aria-label="Mai mult"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>Mai mult</span></button>
+      <button id="clMore" class="vonly" aria-label="Mai mult" aria-expanded="false" aria-controls="clMoreP"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg><span>Mai mult</span></button>
       <button id="clEnd" class="end" aria-label="Închide">${ICO.end}<span>Închide</span></button></div>
     <div class="cmore" id="clMoreP"><div class="cmrx"></div><div class="cmgrid"></div></div>`;
   document.body.appendChild(v); hydrate(v); call.tImgs = performance.now();
@@ -11891,7 +11895,7 @@ function startCall(opts = {}){
     sv.style.left = (left ? m : W - r.width - m) + 'px'; sv.style.top = Math.max(40, top) + 'px'; });
   // butoanele se ascund singure în video; o atingere le aduce înapoi
   let hideT = 0;
-  const poke = () => { v.classList.remove('calm'); clearTimeout(hideT); if(c.video) hideT = setTimeout(() => { if(call === c && c.video) v.classList.add('calm'); }, 4500); };
+  const poke = () => { v.classList.remove('calm'); clearTimeout(hideT); if(c.video && !v.classList.contains('more')) hideT = setTimeout(() => { if(call === c && c.video) v.classList.add('calm'); }, 4500); };
   v.addEventListener('pointerdown', e => { c.wasCalm = v.classList.contains('calm'); if(!e.target.closest('.cbtns,.vreact,.cself')) poke(); });   // atingerea care aduce butoanele înapoi nu o întrerupe
   // reacții în timpul apelului: le vede și le ia în seamă la replica următoare
   v.querySelectorAll('[data-cr]').forEach(b => b.onclick = () => { fxBurst(b.dataset.cr, 10); c.reacts.push(b.dataset.cr); poke(); exprShow(c, b.dataset.cr === '😂' ? 'ras' : b.dataset.cr === '😮' ? 'surpriza' : 'zambet'); });
@@ -11918,8 +11922,8 @@ function startCall(opts = {}){
   if(pics.length > 1) c.picT = setInterval(() => { if(call !== c || c.state === 'speak') return; if(c.exprReady) return; const ims = v.querySelectorAll('.cvid img:not(.ex)'); cvCut(v.querySelector('.cvid')); ims[c.pi].classList.remove('on'); c.pi = (c.pi + 1) % ims.length; ims[c.pi].classList.add('on'); if(c.vf) vfSwitch(c, ims[c.pi]); }, 22000);
   if(video) camOn();
   callLayout(v, video);   // 12.4: în video, butoanele rare stau sub „Mai mult”
-  $('#clMore').onclick = e => { e.stopPropagation(); v.classList.toggle('more'); poke(); };
-  v.addEventListener('click', e => { if(v.classList.contains('more') && !e.target.closest('#clMoreP,#clMore')) v.classList.remove('more'); });
+  $('#clMore').onclick = e => { e.stopPropagation(); const open = v.classList.toggle('more'); $('#clMore').setAttribute('aria-expanded', String(open)); poke(); };
+  v.addEventListener('click', e => { if(v.classList.contains('more') && !e.target.closest('#clMoreP,#clMore')){ v.classList.remove('more'); $('#clMore').setAttribute('aria-expanded', 'false'); poke(); } });
   // sună întâi, apoi răspunde (la un apel primit ești deja conectat)
   c.state = 'ring'; callState(c.incoming ? 'conectare…' : 'se apelează…', 'ring'); if(!c.incoming) ringback(true);
   const av = callAvail(c); c.av = av; if(av.k === 'sleepy') c.sleepy = true;   // 12.6
@@ -12141,7 +12145,7 @@ async function callPlaySpeech(c, text, capOff, who, fill, turn){
   if(!current()) return;
   if(!window.speechSynthesis || !window.SpeechSynthesisUtterance){ callVoiceFail(c, 'unavailable'); return; }
   const parts = callChunks(text).flatMap(([s, at]) => { let o = 0; return ttsSplitLong(s).map(x => { const r = [x.trim(), at + o]; o += x.length; return r; }); }).filter(([s]) => s);
-  const vc = who || c.c, speechLang = who ? langOf(who) : callSpeechLang(c), v = phoneVoice(speechLang, vc);
+  const vc = who || c.c, speechLang = callSpeechLang(who ? {c:who} : c), v = phoneVoice(speechLang, vc);
   return Promise.all(parts.map(([s, at], k) => new Promise(res => {
     const u = new SpeechSynthesisUtterance(s); u.lang = speechLang; if(v) u.voice = v; u._rc = vc; u._rtag = 'apel'; if(fill) u._fill = 1;   // 12.9
     const P = callProso(c, s, text, v); u.pitch = who ? Math.min(2, P.pitch + .14) : P.pitch * (c.sleepy ? .96 : 1); u.rate = P.rate * (c.sleepy && !who ? .9 : 1); u.volume = P.vol;   // 9.98: alt ton pentru a doua voce
@@ -12237,7 +12241,7 @@ async function callReply(opts = {}){
     turn.rid = rid;
     c.spokenTurn = turn;
   }
-  const run = reply(null, {c:c.c, ch:c.ch, tag:'apel', ...opts, fix:(opts.pro ? (opts.fix || '') + (c.video ? callSpeechRules(c) : '') : callFix(c) + pres + callSpeechRules(c)) + gN + (opts.resume || '')});
+  const run = reply(null, {c:c.c, ch:c.ch, tag:'apel', ...opts, fix:(opts.pro ? (opts.fix || '') + callSpeechRules(c) : callFix(c) + pres + callSpeechRules(c)) + gN + (opts.resume || '')});
   const m = c.ch.msgs[n0];
   // vorbește de la prima propoziție gata, cât restul încă se scrie
   let said = 0; const q = [];
@@ -12261,7 +12265,10 @@ async function callReply(opts = {}){
   clearTimeout(c.fillT); const fill = c.fillT = !opts.pro && !learnOn(c.c) && S.callFill !== 'off' ? setTimeout(() => {
     const rvq = rvOn(c.c);   // 12.9: cu vocea reală, „hm…” acoperă și așteptarea sunetului primei propoziții
     if(call !== c || c.state !== 'think' || (said && !rvq) || c.interrupted || (!rvq && m && callClean(m.text || '').length > 3)) return;
-    const q = /\?\s*$/.test(c.lastHeard || ''), F = callSharonEnglish(c) ? (q ? ['Hmm…', 'Let me think…'] : ['Mm-hmm…', 'I see…']) : (q ? ['Păi…', 'Stai…', 'Păi, stai…', 'Hmm, păi…'] : ['Îhî…', 'Aha…', 'Da…', 'Păi…']);   // 9.69: „Mhm” / „Mm” erau citite literă cu literă de vocile de telefon
+    const question = /\?\s*$/.test(c.lastHeard || '');
+    const language = callSpeechLang(c).slice(0, 2);
+    if(language !== 'en' && language !== 'ro') return;
+    const F = language === 'en' ? (question ? ['Hmm…', 'Let me think…'] : ['Mm-hmm…', 'I see…']) : (question ? ['Păi…', 'Stai…'] : ['Îhî…', 'Aha…', 'Da…']);
     if(rvq || Math.random() < .65) q.push(callSay(c, F[Math.floor(Math.random() * F.length)], 0, undefined, rvq));
   }, 1100) : 0;
   try{ await run; } catch(e){}
@@ -12330,7 +12337,7 @@ async function callGuestTurn(c, kind){
   const prompt = (kind === 'join' ? `${c.c.name} te-a băgat chiar acum în apelul ei cu ${u} (apel ${c.video ? 'video' : 'de voce'}; vorbiți, nu scrieți). Ultimele replici:\n${recent}\n\nSalută-l și intră firesc în discuție` : `Ești în același apel cu ${c.c.name} și ${u} (apel ${c.video ? 'video' : 'de voce'}; vorbiți, nu scrieți). Ultimele replici:\n${recent}\n\nSpune-ți replica: răspunde la ce s-a zis acum, mai ales dacă ți se adresează ție`)
     + `: 1-2 propoziții scurte, vorbite, firești, cu personalitatea ta și cu ce simți față de ${c.c.name} și față de ${u}. Fără acțiuni între asteriscuri, fără etichete, fără nume în față.`;
   let tx = '';
-  try{ tx = await stream(guestSys(c.c, o), [{role:'user', text:prompt}], {max:200, cid:o.id, tag:'apel'}); }catch(e){ tx = ''; }
+  try{ tx = await stream(guestSys(c.c, o) + callSpeechRules({c:o}), [{role:'user', text:prompt}], {max:200, cid:o.id, tag:'apel'}); }catch(e){ tx = ''; }
   tx = callClean(String(tx || '').replace(new RegExp('^\\s*' + o.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*:\\s*', 'i'), '')).trim();
   if(!tx || !current() || c.guest !== o) return null;
   c.ch.msgs.push({id:uid(), role:'ai', guest:o.id, text:tx, ts:Date.now(), call:true, ...(c.video ? {video:true} : {}), ...(c.duoG === o ? {who:1, gname:o.name} : {})});
@@ -13451,12 +13458,13 @@ function bcMaybe(c, txt, lastT){
   const words = txt.split(/\s+/).filter(Boolean).length;
   if(words - (c.bcWords || 0) < 6 || now - (c.bcAt || 0) < 5500 || now - (c.bcStart || now) < 2200 || Math.random() > .55) return;
   const sad = /(trist|greu|obosit|nasol|\brău\b|plâng|dor\b|bolnav|singur|sad|tired|hard|bad)/i.test(txt);
-  const set = BC_WORDS[langOf(c.c).slice(0, 2)] || BC_WORDS.ro, pool = set[sad ? 1 : 0], w = pool[Math.floor(Math.random() * pool.length)];
+  const speechLang = callSpeechLang(c);
+  const set = BC_WORDS[speechLang.slice(0, 2)] || BC_WORDS.ro, pool = set[sad ? 1 : 0], w = pool[Math.floor(Math.random() * pool.length)];
   c.bcAt = now; c.bcWords = words;
   // În video, semnalul de ascultare rămâne vizual, fără ecou în microfon.
   if(!c.video) try{
     (c.bcSaid = c.bcSaid || []).push(w);
-    const u = new SpeechSynthesisUtterance(w); u.lang = langOf(c.c); const vv = phoneVoice(langOf(c.c), c.c); if(vv) u.voice = vv;
+    const u = new SpeechSynthesisUtterance(w); u.lang = speechLang; const vv = phoneVoice(speechLang, c.c); if(vv) u.voice = vv;
     const P = callProso(c, w, txt, vv); u.pitch = P.pitch; u.rate = Math.min(1.25, P.rate * 1.05); u.volume = .55;
     ttsPlay(u);
   }catch(e){}
@@ -14131,7 +14139,8 @@ function callLifeTry(c, tries = 0){
   setTimeout(() => {
     if(call !== c) return;
     if(c.video) ccPlay(c, 'priv', true);
-    const set = langOf(c.c).startsWith('ro') ? ['Stai o secundă…', 'O clipă…', 'Stai puțin…'] : ['Hold on a sec…', 'One moment…'];
+    const pauses = {ro:['Stai o secundă…','O clipă…'], en:['Hold on a sec…','One moment…'], es:['Un momento…'], fr:['Un instant…'], it:['Un attimo…'], de:['Einen Moment…']};
+    const set = pauses[callSpeechLang(c).slice(0, 2)] || pauses.ro;
     const w = set[Math.floor(Math.random() * set.length)];
     c.capOn = false; const off = capAppend(c, w);
     Promise.resolve(callSay(c, w, off)).then(() => {
@@ -14613,7 +14622,11 @@ function callIntro(c){
   if(c.amb) ambEvent(c, 'rustle'); else setTimeout(() => { if(call === c && c.amb) ambEvent(c, 'rustle'); }, 900);
   setTimeout(() => { if(call === c && c.state !== 'speak') ccPlay(c, 'activ'); }, 1500);
 }
-const CALL_BYE = {ro:['Pa, pa!', 'Hai, pa!', 'Bine, vorbim. Pa!', 'Pa! Vorbim.'], en:['Bye!', 'Okay, bye!', 'Talk soon, bye!']};
+const CALL_BYE = {
+  ro:['Pa, pa!', 'Hai, pa!', 'Bine, vorbim. Pa!', 'Pa! Vorbim.'],
+  en:['Bye!', 'Okay, bye!', 'Talk soon, bye!'],
+  es:['¡Hasta luego!'], fr:['À bientôt !'], it:['A presto!'], de:['Bis bald!']
+};
 /* 13.2: 🔎 Starea apelului — ce se vede și de ce, ca să nu ghicim: imaginea, fața și gura, clipurile, vocea, Runware */
 function callDiag(c){
   const cc = c.c, V = c.vf, L = c.cl, out = [], k0 = c.pics && c.pics[0];
@@ -14631,7 +14644,7 @@ function callDiag(c){
   out.push(['🎬 Clipurile', cl]);
   const w = rvWhy(cc);
   if(c.ccOpening) out.push(['🎤 Inițiativa apelului', c.ccOpening]);
-  out.push(['🌐 Limba apelului', callSharonEnglish(c) ? 'engleză (expresii ocazionale în spaniolă); chatul scris neschimbat' : 'limba personajului']);
+  out.push(['🌐 Limba apelului', callLanguage(c.c)?.[0] || 'limba personajului']);
   out.push(['🎙️ Vocea', (w ? 'a telefonului: ' + w : 'reală · ' + rvLabel(cc) + (RV.cur ? ' · vorbește' : RV.q.length ? ` · ${RV.q.length} în coadă` : '')) + (RV.lastErr ? ` · ultima eroare: ${RV.lastErr}` : '')]);
   const busyMin = S.rwBusyAt ? Math.round((Date.now() - S.rwBusyAt) / 60e3) : null;
   if(S.rwLastErr && Date.now() - S.rwLastErr.at < 864e5) out.push(['⚠️ Ultima eroare Runware', `${S.rwLastErr.why} (${new Date(S.rwLastErr.at).toTimeString().slice(0, 5)}): ${S.rwLastErr.msg}`]);   // 14.0
@@ -14738,9 +14751,9 @@ function callSheHangs(c, m){
 function callLayout(v, on){
   const P = v.querySelector('#clMoreP'), grid = P && P.querySelector('.cmgrid'), rx = P && P.querySelector('.cmrx'), bar = v.querySelector('.cbtns'), rail = v.querySelector('.vreact'), end = v.querySelector('#clEnd'), more = v.querySelector('#clMore');
   if(!P) return;
-  for(const id of ['clSee', 'clBarge', 'clAdd', 'clDiag']){ const b = v.querySelector('#' + id); if(!b) continue; if(on) grid.appendChild(b); else bar.insertBefore(b, more || end); }
+  for(const id of ['clFlip', 'clSee', 'clBarge', 'clAdd', 'clDiag']){ const b = v.querySelector('#' + id); if(!b) continue; if(on) grid.appendChild(b); else bar.insertBefore(b, more || end); }
   if(rail){ if(on){ for(const b of [...rail.children]) rx.appendChild(b); } else for(const b of [...rx.children]) rail.appendChild(b); }
-  if(!on) v.classList.remove('more');
+  if(!on){ v.classList.remove('more'); more?.setAttribute('aria-expanded', 'false'); }
 }
 
 function cvCut(cv){ if(!cv) return; cv.classList.add('cut'); clearTimeout(cv._cut); cv._cut = setTimeout(() => cv.classList.remove('cut'), 260); }   // 12.5
@@ -15877,6 +15890,7 @@ function openEditor(id){
   $('#edName').value = c?.name || ''; $('#edTag').value = c?.tag || '';
   $('#edAspect').value = c?.aspect || ''; $('#edPersona').value = c?.persona || '';
   duoFill(c);   // 9.63
+  $('#edCallLang').value = callLanguage(c) ? c.callLang : '';
   $('#edSpeech').value = c?.speech || ''; $('#edGreet').value = c?.greet || '';
   $('#edLook').value = c?.look || ''; $('#edStil').value = c?.stil || 'photo';
   ed.accent = c?.accent || ''; ed.bg = c?.bg || 'clar'; drawLook();
@@ -16129,7 +16143,7 @@ async function saveEditorNow(){
   await crSave(c);   // 9.24: poza întreagă, corpul, unghiurile, descrierea ta
   const oldGreet = c.greet;
   Object.assign(c, {name, tag:$('#edTag').value.trim(), aspect:$('#edAspect').value.trim(), persona:$('#edPersona').value.trim(),
-    speech:$('#edSpeech').value.trim(), greet:$('#edGreet').value.trim(), look:$('#edLook').value.trim(), stil:$('#edStil').value,
+    callLang:$('#edCallLang').value, speech:$('#edSpeech').value.trim(), greet:$('#edGreet').value.trim(), look:$('#edLook').value.trim(), stil:$('#edStil').value,
     accent:ed.accent || '', bg:ed.bg || 'clar'});
   if(duo){ const o = c.duo || {}; c.duo = {...o, ...duo, a:{...(o.a || {}), ...duo.a}, b:o.bRef ? {...(o.b || {}), ...duo.b} : {...(o.b || {}), ...duo.b}}; duoFix(c); c.name = duo.a.name + ' & ' + duo.b.name; groups.forEach(g => { if(g.members.includes(c.id)) g.members = g.members.filter(x => x !== c.id); }); saveGroups(); }   // 9.63
   else if(c.duo){ c.duo.on = false; }
@@ -16711,6 +16725,8 @@ function bind(){
   $('#edGreet').addEventListener('input', drawEdPreview);
   $('#edName').addEventListener('input', drawEdPreview);
   $('#vHome').addEventListener('click', e => {
+    const tab = e.target.closest('[data-home-tab]');
+    if(tab){ showHomeTab(tab.dataset.homeTab); return; }
     if(e.target.closest('[data-duonew]')){ duoSheet(null); return; }   // 14.3
     if(e.target.closest('#btnNew, [data-new]')){ if(!aiReady()) toast('Sfat: adaugă întâi cheia în Setări, ca poza să fie descrisă automat.', 3500); openEditor(null); return; }
     const o = e.target.closest('[data-open]'); if(o) openWithFly(o);
@@ -16732,10 +16748,17 @@ function bind(){
   $('#gRbX').onclick = () => { gReply = null; $('#gReplyBar').hidden = true; };
   // conversație
   $('#btnPolish').onclick = polishSheet;
-  const iq = $('#intimacyQuick'), iqBtn = $('#btnIntimacy');
+  const iq = $('#intimacyQuick'), iqBtn = $('#btnPlus');
   const closeIq = () => { iq.hidden = true; iqBtn.setAttribute('aria-expanded', 'false'); };
-  iqBtn.onclick = () => { const open = iq.hidden; iq.hidden = !open; iqBtn.setAttribute('aria-expanded', String(open)); if(open) $('#iqClose').focus({preventScroll:true}); };
-  $('#iqClose').onclick = closeIq;
+  iqBtn.onclick = () => {
+    if(!iq.hidden){ closeIq(); return; }
+    plusMenu(() => {
+      iq.hidden = false;
+      iqBtn.setAttribute('aria-expanded', 'true');
+      $('#iqClose').focus({preventScroll:true});
+    });
+  };
+  $('#iqClose').onclick = () => { closeIq(); iqBtn.focus(); };
   iq.onclick = e => {
     const b = e.target.closest('[data-intimacy]');
     if(!b) return;
@@ -16751,7 +16774,6 @@ function bind(){
   $('#composer').onsubmit = e => { e.preventDefault(); if(busy && live && live.ch === chat) busy.abort(); else send(); };
   $('#inp').addEventListener('input', () => { autoSize(); updateComposer(); });
   $('#inp').addEventListener('keydown', e => { if(e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches){ e.preventDefault(); $('#composer').requestSubmit(); } });
-  $('#btnPlus').onclick = plusMenu;
   $('#msgs').addEventListener('scroll', onMsgsScroll, {passive:true});   // 11.7: o dată pe cadru
   // apăsare lungă pe o poză din conversație → meniul ei (salvează, trimite, poză de profil)
   $('#msgs').addEventListener('contextmenu', e => { const w = e.target.closest('.mw'); if(!w || !e.target.closest('.pic')) return; e.preventDefault(); msgSheet(+w.dataset.i); });
@@ -16762,7 +16784,6 @@ function bind(){
   $('#pfScroll').addEventListener('scroll', profScroll, {passive:true});
   $('#btnMic').onclick = toggleMic;
   $('#btnSearch').onclick = () => openSearch();
-  $('#chSearch').onclick = () => openSearch(cur.id);
   $('#btnSugg').onclick = () => { if(!aiReady()){ toast('Adaugă cheia în Setări.'); return; } if(busy){ toast('Așteaptă răspunsul.'); return; } suggest(); };
   $('#search').addEventListener('input', renderHome);
   // apăsare lungă pe card → profil
@@ -16927,9 +16948,9 @@ function bind(){
   });
   $('#stExport').onclick = () => exportAll(false);
   $('#stExportShare').onclick = () => exportAll(true);
-  $('#stWrapped').onclick = () => openWrapped();
   $('#btnHomeMore').onclick = () => sheet([
     ['📣', 'Întreabă-le pe toate', () => bcastSheet()],
+    ['◉', 'Noutăți', () => showHomeTab('feed')],
     ['📊', 'Taifas Wrapped', () => openWrapped()]
   ]);
   $('#chCall').onclick = () => callChoice();
