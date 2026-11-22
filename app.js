@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.11.0';
+const APP_VER = '14.12.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -4908,7 +4908,7 @@ function back(){
 window.addEventListener('popstate', () => {
   if(call){ endCall(); return; }   // 8.5: Înapoi închide apelul
   if(stv){ closeStories(); history.pushState(history.state, ''); return; }   // 8.8: Înapoi închide story-ul
-  if(albumEl && !$('.viewer')){ closeAlbum(); history.pushState(history.state, ''); return; }
+  if(albumEl && !$('.viewer')){ if(!albumEl.closePreview?.()) closeAlbum(); history.pushState(history.state, ''); return; }
   if(phoneEl && !$('.viewer')){ closePhone(); history.pushState(history.state, ''); return; }
   // intrarea-gardă de la pornire: Înapoi închide ce e deschis; abia pe Acasă, fără nimic deschis, iese din aplicație
   if(history.state && history.state.root){
@@ -4985,9 +4985,11 @@ function renderHome(){
   const bk = !q && bkDue() ? `<div class="bkslim"><span>💾</span><span class="bkt"><b>Backup: ${esc(bkAgo())}</b><small>Totul stă doar în telefonul ăsta</small></span><button class="btn sm pri" data-bk="share">📤 Drive</button><button class="btn sm" data-bk="dl" aria-label="Salvează">⬇</button><button class="bkx" data-bk="later" aria-label="Mai târziu">✕</button></div>` : '';
   // 9.15: doar cardurile schimbate se refac (înainte, la fiecare întoarcere pe Acasă se refăcea tot, cu pozele decodate din nou)
   patchKeyed($('#homeChars'), [['top', top], ['empty', !chars.length ? `<button class="card empty" data-new><b>Niciun personaj încă</b>Apasă ＋ jos ca să creezi primul personaj, din poză sau din imaginație.</button>` : ''],
-    ...shown.map(c => ['card:' + c.id, `<button class="card${c.fav ? ' isfav' : ''}" data-open="${c.id}">${c.fav ? '<span class="fav">⭐</span>' : ''}${c.unread ? `<span class="ubadge">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}${c.lastAt && c.last || clockHTML(c) ? `<span class="tl">${c.lastAt && c.last ? `<span class="when">${when(c.lastAt)}</span>` : ''}${clockHTML(c, 'when clk')}</span>` : ''}
-      ${duoOn(c) ? duoHalves(c) : c.photo ? `<img${c.avLive && c.avs && fxOn() ? ` class="avl" style="animation-delay:${avDelay(c.id)}"` : ''} data-k="${esc(photoNow(c))}" data-t="m" alt="">${c.avLive && c.avs ? avClipHTML(c, avKeyNow(c)) : ''}` : `<div class="ph" style="background:${colorFor(c)}">${esc(c.name[0] || '?')}</div>`}
-      <div class="ov"><b>${esc(c.name)}</b>${c.tag ? `<small>${esc(c.tag)}</small>` : ''}${cardStatus(c)}${c.rel ? `<span class="crel">💞 ${esc(relOf(c).name)}</span>` : ''}${c.last ? `<em class="lm">${esc(c.last)}</em>` : ''}</div></button>`]), ['new', chars.length && !q ? `<button class="card new" data-new><span>＋</span><em>Personaj nou</em></button>` : ''], ['duonew', chars.length && !q ? `<button class="card new duonew" data-duonew><span>👯</span><em>Duo nou</em></button>` : '']].filter(b => b[1]), homeStore.chars);
+    ...shown.map(c => ['card:' + c.id, `<button class="card galleryCharacter" data-profile="${esc(c.id)}">
+      <span class="galleryPortrait">${duoOn(c) ? duoHalves(c) : c.photo ? `<img data-k="${esc(c.photo)}" data-t="m" alt="">` : `<span class="galleryInitial" style="background:${colorFor(c)}">${esc(c.name[0] || '?')}</span>`}
+      ${c.fav ? '<span class="galleryFavorite" aria-label="Favorit">★</span>' : ''}</span>
+      <span class="galleryName"><b>${esc(c.name)}</b>${c.tag ? `<small>${esc(c.tag)}</small>` : ''}</span>
+    </button>`]), ['new', chars.length && !q ? `<button class="card new" data-new><span>＋</span><em>Personaj nou</em></button>` : ''], ['duonew', chars.length && !q ? `<button class="card new duonew" data-duonew><span>👯</span><em>Duo nou</em></button>` : '']].filter(b => b[1]), homeStore.chars);
   const withChat = chars.filter(c => c.last).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
   const pinned = withChat.filter(c => c.pinned), rest = withChat.filter(c => !c.pinned);
   const crow = c => {
@@ -5991,8 +5993,6 @@ async function openChat(id, push = true, tid, dir){
     const box = $('#msgs'), fromBottom = box.scrollHeight - box.scrollTop; msgStart = full0; renderMsgs(false, true); box.scrollTop = box.scrollHeight - fromBottom; }); }
   setBusyUI(!!(busy && live && live.ch === chat));
   $('#sugg').innerHTML = '';
-  $('#intimacyQuick').hidden = true;
-  $('#btnPlus').setAttribute('aria-expanded', 'false');
   clearReply(); jumpCount = 0;
   if((cur.sched || []).some(x => x.at <= Date.now())) runDueSched(); else annCheck(cur).then(async done => { if(!done) done = await bdayCheck(cur); if(!done) maybeProactive(); });
   setTimeout(jrnSweep, 2500);
@@ -6627,6 +6627,90 @@ Răspunde STRICT cu JSON: {"text":"textul de pe story (poate fi gol)","poza":"on
 }
 /* ───────── 📖 8.10: albumul vostru (cronologie ca un scrapbook) ───────── */
 let albumEl = null;
+function characterMedia(chats, posts, cid){
+  const items = [];
+  for(const thread of chats){
+    for(const m of thread.msgs || []){
+      if(m.role !== 'ai' || !m.img || m.err || m.pending || m.pendingImg) continue;
+      const common = {poster:m.img, ts:m.ts || 0, tid:thread.tid || 'main', mid:m.id, m};
+      items.push({...common, kind:'photo', key:m.img});
+      if(m.vid) items.push({...common, kind:'video', key:m.vid});
+    }
+  }
+  const chatPhotos = new Set(items.filter(it => it.kind === 'photo').map(it => it.key));
+  for(const p of posts){
+    if(p.cid === cid && p.img && !chatPhotos.has(p.img)) items.push({poster:p.img, key:p.img, kind:'photo', ts:p.ts || 0});
+  }
+  items.sort((a,b) => b.ts - a.ts || Number(!!b.mid) - Number(!!a.mid) || Number(b.kind === 'video') - Number(a.kind === 'video'));
+  const seen = new Set();
+  return items.filter(item => {
+    const key = item.kind + ':' + item.key;
+    if(seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+async function openCharacterAlbum(c){
+  if(!c) return;
+  showCharacterAlbum(c, characterMedia(await allChats(c), feedCache, c.id));
+}
+function openMessageMedia(c, ch, m, kind){
+  if(!c || !ch || !m?.img) return;
+  const items = characterMedia([{tid:ch.tid, msgs:[m]}], [], c.id);
+  const item = items.find(x => x.kind === kind);
+  if(item) showCharacterAlbum(c, items, item);
+}
+function showCharacterAlbum(c, items, initial){
+  closeAlbum();
+  const root = document.createElement('div');
+  albumEl = root;
+  root.className = 'albumv mediaAlbum';
+  root.innerHTML = `<header><button type="button" class="ib" data-alx aria-label="Închide albumul">‹</button><div><b>Album</b><small>${esc(c.name)}</small></div><button type="button" class="btn sm" data-moments>Amintiri</button></header>
+    <nav aria-label="Tip de conținut"><button data-filter="all">Toate</button><button data-filter="photo">Fotografii</button><button data-filter="video">Clipuri</button></nav>
+    <div class="mediaAlbumScroll"></div><section class="mediaPreview" hidden aria-label="Vizualizare media"></section>`;
+  const grid = root.querySelector('.mediaAlbumScroll'), preview = root.querySelector('.mediaPreview');
+  let selected = null;
+  const render = filter => {
+    root.querySelectorAll('[data-filter]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.filter === filter)));
+    grid.innerHTML = items.map((it,i) => filter !== 'all' && filter !== it.kind ? '' : `<button class="mediaTile" data-media="${i}" aria-label="${it.kind === 'video' ? 'Redă clipul' : 'Deschide fotografia'}">
+      <img data-k="${esc(it.poster)}" data-t="g" alt="" loading="lazy">${it.kind === 'video' ? '<span aria-hidden="true">▶</span>' : ''}</button>`).join('') || '<p class="mediaEmpty">Aici vor apărea fotografiile și clipurile personajului.</p>';
+    hydrate(grid);
+  };
+  const closePreview = () => { preview.hidden = true; preview.replaceChildren(); selected = null; };
+  root.closePreview = () => { if(!selected) return false; closePreview(); return true; };
+  const showMedia = async it => {
+    selected = it;
+    const heading = it.kind === 'video' ? 'Clip' : 'Fotografie';
+    preview.innerHTML = `<header><button type="button" class="ib" data-prevback aria-label="Înapoi la album">‹</button><b>${heading}</b></header>
+      <div class="mediaCanvas">${it.kind === 'video' ? '<video controls playsinline preload="metadata"></video>' : `<img data-k="${esc(it.key)}" alt="Fotografie">`}</div>
+      <footer>${it.mid ? '<button type="button" class="btn" data-origin>Vezi mesajul</button>' : ''} <button type="button" class="btn" data-media-save>Salvează</button>
+      ${it.m ? `<details><summary>Detalii</summary><p>${esc(it.kind === 'video' ? (vidInfo(it.m) || 'Fidelitate neverificată.') : [warnLine(it.m), it.m.scene].filter(Boolean).join('\n') || 'Fără detalii de generare.')}</p></details>` : ''}</footer>`;
+    preview.hidden = false;
+    preview.querySelector('[data-prevback]').focus({preventScroll:true});
+    if(it.kind === 'photo'){ hydrate(preview); return; }
+    const video = preview.querySelector('video');
+    const url = it.key.startsWith('u:') ? it.key.slice(2) : await imgUrl(it.key);
+    if(selected !== it || !video.isConnected) return;
+    if(url) video.src = url; else video.replaceWith(Object.assign(document.createElement('p'),{textContent:'Clipul nu mai este disponibil.'}));
+  };
+  root.onclick = e => {
+    const button = e.target.closest('button');
+    if(!button) return;
+    if(button.hasAttribute('data-alx')) closeAlbum();
+    else if(button.hasAttribute('data-moments')) openAlbum(c);
+    else if(button.dataset.filter) render(button.dataset.filter);
+    else if(button.hasAttribute('data-media')) showMedia(items[Number(button.dataset.media)]);
+    else if(button.hasAttribute('data-prevback')) closePreview();
+    else if(button.hasAttribute('data-media-save') && selected){
+      if(selected.kind === 'video') vidSave(selected.key); else saveImage(selected.key);
+    }else if(button.hasAttribute('data-origin') && selected?.mid){
+      const {tid,mid} = selected; closeAlbum(); jumpTo(c.id, tid, mid);
+    }
+  };
+  document.body.appendChild(root);
+  render('all');
+  if(initial) showMedia(initial);
+}
 async function openAlbum(c){
   if(!c) return;
   const chats = await allChats(c), days = {};
@@ -6667,7 +6751,7 @@ async function openAlbum(c){
   const allPics = [...albumEl.querySelectorAll('[data-view]')].map(x => x.dataset.view);
   albumEl.onclick = e => { if(e.target.closest('[data-alx]')){ closeAlbum(); return; } const v = e.target.closest('[data-view]'); if(v) viewImg(v.dataset.view, allPics); };
 }
-function closeAlbum(){ if(!albumEl) return; const a = albumEl; albumEl = null; a.classList.add('out'); setTimeout(() => a.remove(), 250); }
+function closeAlbum(){ if(!albumEl) return; const a = albumEl; albumEl = null; a.closePreview?.(); a.classList.add('out'); setTimeout(() => a.remove(), 250); }
 /* ───────── 👯 8.10: personajele se cunosc între ele ───────── */
 const pairKey = (a, b) => [a, b].sort().join('|');
 const relBetween = (a, b) => (S.socRel || {})[pairKey(a.id, b.id)] || '';
@@ -8614,7 +8698,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
     cls += ' picm';
     const fresh = !devDone.has(m.img) && m.ts && Date.now() - m.ts < 3 * 60e3;   // poza abia sosită „se developează”
     const loc = whereIn(m.where);
-    inner = `<div class="picbox${fresh ? ' flash' : ''}"><img class="pic big${fresh ? ' dev' : ''}" data-k="${esc(m.img)}"${picAttr(m.img, false)} data-view="${esc(m.img)}" alt="">${m.vid ? `<video class="pvid" data-vk="${esc(m.vid)}" muted loop playsinline preload="metadata"></video><span class="vbadge${m.vidChk && m.vidChk.ok === false ? ' warn' : ''}">${esc(vidBadge(m))}</span>` : ''}${m.vidPending ? `<span class="vload"><span class="spin"></span> 🎬 ${esc(cur.name)} filmează…${m.vidStage ? ' · ' + esc(m.vidStage) : ''}</span>` : ''}${loc ? `<span class="ploc">📍 ${esc(loc)}</span>` : ''}${tm}${reactHTML(m)}</div>${warnLine(m) ? `<div class="bwarn">${esc(warnLine(m))}</div>` : ''}${m.text ? `<div class="bub">${fmtMsg(m.text)}</div>` : ''}`;   // 9.85 (6)
+    inner = `<div class="picbox${fresh ? ' flash' : ''}"><img class="pic big${fresh ? ' dev' : ''}" data-k="${esc(m.img)}"${picAttr(m.img, false)} data-view="${esc(m.img)}" alt="">${m.vid ? '<button type="button" class="chatMediaPlay" data-chat-media="video" aria-label="Redă clipul">▶</button>' : ''}<button type="button" class="chatMediaInfo" data-chat-media="${m.vid ? 'video' : 'photo'}" aria-label="Detalii media">ⓘ</button>${m.vidPending ? `<span class="vload"><span class="spin"></span> 🎬 ${esc(cur.name)} filmează…${m.vidStage ? ' · ' + esc(m.vidStage) : ''}</span>` : ''}${loc ? `<span class="ploc">📍 ${esc(loc)}</span>` : ''}${tm}${reactHTML(m)}</div>${m.text ? `<div class="bub">${fmtMsg(m.text)}</div>` : ''}`;   // 9.85 (6)
     if(fresh) devDone.add(m.img);
   }
   else if(m.img) inner = `<div class="bub picwrap">${quoteHTML(m)}<img class="pic" data-k="${esc(m.img)}"${picAttr(m.img, true)} data-view="${esc(m.img)}" alt="">${m.text ? `<div class="cap">${fmtMsg(m.text)}</div>` : ''}${tm}${reactHTML(m)}</div>`;
@@ -9019,7 +9103,7 @@ function ttsWire(u, orig){
   u.onend = ev => { if(u !== o){ TTS_KEEP.delete(u); } ttsFinish(o, ev || {type:'end', utterance:o}); };
   u.onerror = ev => {
     const er = ev && ev.error;
-    if(!u._retry && u.voice && /voice-unavailable|language-unavailable|synthesis-failed|synthesis-unavailable|audio-busy|audio-hardware/.test(er || '')){ ttsRetry(u); return; }
+    if(!u._strictVoice && !u._retry && u.voice && /voice-unavailable|language-unavailable|synthesis-failed|synthesis-unavailable|audio-busy|audio-hardware/.test(er || '')){ ttsRetry(u); return; }
     if(u !== o) TTS_KEEP.delete(u);
     ttsFinish(o, {type:'error', error:er || 'error', utterance:o});
   };
@@ -10558,6 +10642,26 @@ async function renderCost(){
 }
 
 /* poze: ＋ (cere de la personaj, galerie, cameră), salvare și partajare */
+function openConversationPresets(){
+  const root = openSheet($('#intimacyQuick').innerHTML);
+  const dialog = root.querySelector('.sheet');
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.setAttribute('aria-label', 'Apropiere, fotografii și scenă');
+  root.querySelector('[data-close]').focus({preventScroll:true});
+  root.addEventListener('click', e => {
+    const button = e.target.closest('[data-intimacy]');
+    if(!button) return;
+    const input = $('#inp');
+    input.value += (input.value.trim() ? '\n\n' : '') + button.dataset.intimacy;
+    closeSheet();
+    autoSize();
+    updateComposer();
+    input.focus();
+    const end = input.value.length;
+    input.setSelectionRange(end,end);
+  });
+}
 function plusMenu(openPresets){
   if(busy && live && live.ch === chat){ toast('Așteaptă răspunsul.'); return; }
   const o = [];
@@ -10927,6 +11031,7 @@ async function charProfile(id, push = true){
   const picsM = chats.flatMap(ch => ch.msgs.filter(m => m.img && m.role === 'ai').map(m => ({k:m.img, ts:m.ts, scene:m.scene}))).sort((a, b) => b.ts - a.ts);
   { const have = new Set(picsM.map(y => y.k)); for(const fp of feedCache.filter(x => x.cid === id && x.img && !have.has(x.img))) picsM.push({k:fp.img, ts:fp.ts, scene:fp.scene, story:fp.story}); }   // 11.7
   picsM.sort((a, b) => b.ts - a.ts);
+  const media = characterMedia(chats, feedCache, id), featured = media[0];
   const pics = picsM.map(x => x.k), picMeta = Object.fromEntries(picsM.map(x => [x.k, x]));
   if(push) profTab = pics.length ? 'poze' : 'despre';
   // 8.9: momente (ca evidențierile de pe Instagram): pozele grupate pe zile
@@ -10954,12 +11059,14 @@ async function charProfile(id, push = true){
     <div class="igBio"><h1>${esc(c.name)}</h1>${c.tag ? `<p class="igTag">${esc(c.tag)}</p>` : ''}${duoOn(c) ? '' : c.persona ? `<p class="clamp3" id="pfAbout">${esc(c.persona)}</p><button class="more" id="pfMore" hidden>mai mult</button>` : ''}${pfChips(c)}</div>
     ${duoOn(c) ? duoCardsHTML(c) : ''}
     <div class="igActs">
-      <button class="btn pri" id="pfChat">💬 ${fromChat ? 'Înapoi la chat' : 'Mesaj'}</button>
-      <button class="btn" id="pfCall" aria-label="Sună">📞</button>
+      <button class="btn pri" id="pfChat">Conversație</button>
+      <button class="btn" id="pfCall">Apel</button>
+      <button class="btn" id="pfAlbum">Album</button>
       <button class="btn" id="pfGift" aria-label="Cadou">🎁</button>
       <button class="btn" id="pfPhone" aria-label="Telefonul lui">📱</button>
       <button class="btn" id="pfFav" aria-label="Favorit">${c.fav ? '★' : '☆'}</button>
     </div>
+    ${featured ? `<button class="profileLatest" id="pfLatest"><img data-k="${esc(featured.poster)}" data-t="m" alt=""><span><b>${featured.kind === 'video' ? 'Cel mai recent clip' : 'Cea mai recentă fotografie'}</b><small>${esc(when(featured.ts))}</small></span><span aria-hidden="true">›</span></button>` : ''}
     ${hiDays.length ? `<div class="igHi">${hiDays.map((h, k) => `<button data-hi="${k}"><span><img data-k="${esc(h.items[0].k)}" data-t="s" alt=""></span><small>${esc(hiLabel(h.d))}</small></button>`).join('')}</div>` : ''}
     <div class="pftabs ig" id="pfTabs"><button data-pt="poze"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Poze</button><button data-pt="despre">✨ Despre</button><button data-pt="memorie">🧠 Memorie</button></div>
     <div class="pfSec igGrid"><div class="pfGal">${pics.length ? pics.map(k => `<button data-view="${esc(k)}">${picMeta[k].story ? '<i>📸</i>' : ''}<img data-lk="${esc(k)}" data-t="g" alt="" loading="lazy"></button>`).join('') : ''}</div>${pics.length ? '' : `<p class="igEmpty">📷<br>Încă nicio poză de la ${esc(c.name)}.<br><small>Cere-i una din ＋ în conversație.</small></p>`}</div>
@@ -11050,7 +11157,12 @@ async function charProfile(id, push = true){
   $('#pfFav').onclick = async () => { c.fav = !c.fav; await saveChars(); $('#pfFav').textContent = c.fav ? '★' : '☆'; toast(c.fav ? '⭐ Adăugat la favorite' : 'Scos de la favorite'); };
   $('#pfEditTop').onclick = () => openEditor(id);
   $('#pfPhone').onclick = () => openPhone(c);
-  $('#pfCall').onclick = async () => { if(!fromChat) await openChat(id); else history.back(); setTimeout(callChoice, 350); };
+  $('#pfCall').onclick = async () => {
+    await openChat(id, !fromChat);
+    if(cur?.id === id && !$('#vChat').hidden) callChoice();
+  };
+  $('#pfAlbum').onclick = () => showCharacterAlbum(c, media);
+  if(featured) $('#pfLatest').onclick = () => showCharacterAlbum(c, media, featured);
   $('#pfGift').onclick = async () => { if(!fromChat) await openChat(id); else history.back(); setTimeout(giftSheet, 350); };
   $('#pfAvBtn').onclick = () => { if(storyLive().some(x => x.cid === id)) openStories(id); else if(c.photo){ const k = photoNow(c); viewImg(k, [...new Set([k, c.photo])]); } };   // 9.27: poza de acum (avatarul viu), apoi cea de bază
   body.querySelectorAll('[data-hi]').forEach(b => b.onclick = e => { e.stopPropagation(); const h = hiDays[+b.dataset.hi]; openStories(id, h.items.slice().reverse().map(x => ({id:'h' + x.k, cid:id, ts:x.ts, text:'', img:x.k, scene:x.scene}))); });
@@ -11502,7 +11614,7 @@ function chatMenu(){
     ['🧵', n > 1 ? `Conversații (${n})` : 'Conversații', threadsSheet],
     modeOf(chat) === 'chat' ? ['🎭', 'Treci pe roleplay (*acțiuni*, scenă împreună)', toggleMode] : ['💬', 'Treci pe chat pe telefon (doar mesaje)', toggleMode],
     ['⏰', (() => { const k = (cur.sched || []).filter(x => x.tid === (chat.tid || 'main')).length; return k ? `Mesaje programate (${k})` : 'Mesaje programate'; })(), schedSheet],
-    ['📖', 'Albumul vostru', () => openAlbum(cur)],
+    ['▦', 'Album foto și video', () => openCharacterAlbum(cur)],
     ['📱', `Telefonul lui ${cur.name}`, () => openPhone(cur)],
     ['📌', 'Regulile voastre' + ((cur.rules || []).length ? ' · ' + cur.rules.length : ''), () => setTimeout(() => cRulesSheet(cur), 60)],   // 9.74
     ['🌍', learnOn(cur) ? `Învață ${LANGS[cur.learn.lang][0].toLowerCase()} (pornit)` : 'Învață o limbă', () => learnSheet(cur)],
@@ -11810,6 +11922,13 @@ const CALL_FIX_V = u => `ești într-un apel video cu ${u}, vă vedeți pe ecran
 const CALL_LANGS = {ro:['Română','ro-RO','Romanian'], ...LANGS, en_es:['Engleză cu expresii în spaniolă','en-US','English']};
 const callLanguage = c => Object.hasOwn(CALL_LANGS, c?.callLang) ? CALL_LANGS[c.callLang] : null;
 const callSpeechLang = c => callLanguage(c.c)?.[1] || langOf(c.c);
+const callAmerican = character => character?.callLang === 'en' || character?.callLang === 'en_es';
+function callPhoneVoice(lang, character){
+  if(!callAmerican(character)) return phoneVoice(lang, character);
+  const voices = phoneVoices(lang).filter(v => voxLang(v) === 'en-us');
+  const gender = genderOf(character);
+  return voices.find(v => v.name === character.vName) || voices.sort((a,b) => voxScore(b, gender, lang, '') - voxScore(a, gender, lang, ''))[0] || null;
+}
 function callSpeechRules(c){
   const language = callLanguage(c.c);
   if(!language) return '';
@@ -12108,7 +12227,7 @@ function ccScriptMatch(c, text){
 // Only a verified greeting clip may replace a short greeting response. This deliberately
 // avoids fuzzy matching of arbitrary sentences, which could misrepresent the character.
 function ccContextPick(c, heard){
-  if(!c || !c.video || !ccIsLib(c) || c.guest || c.scriptStop || c._smartClipUsed) return null;
+  if(!c || !c.video || !ccIsLib(c) || c.guest || c.scriptStop || c._smartClipUsed || callAmerican(c.c)) return null;
   const set=ccSet(c), items=set && set.scripted || [];
   const msg=ccScriptNorm(heard);
   if(!msg || msg.length>145 || /\b(not|don't|stop|sad|upset|angry|help|emergency|hurt|problem|why|how|when|where)\b/.test(msg)) return null;
@@ -12222,7 +12341,7 @@ async function callPlaySpeech(c, text, capOff, who, fill, turn){
   if(!current()) return;
   // 9.69: bucăți de cel mult ~170 de caractere, vocea după genul ei, redare prin `ttsPlay` (fără blocaje pe „vorbește”)
   // Prioritate doar pentru replici fixe identice; în orice alt caz rămâne vocea Taifas.
-  if(!who && !fill && c.video && !c.scriptStop){
+  if(!who && !fill && c.video && !c.scriptStop && !callAmerican(c.c)){
     const item=ccScriptMatch(c,text);
     if(item && await ccScriptPlay(c,item,text,capOff)){
       if(current() && turn){ turn.parts.set(capOff, text); callSaveCheckpoint(c, turn, true); }
@@ -12232,9 +12351,17 @@ async function callPlaySpeech(c, text, capOff, who, fill, turn){
   if(!current()) return;
   if(!window.speechSynthesis || !window.SpeechSynthesisUtterance){ callVoiceFail(c, 'unavailable'); return; }
   const parts = callChunks(text).flatMap(([s, at]) => { let o = 0; return ttsSplitLong(s).map(x => { const r = [x.trim(), at + o]; o += x.length; return r; }); }).filter(([s]) => s);
-  const vc = who || c.c, speechLang = callSpeechLang(who ? {c:who} : c), v = phoneVoice(speechLang, vc);
+  const vc = who || c.c, speechLang = callSpeechLang({c:vc}), american = callAmerican(vc);
+  let v = callPhoneVoice(speechLang, vc);
+  if(american && !v){
+    await voxWait();
+    if(!current()) return;
+    v = callPhoneVoice(speechLang, vc);
+  }
+  if(!who) c.speechVoice = v ? v.name + ' · ' + v.lang : american ? 'en-US indisponibilă · subtitrări' : '';
+  if(american && !v){ callVoiceFail(c, 'en-us-unavailable'); return; }
   return Promise.all(parts.map(([s, at], k) => new Promise(res => {
-    const u = new SpeechSynthesisUtterance(s); u.lang = speechLang; if(v) u.voice = v; u._rc = vc; u._rtag = 'apel'; if(fill) u._fill = 1;   // 12.9
+    const u = new SpeechSynthesisUtterance(s); u.lang = speechLang; if(v) u.voice = v; if(american) u._strictVoice = true; else u._rc = vc; u._rtag = 'apel'; if(fill) u._fill = 1;   // 12.9
     const P = callProso(c, s, text, v); u.pitch = who ? Math.min(2, P.pitch + .14) : P.pitch * (c.sleepy ? .96 : 1); u.rate = P.rate * (c.sleepy && !who ? .9 : 1); u.volume = P.vol;   // 9.98: alt ton pentru a doua voce
     u.onstart = () => { if(!current()) return; u._t0 = performance.now(); if(!who) ccTalk(c, true); if(c.state !== 'listen'){ c.state = 'speak'; callState(who ? who.name + ' vorbește' : 'vorbește', 'speak'); callBarge(c); if(!who) vfUtter(c, u); } };   // 9.62: gura pe cronologia textului
     u.onboundary = e => {
@@ -12259,7 +12386,7 @@ async function callPlaySpeech(c, text, capOff, who, fill, turn){
           callSaveCheckpoint(c, turn, true);
         }
       }   // 9.62
-      if(ev && !u._t0 && ev.error && !/interrupted|canceled/.test(ev.error)) callVoiceFail(c, ev.error);   // 9.70: n-a pornit deloc: spunem de ce
+      if(ev && !u._t0 && ev.error && !/interrupted|canceled/.test(ev.error)) callVoiceFail(c, american ? 'en-us-unavailable' : ev.error);   // 9.70: n-a pornit deloc: spunem de ce
       if(call === c && c.holdNext && c.state === 'speak' && !c.interrupted){ c.holdNext = false; callInterrupt(c); }   // 9.23: ai ieșit din cadru: se oprește la capăt de propoziție
       else if(call === c && k < parts.length - 1 && /(…|\.\.\.)\s*$/.test(s)) callBreath(c, .6);
       res();
@@ -12271,7 +12398,7 @@ async function callPlaySpeech(c, text, capOff, who, fill, turn){
 function callVoiceFail(c, err){
   VOX.err = {e:err, t:Date.now()};
   if(call !== c || c.vWarned) return; c.vWarned = true;
-  const hint = err === 'unavailable' ? 'poți citi subtitrările în apel'
+  const hint = err === 'en-us-unavailable' ? 'activează o voce English (United States) în setările de redare vocală ale telefonului; între timp ai subtitrările' : err === 'unavailable' ? 'poți citi subtitrările în apel'
     : /language|voice/.test(err) ? 'telefonul n-are vocea română instalată: Setări Android → Ieșire text în vorbire → Motor Google → Instalează date vocale → Română'
     : /not-allowed/.test(err) ? 'telefonul n-a permis vocea: atinge o dată ecranul apelului'
     : 'încearcă fără căști Bluetooth sau cu „Întrerup” oprit; din profil → 🎙️ Vocea → „🔧 Verifică vocea” vezi ce răspunde telefonul';
@@ -12350,7 +12477,7 @@ async function callReply(opts = {}){
   const poll = c.pollT = setInterval(() => { if(!current()) return clearInterval(poll); if(m && m.text && !m.err){ exOf(); speakNew(false); } }, 120);
   // 9.62: dacă răspunsul întârzie, un „hm…” scurt, ca un om care se gândește (local, fără cost; nu la începutul apelului, nu în altă limbă)
   clearTimeout(c.fillT); const fill = c.fillT = !opts.pro && !learnOn(c.c) && S.callFill !== 'off' ? setTimeout(() => {
-    const rvq = rvOn(c.c);   // 12.9: cu vocea reală, „hm…” acoperă și așteptarea sunetului primei propoziții
+    const rvq = !callAmerican(c.c) && rvOn(c.c);   // 12.9: cu vocea reală, „hm…” acoperă și așteptarea sunetului primei propoziții
     if(call !== c || c.state !== 'think' || (said && !rvq) || c.interrupted || (!rvq && m && callClean(m.text || '').length > 3)) return;
     const question = /\?\s*$/.test(c.lastHeard || '');
     const language = callSpeechLang(c).slice(0, 2);
@@ -13551,7 +13678,7 @@ function bcMaybe(c, txt, lastT){
   // În video, semnalul de ascultare rămâne vizual, fără ecou în microfon.
   if(!c.video) try{
     (c.bcSaid = c.bcSaid || []).push(w);
-    const u = new SpeechSynthesisUtterance(w); u.lang = speechLang; const vv = phoneVoice(speechLang, c.c); if(vv) u.voice = vv;
+    const u = new SpeechSynthesisUtterance(w); u.lang = speechLang; const vv = callPhoneVoice(speechLang, c.c); if(callAmerican(c.c) && !vv) return; if(vv) u.voice = vv; u._strictVoice = callAmerican(c.c);
     const P = callProso(c, w, txt, vv); u.pitch = P.pitch; u.rate = Math.min(1.25, P.rate * 1.05); u.volume = .55;
     ttsPlay(u);
   }catch(e){}
@@ -14329,12 +14456,20 @@ async function callFrameEnsure(c){
 }
 function callFrameSwitch(c, k){   // trece pe cadrul nou ca un telefon mutat și potrivit din nou
   const cvd = $('.callv .cvid'); if(!cvd) return;
-  if(c.cl){ for(const v of Object.values(c.cl.els)) if(v && v !== 1 && v.remove) v.remove(); c.cl = null; }
-  clearInterval(c.ccT); c.ccT = null; c.ccOn = false;
+  const version = c.frameSwitch = (c.frameSwitch || 0) + 1;
   const im = document.createElement('img'); im.dataset.k = k; im.dataset.ik = k; im.alt = '';
-  cvd.insertBefore(im, cvd.querySelector('.cgrain')); hydrate(cvd);
+  const current = () => call === c && c.frameSwitch === version;
+  const fail = () => {
+    if(im.classList.contains('on')) return;
+    im.remove();
+    if(current()){ c.ccOn = false; ccEnsure(c); }
+  };
   const go = () => {
-    if(call !== c) return;
+    if(!current() || !im.isConnected){ im.remove(); return; }
+    if(!im.naturalWidth){ fail(); return; }
+    if(c.cl){ for(const v of Object.values(c.cl.els)) if(v && v !== 1 && v.remove) v.remove(); c.cl = null; }
+    clearInterval(c.ccT); c.ccT = null; c.ccOn = false;
+    cvd.classList.remove('clip-active');
     if(fxOn()){ cvd.classList.add('intro'); setTimeout(() => cvd.classList.remove('intro'), 1700); }
     if(c.amb) ambEvent(c, 'rustle');
     cvd.querySelectorAll('img').forEach(i => i.classList.toggle('on', i === im));
@@ -14342,7 +14477,10 @@ function callFrameSwitch(c, k){   // trece pe cadrul nou ca un telefon mutat și
     if(c.vf) vfSwitch(c, im);
     ccEnsure(c);
   };
-  if(im.complete && im.naturalWidth) go(); else { im.addEventListener('load', go, {once:true}); setTimeout(() => { if(!im.classList.contains('on')) go(); }, 4000); }
+  im.addEventListener('load', go, {once:true});
+  im.addEventListener('error', fail, {once:true});
+  cvd.insertBefore(im, cvd.querySelector('.cgrain')); hydrate(cvd);
+  setTimeout(fail, 4000);
 }
 const ccSet = c => c && c.c && c.c.callClips && c.pics && c.pics[0] ? c.c.callClips[c.pics[0]] : null;
 function ccPrune(cc){   // 14.5: păstrează seturile imaginilor de apel ale locurilor ei + ultimele 3 în plus
@@ -14636,7 +14774,13 @@ async function ccAdd(c, kind, r){
   const u = r.k ? await imgUrl(r.k) : r.url; if(!u || call !== c){ delete c.cl.els[kind]; return; }
   const v = document.createElement('video'); v.className = 'cclip'; v.muted = true; v.playsInline = true; v.preload = 'metadata';
   v.setAttribute('playsinline', ''); v.setAttribute('muted', ''); v.dataset.kind = kind; v.src = u;
-  v.addEventListener('error', () => { if(c.cl && c.cl.els[kind] === v){ delete c.cl.els[kind]; if(c.cl.cur === v) c.cl.cur = null; } v.remove(); }, {once:true});
+  v.addEventListener('error', () => {
+    if(c.cl && c.cl.els[kind] === v){
+      if(c.cl.cur === v || c.cl.visible === v) ccOff(c, v, true);
+      delete c.cl.els[kind];
+    }
+    v.remove();
+  }, {once:true});
   v.addEventListener('ended', () => {   // 12.5: cât vorbește, clipurile „vorbește” se continuă unul pe altul
     if(call === c && c.cl && c.cl.cur === v && kind !== 'bye' && ccLibOn(c)){ ccLibNext(c); return; }   // 14.8: mișcare continuă
     if(call === c && c.state === 'speak' && /^vorb/.test(kind) && S.callTalk !== 'face' && S.callTalk !== 'hybrid' && c.cl.cur === v){ const o = kind === 'vorb' ? 'vorb2' : 'vorb', ov = c.cl.els[o]; if(ccPlay(c, ov && ov !== 1 ? o : kind, true)) return; }
@@ -14654,27 +14798,44 @@ function ccPlay(c, kind, force){
   if(L.cur === v && !v.ended && !v.paused) return true; // 14.9.4: nu reporni același clip deja activ
   /* 14.8: trecere lină: clipul vechi rămâne vizibil până când cel nou are primul cadru pe ecran; cel nou intră deasupra (ultimul în
      pagină, înainte de granulație), apoi cel vechi se stinge sub el. Înainte, cel vechi se stingea imediat → se vedea imaginea statică. */
-  const old = L.cur && L.cur !== v ? L.cur : null;
-  const cvd = v.parentNode; if(cvd) cvd.classList.add('clip-active');
+  const old = L.cur && L.cur !== v && L.cur.classList.contains('on') ? L.cur : L.visible || null;
+  const cvd = v.parentNode;
   if(old){ const gr = cvd && cvd.querySelector('.cgrain'); if(cvd && v.nextSibling !== gr) try{ cvd.insertBefore(v, gr); }catch(e){} }
   try{ v.currentTime = 0; }catch(e){}
   v.classList.remove('out', 'fast'); L.cur = v; L.last[kind] = performance.now(); L.lastAny = performance.now();
   if(force && (kind === 'ras' || kind === 'priv')) L.hold = performance.now() + 2600;   // o reacție se vede până la capăt
-  let shown = false;
-  const show = () => { if(shown) return; shown = true; if(L.cur !== v){ return; } v.classList.add('on'); if(old) setTimeout(() => { if(L.cur !== old) ccOff(c, old, true); }, 300); };
-  const ready = () => { if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(() => show()); setTimeout(show, 260); };
-  let p; try{p=v.play();}catch(e){p=Promise.reject(e);}
-  if(p && p.then) p.then(ready).catch(() => {
-    if(L.cur === v){ L.cur = old && old.classList.contains('on') ? old : null; }
-    c.ccErr = `clipul „${kind}” n-a pornit (${v.error ? 'eroare media' : 'redare refuzată'})`;
+  const transition = L.transition = (L.transition || 0) + 1;
+  const current = () => call === c && c.cl === L && L.cur === v && L.transition === transition;
+  const show = () => {
+    if(!current() || L.visible === v) return;
+    L.visible = v;
+    v.classList.add('on');
+    if(cvd) cvd.classList.add('clip-active');
+    if(old && old !== v) setTimeout(() => { if(L.cur !== old && L.visible !== old) ccOff(c, old, true); }, 300);
+  };
+  const fail = () => {
+    if(!current() || L.visible === v) return;
+    L.cur = old && old.classList.contains('on') ? old : null;
+    c.ccErr = `clipul „${kind}” n-a afișat un cadru`;
+    try{ v.pause(); }catch(e){}
     if(!L.cur && cvd) cvd.classList.remove('clip-active');
-    if(old && old.isConnected && L.cur === old && old.paused) old.play().catch(()=>{});
-  }); else show();
+  };
+  const ready = () => {
+    if(!current()) return;
+    if(v.requestVideoFrameCallback) v.requestVideoFrameCallback(show);
+    else if(v.readyState >= 2) show();
+    else v.addEventListener('loadeddata', show, {once:true});
+    setTimeout(() => { if(v.readyState >= 2 && !v.paused && v.currentTime > 0) show(); else fail(); }, 1200);
+  };
+  let p; try{p=v.play();}catch(e){p=Promise.reject(e);}
+  if(p && p.then) p.then(ready).catch(fail);
+  else ready();
   return true; // Cerere acceptată; confirmarea redării este asincronă.
 }
 function ccOff(c, v, fast){
   const L = c && c.cl; if(!L || !v || v === 1) return;
   const wasCurrent = L.cur === v, cvd = v.parentNode;
+  if(L.visible === v) L.visible = null;
   v.classList.toggle('fast', !!fast); v.classList.add('out'); v.classList.remove('on'); if(wasCurrent) L.cur = null; L.lastAny = performance.now();
   setTimeout(() => { if(!v.classList.contains('on')) try{ v.pause(); }catch(e){} if(wasCurrent && cvd && (!L.cur || L.cur === 1)) cvd.classList.remove('clip-active'); }, 420);
 }
@@ -14735,6 +14896,7 @@ function callDiag(c){
   const w = rvWhy(cc);
   if(c.ccOpening) out.push(['🎤 Inițiativa apelului', c.ccOpening]);
   out.push(['🌐 Limba apelului', callLanguage(c.c)?.[0] || 'limba personajului']);
+  if(c.speechVoice) out.push(['🎙️ Voce folosită', c.speechVoice]);
   out.push(['🎙️ Vocea', (w ? 'a telefonului: ' + w : 'reală · ' + rvLabel(cc) + (RV.cur ? ' · vorbește' : RV.q.length ? ` · ${RV.q.length} în coadă` : '')) + (RV.lastErr ? ` · ultima eroare: ${RV.lastErr}` : '')]);
   const busyMin = S.rwBusyAt ? Math.round((Date.now() - S.rwBusyAt) / 60e3) : null;
   if(S.rwLastErr && Date.now() - S.rwLastErr.at < 864e5) out.push(['⚠️ Ultima eroare Runware', `${S.rwLastErr.why} (${new Date(S.rwLastErr.at).toTimeString().slice(0, 5)}): ${S.rwLastErr.msg}`]);   // 14.0
@@ -14925,6 +15087,7 @@ function openSheet(html){
   s.innerHTML = `<div class="sheet">${html}</div>`;
   s.addEventListener('click', e => { if(e.target === s || e.target.closest('[data-close]')) closeSheet(); });
   document.body.appendChild(s);
+  return s;
 }
 function closeSheet(){ $$('.scrim,.viewer,.wrapv').forEach(x => x.remove()); }
 function sheet(opts){
@@ -16626,7 +16789,15 @@ function drawFixHint(){
       : 'Oprit: fața vine doar din generator, după repere (setarea „Fidelitatea feței”).';
   if(S.faceFix !== 'off' && sceneModel() !== 'eco') el.innerHTML = 'Cu „Fidel · 9B”, retușul nu rulează: 9B ține singur fața, pielea și expresia, iar retușul (pe eco) le-ar netezi. Se aplică doar pozelor pe Eco (de exemplu stories și statusuri, dacă le pui pe Eco mai jos).';
 }
+function drawPhotoFlowStatus(){
+  const status = $('#stPhotoFlowStatus');
+  if(S.imgProv !== 'worker') status.textContent = 'Activează pozele ca să poți folosi traseul.';
+  else if(S.rw !== 'on' || !rwReady()) status.textContent = 'Traseul direct are nevoie de Runware activ și configurat.';
+  else if(S.photoModel === 'flux3' || sceneModel() !== 'ancorat' || S.photoEngine === 'id' || S.idBoost === 'off') status.textContent = 'Pentru traseul direct, folosește Klein 9B și identitatea activă.';
+  else status.textContent = S.photoFlow === 'bounded' ? 'Traseul direct este selectat pentru pozele solo eligibile.' : 'Traseul cu schițe este selectat.';
+}
 function drawChatHint(){
+  drawPhotoFlowStatus();
   const el = $('#stWkChatHint'); if(!el) return;
   const e = neurPerPhoto('eco'), f = neurPerPhoto('ancorat');
   if(S.rw === 'on'){ el.innerHTML = `Pozele din chat și din creator se fac mereu cu FLUX.2 klein 9B, pe Runware (~${usd4(rwPer())} pe imagine, fără neuroni)${S.imgRoute === 'rw' ? '' : '; stickerele și avatarul rămân pe Cloudflare'}.`; return; }
@@ -16819,6 +16990,8 @@ function bind(){
     if(tab){ showHomeTab(tab.dataset.homeTab); return; }
     if(e.target.closest('[data-duonew]')){ duoSheet(null); return; }   // 14.3
     if(e.target.closest('#btnNew, [data-new]')){ if(!aiReady()) toast('Sfat: adaugă întâi cheia în Setări, ca poza să fie descrisă automat.', 3500); openEditor(null); return; }
+    const profile = e.target.closest('[data-profile]');
+    if(profile){ charProfile(profile.dataset.profile); return; }
     const o = e.target.closest('[data-open]'); if(o) openWithFly(o);
     const go = e.target.closest('[data-gopen]'); if(go){ openGroup(go.dataset.gopen); return; }   // 9.44
     if(e.target.closest('[data-gnew]')){ groupEditSheet(null); return; }
@@ -16838,29 +17011,7 @@ function bind(){
   $('#gRbX').onclick = () => { gReply = null; $('#gReplyBar').hidden = true; };
   // conversație
   $('#btnPolish').onclick = polishSheet;
-  const iq = $('#intimacyQuick'), iqBtn = $('#btnPlus');
-  const closeIq = () => { iq.hidden = true; iqBtn.setAttribute('aria-expanded', 'false'); };
-  iqBtn.onclick = () => {
-    if(!iq.hidden){ closeIq(); return; }
-    plusMenu(() => {
-      iq.hidden = false;
-      iqBtn.setAttribute('aria-expanded', 'true');
-      $('#iqClose').focus({preventScroll:true});
-    });
-  };
-  $('#iqClose').onclick = () => { closeIq(); iqBtn.focus(); };
-  iq.onclick = e => {
-    const b = e.target.closest('[data-intimacy]');
-    if(!b) return;
-    const input = $('#inp');
-    const preset = b.dataset.intimacy;
-    input.value += (input.value.trim() ? '\n\n' : '') + preset;
-    closeIq();
-    autoSize();
-    updateComposer();
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
-  };
+  $('#btnPlus').onclick = () => plusMenu(openConversationPresets);
   $('#composer').onsubmit = e => { e.preventDefault(); if(busy && live && live.ch === chat) busy.abort(); else send(); };
   $('#inp').addEventListener('input', () => { autoSize(); updateComposer(); });
   $('#inp').addEventListener('keydown', e => { if(e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches){ e.preventDefault(); $('#composer').requestSubmit(); } });
@@ -16921,12 +17072,20 @@ function bind(){
   setInterval(() => { if(cur && chat && !$('#vChat').hidden && !(busy && live && live.ch === chat)) $('#chTag').innerHTML = statusLine(); }, 60e3);
   let tapT = null, tapI = -1;
   $('#msgs').addEventListener('click', e => {
+    const media = e.target.closest('[data-chat-media]');
+    if(media){ const row = media.closest('.mw'); if(row) openMessageMedia(cur, chat, chat.msgs[Number(row.dataset.i)], media.dataset.chatMedia); return; }
     const v = e.target.closest('[data-view]');
     if(v){
       // dublu-tap pe poză = reacție; un tap = vizualizator
       const w0 = e.target.closest('.mw'), i0 = w0 ? +w0.dataset.i : -1;
       if(tapT && tapI === i0){ clearTimeout(tapT); tapT = null; reactPicker(i0); return; }
-      clearTimeout(tapT); tapI = i0; tapT = setTimeout(() => { tapT = null; viewImg(v.dataset.view); }, 280);
+      clearTimeout(tapT); tapI = i0; const character = cur, thread = chat, message = chat?.msgs[i0];
+      tapT = setTimeout(() => {
+        tapT = null;
+        if(thread !== chat) return;
+        if(message?.role === 'ai' && message.img === v.dataset.view && !message.pendingImg && !message.err) openMessageMedia(character, thread, message, 'photo');
+        else viewImg(v.dataset.view);
+      }, 280);
       return;
     }
     if(e.target.closest('.hero')){ charProfile(cur.id); return; }

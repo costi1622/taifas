@@ -2070,6 +2070,57 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 #setList .sgroup { margin-block:18px; }
 #setList .srow i { background:var(--card)!important; }
 #setList .srow { min-height:48px; }
+
+/* Galerie, album și apel pe tot ecranul */
+#homeChars { grid-template-columns:repeat(auto-fit,minmax(min(40%,166px),1fr)); gap:clamp(10px,2.5vw,22px); }
+#homeChars .galleryCharacter { display:flex; flex-direction:column; text-align:left; aspect-ratio:auto; min-width:0; min-height:0; border-radius:20px; background:var(--bg2); border:1px solid var(--line); }
+.galleryPortrait { width:100%; aspect-ratio:4/5; position:relative; display:block; overflow:hidden; background:var(--card); }
+.galleryPortrait img { object-position:50% 28%; }
+.galleryInitial { position:absolute; inset:0; display:grid; place-items:center; font-size:4rem; font-weight:800; color:#fff; }
+.galleryFavorite { position:absolute; right:10px; top:10px; background:#141619cf; color:#ffdf8c; border-radius:24px; padding:5px 8px; }
+.galleryName { display:grid; gap:4px; padding:11px 12px 13px; color:var(--tx); width:100%; }
+.galleryName b,.galleryName small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.galleryName b { font-size:clamp(.96rem,4vw,1.16rem); }
+.galleryName small { color:var(--tx2); }
+#vProf .pfHero { height:clamp(190px,56dvh,540px); }
+#vProf .igActs { flex-wrap:wrap; }
+#vProf .igActs .btn:is(#pfChat,#pfCall,#pfAlbum) { flex:1 1 24%; min-width:max-content; width:auto; padding-inline:12px; font-size:.88rem; }
+.profileLatest { display:flex; gap:12px; align-items:center; width:calc(100% - 32px); margin:14px 16px 6px; padding:9px; text-align:left; border:1px solid var(--line); border-radius:17px; background:var(--bg2); color:var(--tx); }
+.profileLatest img { width:56px; height:56px; object-fit:cover; border-radius:10px; }
+.profileLatest span:nth-child(2) { flex:1; display:grid; gap:4px; }
+.profileLatest small { color:var(--tx2); }
+.mediaAlbum { background:var(--bg); color:var(--tx); }
+.mediaAlbum header { background:var(--bg2); border-color:var(--line); }
+.mediaAlbum header small,.mediaAlbum header .ib { color:var(--tx); }
+.mediaAlbum header div { flex:1; }
+.mediaAlbum nav { display:flex; flex-wrap:wrap; gap:8px; padding:12px 14px; border-bottom:1px solid var(--line); }
+.mediaAlbum nav button { padding:9px 13px; min-height:44px; border-radius:20px; color:var(--tx2); }
+.mediaAlbum nav button[aria-pressed="true"] { color:var(--tx); background:var(--card); box-shadow:inset 0 0 0 1px var(--line); }
+.mediaAlbumScroll { flex:1; min-height:0; overflow:auto; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(30%,155px),1fr)); align-content:start; gap:8px; padding:10px 12px calc(18px + var(--safe-b)); }
+.mediaTile { position:relative; overflow:hidden; aspect-ratio:1; background:var(--card); border-radius:13px; }
+.mediaTile img { display:block; width:100%; height:100%; object-fit:cover; }
+.mediaTile span { position:absolute; bottom:8px; right:8px; padding:5px 8px; border-radius:20px; background:#101318dd; color:#fff; }
+.mediaEmpty { grid-column:1/-1; color:var(--tx2); padding:24px 4px; }
+.mediaPreview { position:absolute; inset:0; z-index:4; display:flex; flex-direction:column; background:#101215; color:#fff; }
+.mediaPreview header { background:#17191d; }
+.mediaPreview header .ib { color:#fff; }
+.mediaCanvas { flex:1; min-height:0; display:grid; place-items:center; overflow:hidden; }
+.mediaCanvas img,.mediaCanvas video { width:100%; height:100%; min-height:0; object-fit:contain; }
+.mediaPreview footer { padding:10px 14px calc(12px + var(--safe-b)); max-height:42%; overflow:auto; flex:none; background:#17191d; }
+.mediaPreview footer .btn { background:#30343d; color:#fff; border-color:#555c68; }
+.mediaPreview details { margin-top:8px; font-size:.88rem; line-height:1.45; }
+.mediaPreview details p { white-space:pre-line; color:#ddd; }
+.chatMediaPlay { position:absolute; z-index:2; inset:50% auto auto 50%; transform:translate(-50%,-50%); min-width:50px; min-height:50px; border-radius:50%; background:#111b; color:#fff; border:1px solid #fff8; }
+.chatMediaInfo { position:absolute; z-index:2; inset:8px 8px auto auto; width:40px; height:40px; border-radius:50%; background:#111c; color:#fff; }
+.callv.vid.v2 .cvid { inset:0; border-radius:0; }
+.callv.vid.v2 .cvid::after { background:linear-gradient(180deg,#090a11bd 0%,transparent 26%,transparent 65%,#090a11d4 100%)!important; }
+.callv.vid.v2.live .vtop { background:none; backdrop-filter:none; border:0; }
+.callv.vid.v2 .ccap { width:auto; max-width:min(calc(100% - 30px),600px); background:#10141bdc; padding:8px 13px; border-radius:14px; }
+.callv.vid.v2 .cbtns { background:#151820d9; border-radius:30px; }
+.callv.vid.v2 #clMore svg { background:transparent; }
+@media(prefers-reduced-motion:reduce) {
+  .mediaAlbum,.mediaAlbum.out,.callv .cvid,.callv .cvid video.cclip.on { animation:none!important; transition:none!important; }
+}
 </style>
 </head>
 <body>
@@ -2139,8 +2190,8 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
   <div id="duoTo" hidden></div>
   <div id="typingBar" hidden><span id="tbAv"></span><span id="tbTxt"></span></div>
   <div id="sugg"></div>
-  <section id="intimacyQuick" hidden aria-label="Acțiuni de conversație">
-    <div class="iq-head"><b>💗 Apropiere & fotografii</b><button type="button" id="iqClose" aria-label="Închide">✕</button></div>
+  <template id="intimacyQuick">
+    <div class="iq-head"><b>💗 Apropiere & fotografii</b><button type="button" data-close aria-label="Închide">✕</button></div>
     <div class="iq-label">Roleplay</div>
     <div class="iq-grid">
       <button type="button" data-intimacy="*Mă apropii de tine și te îmbrățișez tandru.* Vreau să petrecem un moment doar al nostru." >🤗 Îmbrățișează-mă</button>
@@ -2172,9 +2223,9 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <button type="button" data-intimacy="Refă ultima fotografie cu aceeași identitate și aceeași scenă, dar cu o compoziție mai clară, anatomie naturală, mâini corecte, iluminare realistă și fără schimbări ale feței sau proporțiilor corpului. Păstrează toate detaliile cerute anterior." >🔁 Refă mai bine</button>
     </div>
     <p class="iq-note">Alegerea adaugă text la ciornă. Îl poți edita înainte de trimitere. Preseturile foto urmăresc identitatea, proporțiile și o compoziție senzuală non-grafică; rezultatul depinde de referințe, model și regulile furnizorului. Numai personaje adulte; consimțământ reciproc.</p>
-  </section>
+  </template>
   <form id="composer" autocomplete="off">
-    <button type="button" id="btnPlus" aria-label="Acțiuni de conversație" aria-controls="intimacyQuick" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button type="button" id="btnPlus" aria-label="Acțiuni de conversație" aria-haspopup="dialog"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
     <input type="file" id="fGal" accept="image/*" hidden>
     <input type="file" id="fCam" accept="image/*" capture="environment" hidden>
     <div class="field">
@@ -2307,8 +2358,8 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
         <label for="edCallLang">Limba vorbită în apel</label>
         <select id="edCallLang">
           <option value="">Automat · limba personajului</option>
-          <option value="ro">Română</option><option value="en">Engleză</option>
-          <option value="en_es">Engleză cu expresii în spaniolă</option>
+          <option value="ro">Română</option><option value="en">Engleză americană</option>
+          <option value="en_es">Engleză americană cu expresii în spaniolă</option>
           <option value="es">Spaniolă</option><option value="fr">Franceză</option>
           <option value="it">Italiană</option><option value="de">Germană</option>
         </select>
@@ -2435,6 +2486,10 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 
     <div class="panel sec" data-panel="img" data-title="Poze" hidden>
       <div class="seg" id="stImg"><button data-v="none">Oprite</button><button data-v="worker">Pornite (Worker-ul meu)</button></div>
+            <label>Traseul pozelor din chat</label>
+            <div class="seg" id="stPhotoFlow"><button data-v="legacy">Cu schițe și retușuri</button><button data-v="bounded">Direct la rezoluție finală</button></div>
+            <p class="hint">Traseul direct folosește până la două variante și o corecție. Se aplică pozelor solo cerute în chat, în motorul 9B cu identitate activă.</p>
+            <p class="hint" id="stPhotoFlowStatus"></p>
       <div id="stChatWrap">
         <h3 class="sh">⚡ Unde și cât</h3>
         <p class="hint" id="stWkChatHint"></p>
@@ -2465,9 +2520,6 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
             <label style="margin-top:10px">Rezervă pe Cloudflare (când Runware nu merge sau atingi plafonul)</label>
             <div class="seg" id="stCfFallback"><button data-v="off">Oprită</button><button data-v="free">Doar în cota gratuită</button></div>
             <p class="hint">🎯 Fidelitate maximă, mereu: fișa de identitate (4 unghiuri ale feței), 4 schițe din care telefonul o alege pe cea mai apropiată (față, siluetă, cerere), retușul feței, verificarea automată și repararea doar unde e greșit. Ce respingi cu 🎲 primește mai multă atenție la personajul acela.</p>
-            <label>Traseul pozelor din chat</label>
-            <div class="seg" id="stPhotoFlow"><button data-v="legacy">Cu schițe și retușuri</button><button data-v="bounded">Direct la rezoluție finală</button></div>
-            <p class="hint">Traseul direct folosește până la două variante și o corecție. Se aplică pozelor solo cerute în chat, în motorul 9B cu identitate activă.</p>
             <label style="margin-top:10px">Plafon zilnic Runware</label>
             <div class="seg" id="stRwCap"><button data-v="0.25">$0,25</button><button data-v="0.5">$0,50</button><button data-v="1">$1</button><button data-v="none">Fără</button></div>
             <div class="neur" id="stRwDay" style="margin-top:8px"></div>
