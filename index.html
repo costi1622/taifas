@@ -2001,6 +2001,28 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
 .duosheet .dumaster textarea{width:100%}
 .duosheet .duphoto{position:relative;flex:none;aspect-ratio:132/168;max-width:132px}
 .duosheet .duphoto img{position:absolute;inset:0;width:100%!important;height:100%!important;max-width:none;object-fit:cover}
+
+:root[data-palette="petrol"] {
+  --bg:#102321; --bg2:#183330; --card:#20413d; --line:#355652;
+  --tx:#f7f2e8; --tx2:#c6d8d1; --tx3:#a1bcb1; --me:#284f4b; --ai:#1c3835;
+  --acc:#4b897c; --acc2:#975433; --grad:linear-gradient(135deg,#2a695d,#975433);
+}
+:root[data-palette="petrol"][data-theme="light"] {
+  --bg:#f7f2e8; --bg2:#fffbf3; --card:#f1e7d9; --line:#d6c8b6;
+  --tx:#183936; --tx2:#43615a; --tx3:#536d65; --me:#d7e9df; --ai:#fffbf3;
+  --acc:#246a60; --acc2:#98532f;
+}
+[data-palette="petrol"][data-theme="light"] #composer {
+  background:linear-gradient(transparent,var(--bg) 30%);
+}
+[data-palette="petrol"][data-theme="light"] #chTop.solid .chathead,
+[data-palette="petrol"][data-theme="light"] #vGroup .chathead {
+  background:var(--bg2);
+}
+[data-palette="petrol"] .callv.vid .ccap {
+  background:#102321e8; color:#fffbf3;
+}
+#btnHomeMore, #btnIntimacy { font-size:1.35rem; }
 </style>
 </head>
 <body>
@@ -2010,8 +2032,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
   <header class="top">
     <h1>Taifas</h1>
     <button class="ib" id="btnGroups" aria-label="Grupuri" style="font-size:1.15rem">👥</button>
-    <button class="ib" id="btnBcast" aria-label="Întreabă-le pe toate" style="font-size:1.15rem">📣</button>
-    <button class="ib" id="btnWrapped" aria-label="Taifas Wrapped" style="font-size:1.15rem">📊</button>
+    <button class="ib" id="btnHomeMore" type="button" aria-label="Mai multe" aria-haspopup="dialog">⋯</button>
     <button class="ib" id="btnSearch" aria-label="Caută"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
   </header>
   <div class="scroll" id="homeScroll">
@@ -2072,7 +2093,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
   <div id="duoTo" hidden></div>
   <div id="typingBar" hidden><span id="tbAv"></span><span id="tbTxt"></span></div>
   <div id="sugg"></div>
-  <section id="intimacyQuick" hidden aria-label="Acțiuni rapide de apropiere">
+  <section id="intimacyQuick" hidden aria-label="Acțiuni de conversație">
     <div class="iq-head"><b>💗 Apropiere & fotografii</b><button type="button" id="iqClose" aria-label="Închide">✕</button></div>
     <div class="iq-label">Roleplay</div>
     <div class="iq-grid">
@@ -2104,10 +2125,10 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <button type="button" data-intimacy="Trimite-mi o fotografie intimă, dar non-explicită, în care tu alegi o poziție naturală și o expresie coerentă cu personalitatea ta. Păstrează identitatea exactă din poza de profil, vârsta adultă, forma feței, părul, textura pielii și proporțiile corpului; nu copia fundalul sau hainele pozei de referință. Alege o compoziție clară, lumină realistă și mâini/anatomie naturale." >🎭 Alege tu scena</button>
       <button type="button" data-intimacy="Refă ultima fotografie cu aceeași identitate și aceeași scenă, dar cu o compoziție mai clară, anatomie naturală, mâini corecte, iluminare realistă și fără schimbări ale feței sau proporțiilor corpului. Păstrează toate detaliile cerute anterior." >🔁 Refă mai bine</button>
     </div>
-    <p class="iq-note">Acțiunile rapide trimit o solicitare în chat. Preseturile foto urmăresc identitatea, proporțiile și o compoziție senzuală non-grafică; rezultatul depinde de referințe, model și regulile furnizorului. Numai personaje adulte; consimțământ reciproc.</p>
+    <p class="iq-note">Alegerea adaugă text la ciornă. Îl poți edita înainte de trimitere. Preseturile foto urmăresc identitatea, proporțiile și o compoziție senzuală non-grafică; rezultatul depinde de referințe, model și regulile furnizorului. Numai personaje adulte; consimțământ reciproc.</p>
   </section>
   <form id="composer" autocomplete="off">
-    <button type="button" id="btnIntimacy" aria-label="Acțiuni rapide de apropiere" aria-expanded="false">💗</button>
+    <button type="button" id="btnIntimacy" aria-label="Acțiuni de conversație" aria-expanded="false">⋯</button>
     <button type="button" id="btnPlus" aria-label="Poze"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
     <input type="file" id="fGal" accept="image/*" hidden>
     <input type="file" id="fCam" accept="image/*" capture="environment" hidden>
@@ -2446,8 +2467,8 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
       <label>💬 Stilul conversațiilor<small class="lh">Implicit pentru conversațiile noi; fiecare îl poate schimba din meniul ei.</small></label>
       <div class="seg" id="stChatMode"><button data-v="rp">🎭 Roleplay (*acțiuni*)</button><button data-v="chat">📱 Chat pe telefon</button></div>
       <label>💞 Tonul apropierii<small class="lh">În conversațiile dintre adulți.</small></label>
-      <div class="seg" id="stRpStyle"><button data-v="natural">Natural</button><button data-v="romantic">Romantic</button><button data-v="open">🔥 Deschis la flirt și intimitate</button></div>
-      <p class="hint">Modul „Deschis” încurajează răspunsuri receptive la invitații intime consensuale, fără refuzuri automate. Personajele rămân în caracter; nu activează nuditate pentru personaje minore sau cu vârsta neclară.</p>
+      <div class="seg" id="stRpStyle" aria-label="Tonul conversației"><button data-v="natural">Natural</button><button data-v="romantic">Romantic</button><button data-v="open">🔥 Deschis la flirt și intimitate</button></div>
+      <p class="hint">Alege tonul personajului. Imaginile au verificări separate, iar furnizorii își aplică regulile de conținut.</p>
       <h3 class="sh">⌨️ Cum apar</h3>
       <label>⌨️ Ritm real de scris<small class="lh">„Scrie…” cât ar dura mesajul pe telefon, apoi apare întreg.</small></label>
       <div class="seg" id="stTypeReal"><button data-v="on">Pornit</button><button data-v="off">Oprit (textul curge imediat)</button></div>
@@ -2568,6 +2589,7 @@ details[open]:not(.sadv)>summary::before{transform:rotate(90deg)}
     <div class="panel sec" data-panel="look" data-title="Aspect" hidden>
       <label>Temă</label>
       <div class="seg" id="stTheme"><button data-v="auto">Automat</button><button data-v="dark">Întunecată</button><button data-v="light">Luminoasă</button></div>
+      <div class="seg" id="stPalette" aria-label="Paletă"><button data-v="classic">Clasică</button><button data-v="petrol">Crem și petrol</button></div>
       <label>Mărime text</label>
       <div class="seg" id="stFont"><button data-v="15">Mic</button><button data-v="16">Normal</button><button data-v="18">Mare</button></div>
       <label>Efecte (inimioare, confetti, ploaie sau zăpadă după scenă)</label>

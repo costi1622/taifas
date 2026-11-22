@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.9.18';
+const APP_VER = '14.9.19';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -29,7 +29,20 @@ const DB = {
   set(k, v){ this.pf.delete(k); return this._req('readwrite', s => s.put(v, k)); },
   del(k){ return this._req('readwrite', s => s.delete(k)); },
   keys(){ return this._req('readonly', s => s.getAllKeys()); },
-  clear(){ return this._req('readwrite', s => s.clear()); }
+  clear(){ return this._req('readwrite', s => s.clear()); },
+  replaceAll(rows){ return new Promise((resolve, reject) => {
+    const tx = this.db.transaction('kv', 'readwrite');
+    tx.oncomplete = () => { this.pf.clear(); resolve(); };
+    tx.onabort = () => reject(tx.error || new Error('Restaurarea a fost anulată.'));
+    const store = tx.objectStore('kv');
+    try {
+      store.clear();
+      for(const [key, value] of rows) store.put(value, key);
+    } catch(error) {
+      tx.abort();
+      reject(error);
+    }
+  }); }
 };
 
 /* ───────── stare ───────── */
@@ -38,7 +51,7 @@ const DEF = {
   userName:'', userAbout:'', len:'mediu', font:16,
   imgProv:'none',
   wkBase:'', wkTok:'', wkModel:'eco', wkSize:'768x1024',
-  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', vidFid:'max', arc:'on', vidRep:'on', callGest:'on', callPre:'on', callLib:'on', callMoves:'1', callOutfit:'1', callHand:'on', callClips:'on', callTalk:'hybrid', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
+  sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', vidFid:'max', arc:'on', vidRep:'on', callGest:'on', callPre:'on', callLib:'on', callMoves:'1', callOutfit:'1', callHand:'on', callClips:'on', callTalk:'hybrid', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', palette:'classic', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
   vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
 };
 let S = {...DEF};
@@ -3922,7 +3935,7 @@ async function duoBothPhoto(c0, who, shot, signal, asked){
   const [bA, bB] = await Promise.all([bodyOf(A), bodyOf(B)]);
   if(!fA || !fB) throw new Error('lipsește poza de profil a uneia dintre ele');
   const nA = A.name, nB = B.name, pA = physFull(A, idA, shot), pB = physFull(B, idB, shot);
-  const prompt = `${togetherFraming(shot)}. ${shot}. Exactly two people in this photo, ${nA} and ${nB}, together in the scene described above; both adults, fully dressed, an ordinary everyday moment.
+  const prompt = `${togetherFraming(shot)}. ${shot}. Exactly two people in this photo, ${nA} and ${nB}, together in the scene described above. Follow the requested mood and composition. Respect the stated ages and keep both characters clothed.
 Image 1 is a close-up of ${nA}'s face; image 2 is a close-up of ${nB}'s face; image 3 shows ${nA}'s whole appearance (body shape, proportions, height, hair); image 4 shows ${nB}'s whole appearance.
 ${nA}: ${pA || 'exactly as in images 1 and 3'}.
 ${nB}: ${pB || 'exactly as in images 2 and 4'}.
@@ -4491,7 +4504,7 @@ let lastImgModel = '';  // 7.3: modelul folosit la ultima poză (pentru cost)
 let lastImgProv = '';   // 8.3: furnizorul folosit la ultima poză (fal pentru chat)
 function isImagePolicyError(e){
   const m = String(e && e.message || e || '').toLowerCase();
-  return /(?:nsfw|not safe for work|content.?policy|safety filter|safety.?check|moderation|sexual content|explicit content|prohibited content|content blocked|prompt blocked|unsafe prompt|nudity is not allowed|violat(?:es|ion) (?:the )?(?:policy|guidelines)|flagged as)/i.test(m);
+  return /(?:\b3030\b|image_other|nsfw|not safe for work|content.?policy|safety filter|safety.?check|moderation|sexual content|explicit content|prohibited content|content blocked|prompt blocked|unsafe prompt|nudity is not allowed|violat(?:es|ion) (?:the )?(?:policy|guidelines)|flagged as)/i.test(m);
 }
 async function genImage(prompt, ref, signal, ref2, opt = {}){
   if(!opt.quiet){
@@ -4505,7 +4518,7 @@ async function genImage(prompt, ref, signal, ref2, opt = {}){
     const allR = allRw() && !opt.cf;
     if(!opt.cf && (opt.rw ? rwReady() : rwFor(model))){
       try{ return await rwImage(prompt, ref, ref2, opt, signal, model); }
-      catch(e){ if(e.name === 'AbortError' || opt.rw) throw e; if(isImagePolicyError(e)) throw new Error('Furnizorul Runware a blocat cererea din cauza regulilor de conținut. Nu încerc aceeași cerere pe alt furnizor; modifică solicitarea sau verifică politica modelului.'); rwFailed(e); if(allR && !(await cfFreeOk(model, opt.size))) throw e; }
+      catch(e){ if(e.name === 'AbortError' || opt.rw) throw e; if(isImagePolicyError(e)) throw Object.assign(new Error('Furnizorul Runware a blocat cererea din cauza regulilor de conținut. Nu încerc aceeași cerere pe alt furnizor; modifică solicitarea sau verifică politica modelului.'), {photoKind:'provider'}); rwFailed(e); if(allR && !(await cfFreeOk(model, opt.size))) throw e; }
     } else if(allR && !(await cfFreeOk(model, opt.size))){
       // 9.37: fără Runware (plafon atins / cheie lipsă) și fără rezervă gratuită: poza se oprește, nu merge pe Cloudflare
       const capHit = rwReady() && rwCapLeft() < rwPer();
@@ -4551,6 +4564,7 @@ async function genImage(prompt, ref, signal, ref2, opt = {}){
         return bin || b64ToBlob(b, 'image/png');
       }
       lastErr = await errText(r);
+      if(isImagePolicyError(lastErr)) throw Object.assign(new Error(lastErr), {photoKind:'provider'});
       if(opt.force || r.status < 500 || i === steps.length - 1) break;   // 4xx (cheie, limită, filtru): nu are rost să reîncercăm
       await new Promise(res => setTimeout(res, 1200 + i * 800));
     }
@@ -8541,7 +8555,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
       ${m.img || !m.alts ? '' : `<button data-regen${m.eco ? ' title="Răspunsul ăsta a fost scris de modelul economic; ↻ îl reface cu modelul principal"' : ''}>${m.eco ? '↻ ⚡→🧠' : '↻ Altul'}</button>${S.regen3 === 'on' && n > 1 && !m.err ? '<button data-more3>🎰 +2</button>' : ''}`}
       ${m.cut ? `<span class="cutn">${m.cut === 'refusal' ? '⚠️ întrerupt de furnizor' : m.cut === 'len' ? '✂️ prea lung, tăiat' : '📶 conexiune întreruptă'}</span>` : ''}
       ${m.err ? '' : `<button data-cont>▶ Continuă</button>`}
-      ${m.err ? `<button data-retry>${m.errKind === 'flag' ? '🎲 Încearcă altă scenă' : 'Reîncearcă'}</button>` : ''}
+      ${m.err && m.errKind !== 'local' ? `<button data-retry>${m.errKind === 'flag' ? '🎲 Încearcă altă scenă' : 'Reîncearcă'}</button>` : ''}
       ${S.voice !== 'off' && m.text && !m.err ? `<button data-say class="ico" aria-label="Ascultă">🔊</button>` : ''}
       ${learnOn(cur) && m.text && !m.err ? `<button data-tr class="ico" aria-label="Traducere">🔤</button>` : ''}
       ${m.text && !m.err ? `<button class="rate${m.rate === 1 ? ' on' : ''}" data-rate="1" aria-label="Bun">👍</button><button class="rate${m.rate === -1 ? ' on' : ''}" data-rate="-1" aria-label="Nu prea">👎</button>` : ''}</div>`;
@@ -10974,7 +10988,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
   const c0 = cur, ch = chat, duo = duoOn(c0);   // 14.3: la duo, poza e a uneia (sau cu amândouă); conversația rămâne a duo-ului
   const who = duo ? (opt.who != null ? opt.who : target && target.who != null ? target.who : duoWho(c0, ch, null)) : null;
   const duoUm = duo && !target && opt.who == null ? [...ch.msgs].reverse().find(x => x.role === 'user' && x.text) : null;
-  let duoBoth = duo && !!(opt.duoBoth || (target && target.duoBoth) || (!target && ch.nextShot && ch.nextShot.both && ch.nextShot.who === who) || (duoUm && DUO_BOTH.test(duoUm.text) && PHOTO_ASK.test(duoUm.text)));
+  const duoBoth = duo && !!(opt.duoBoth || (target && target.duoBoth) || (!target && ch.nextShot && ch.nextShot.both && ch.nextShot.who === who) || (duoUm && DUO_BOTH.test(duoUm.text) && PHOTO_ASK.test(duoUm.text)));
   const c = duo ? duoChar(c0, who) : c0;
   if(duo && !c){ toast('Al doilea personaj nu mai există.'); return; }
   let m;
@@ -11034,12 +11048,14 @@ async function askPhoto0(spont, target, mode, opt = {}){
         asked.push('natural non-explicit artistic nudity');
       }
       // 14.3: amândouă în aceeași poză (doar scene obișnuite): cealaltă intră ca „partener”, cu poza și fața ei
-      if(duoBoth && (requestedExposure === 'topless' || requestedExposure === 'explicit' || requestedExposure === 'full')) duoBoth = false;
+      if(duoBoth && requestedExposure !== 'clothed'){
+        throw Object.assign(new Error('Taifas nu poate genera acest tip de cadru cu două personaje. Poți cere un cadru solo sau o altă compoziție.'), {photoKind:'local'});
+      }
       if(duoBoth && !together){
         const pp = duoChar(c0, 1 - who);   // 14.4: generarea cu reperele amândurora + verificarea fiecărei fețe
         if(pp && pp.photo && c.photo){ peopleIn = {names:[pp.name], self:true, pid:'duo:' + (pp.id || 1 - who), duo:true};
           edited = await duoBothPhoto(c0, who, shot, busy.signal, asked); }
-        else duoBoth = false;
+        else throw Object.assign(new Error('Pentru un cadru cu două personaje, Taifas are nevoie de o poză de profil pentru fiecare.'), {photoKind:'local'});
       }
       // 9.43: o persoană din viața personajului (prietenă, soră, coleg…): aceeași persoană de fiecare dată, alta decât personajul
       else if(pl.people && pl.people.length && S.people !== 'off' && !together){
@@ -11082,11 +11098,11 @@ async function askPhoto0(spont, target, mode, opt = {}){
     if(S.imgProv === 'worker') setTimeout(() => loadNeurons(lastImgProv !== 'runware'), 1500);   // 9.20: poza a mers pe Runware → fără avertismente Cloudflare
   }catch(e){
     const msg = e.message || '';
-    const flag = /3030|flagged|safety|blocked|prohibit|nsfw|SAFETY|IMAGE_OTHER|refuzat/i.test(msg);
-    if(target && m.img){ if(e.name !== 'AbortError') toast(flag ? 'Serviciul de imagini a respins varianta asta.' : 'Poza nouă n-a mers: ' + msg, 4000); }   // poza veche rămâne
+    const flag = e.photoKind === 'provider' || isImagePolicyError(e);
+    const failure = flag ? 'Furnizorul de imagini a refuzat cererea conform regulilor sale de conținut.' : (msg || 'Eroare tehnică la generarea pozei.');
+    if(target && m.img){ if(e.name !== 'AbortError') toast(failure, 4000); }   // poza veche rămâne
     else if(e.name === 'AbortError'){ m.err = 'Oprit.'; if(e.cancelFrame) m._drop = true; }   // 10.1: „Renunță” la cadrul propus: mesajul gol dispare
-    else if(flag){ m.err = /refuzat/.test(msg) ? msg : 'Serviciul de imagini a respins poza asta.'; m.errKind = 'flag'; }
-    else m.err = msg || 'Eroare la poză';
+    else { m.err = failure; if(flag) m.errKind = 'flag'; else if(e.photoKind) m.errKind = e.photoKind; }
   }
   clearInterval(pT);
   delete m.pendingImg; busy = null; live = null;
@@ -16161,7 +16177,7 @@ const aiReady = () => hasKey('anthropic');
 const FIELDS = {stKey:'key', stModel:'model', stUser:'userName', stAbout:'userAbout', stBday:'userBday',
   stWkBase:'wkBase', stWkTok:'wkTok', stWkModel:'wkModel', stWkSize:'wkSize',
   stPin:'pIn', stPout:'pOut', stVkBase:'wkBase', stVkTok:'wkTok', stRwKey:'rwKey'};
-const SEGS = {stCallFill:'callFill', stCallClips:'callClips', stCallTalk:'callTalk', stCallReal:'callReal', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
+const SEGS = {stCallFill:'callFill', stCallClips:'callClips', stCallTalk:'callTalk', stCallReal:'callReal', stRw:'rw', stRwCap:'rwCap', stRegen:'regen3', stFx:'fx', stFeed:'feed', stStory:'story', stSky:'sky', stSocial:'social', stCross:'cross', stSocLife:'socLife', stNews:'news', stSocPics:'socPics', stPlans:'plans', stCfCap:'cfCap', stCfPlan:'cfPlan', stAux:'aux', stCtx:'ctxN', stVmsg:'vmsg', stJrn:'jrn', stTheme:'theme', stLen:'len', stFont:'font', stImg:'imgProv', stSugg:'sugg', stPro:'pro', stVoice:'voice', stSpont:'spont', stBkEvery:'bkEvery', stVault:'vault', stCallFace:'callFace', stCallAmb:'callAmb', stCallBack:'callBack', stCallDepth:'callDepth', stCallLight:'callLight', stCallPres:'callPres', stTypeReal:'typeReal', stImgRoute:'imgRoute', stCfFallback:'cfFallback', stPhotoModel:'photoModel', stPeople:'people', stChatMode:'chatMode', stRpStyle:'rpStyle', stPalette:'palette', stSmart:'smart', stLenAuto:'lenAuto', stCacheTtl:'cacheTtl', stCtxCompact:'ctxCompact', stCallLife:'callLife', stCallCam:'callCam', stCallBg:'callBg', stCallSprites:'callSprites', stCallMirror:'callMirror', stPov:'pov', stShotPrev:'shotPrev', stSceneRef:'sceneRef'};
 SEGS.stVoiceReal = 'voiceReal';   // 12.9
 SEGS.stVid = 'vid'; SEGS.stVidQ = 'vidQ'; SEGS.stVidS = 'vidS';   // 13.5
 SEGS.stCallPre = 'callPre'; SEGS.stCallLib = 'callLib'; SEGS.stCallGest = 'callGest'; SEGS.stCallMoves = 'callMoves'; SEGS.stCallOutfit = 'callOutfit'; SEGS.stCallHand = 'callHand';   // 14.2
@@ -16377,7 +16393,8 @@ const mqLight = matchMedia('(prefers-color-scheme: light)');
 function applyTheme(){
   const t = S.theme === 'light' || (S.theme !== 'dark' && mqLight.matches) ? 'light' : 'dark';
   document.documentElement.dataset.theme = t;
-  const m = document.querySelector('meta[name=theme-color]'); if(m) m.content = t === 'light' ? '#f7f4fa' : '#0e0c12';
+  document.documentElement.dataset.palette = S.palette === 'petrol' ? 'petrol' : 'classic';
+  const m = document.querySelector('meta[name=theme-color]'); if(m) m.content = S.palette === 'petrol' ? (t === 'light' ? '#f7f2e8' : '#102321') : (t === 'light' ? '#f7f4fa' : '#0e0c12');
 }
 mqLight.addEventListener?.('change', () => applyTheme());
 async function testAI(){
@@ -16615,15 +16632,25 @@ function drawBk(){ const el = $('#stBkInfo'); if(el) el.textContent = 'Ultimul b
 async function importAll(file){
   try{
     const j = JSON.parse(await file.text());
-    if(j.app !== 'taifas2' || !j.data) throw new Error('Nu e un backup Taifas 2.');
+    if(!j || j.app !== 'taifas2' || !j.data || typeof j.data !== 'object' || Array.isArray(j.data) || !Object.keys(j.data).length) throw new Error('Nu e un backup Taifas 2 cu date.');
+    const settings = j.data.settings ?? {};
+    if(typeof settings !== 'object' || Array.isArray(settings)) throw new Error('Setările din backup sunt invalide.');
+    for(const key of ['chars', 'groups', 'feed']){
+      if(Object.hasOwn(j.data, key) && !Array.isArray(j.data[key])) throw new Error('Structură invalidă în backup: ' + key);
+    }
+    const decoded = Object.entries(j.data).filter(([key]) => key !== 'settings').map(([key, value]) => {
+      if(value && typeof value === 'object' && Object.hasOwn(value, '__blob')){
+        if(typeof value.__blob !== 'string' || (value.type != null && typeof value.type !== 'string')) throw new Error('Fișier invalid în backup.');
+        return [key, b64ToBlob(value.__blob, value.type)];
+      }
+      return [key, value];
+    });
+    const restored = {...settings};
+    for(const key of SECRET_SETTINGS) delete restored[key];
     confirmSheet('Restaurezi backup-ul din ' + (j.date || '').slice(0, 10) + '? Datele actuale se înlocuiesc (cheile tale rămân).', 'Restaurează', async () => {
-      const keep = {}; for(const x of SECRET_SETTINGS) keep[x] = S[x];   // 8.20: un backup modificat nu poate redirecționa cheile spre alt server
-      let rows;
-      try{ rows = Object.entries(j.data).map(([k, v]) => [k, v && v.__blob ? b64ToBlob(v.__blob, v.type) : v]); }
-      catch(e){ toast('Backup-ul e deteriorat; datele tale au rămas neatinse.', 4500); return; }
-      await DB.clear();
-      for(const [k, v] of rows) await DB.set(k, v);
-      const s = await DB.get('settings') || {}; await DB.set('settings', {...s, ...keep});
+      const keep = Object.fromEntries(SECRET_SETTINGS.map(key => [key, S[key]]));
+      try { await DB.replaceAll([...decoded, ['settings', {...restored, ...keep}]]); }
+      catch(e){ toast('Restaurarea a eșuat. Datele actuale au fost păstrate.', 4500); return; }
       location.reload();
     });
   }catch(e){ toast('Fișier invalid: ' + e.message, 4000); }
@@ -16709,7 +16736,18 @@ function bind(){
   const closeIq = () => { iq.hidden = true; iqBtn.setAttribute('aria-expanded', 'false'); };
   iqBtn.onclick = () => { const open = iq.hidden; iq.hidden = !open; iqBtn.setAttribute('aria-expanded', String(open)); if(open) $('#iqClose').focus({preventScroll:true}); };
   $('#iqClose').onclick = closeIq;
-  iq.onclick = e => { const b = e.target.closest('[data-intimacy]'); if(!b) return; if(busy){ toast('Așteaptă să termine răspunsul curent.'); return; } $('#inp').value = b.dataset.intimacy || ''; closeIq(); autoSize(); updateComposer(); $('#composer').requestSubmit(); };
+  iq.onclick = e => {
+    const b = e.target.closest('[data-intimacy]');
+    if(!b) return;
+    const input = $('#inp');
+    const preset = b.dataset.intimacy;
+    input.value += (input.value.trim() ? '\n\n' : '') + preset;
+    closeIq();
+    autoSize();
+    updateComposer();
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  };
   $('#composer').onsubmit = e => { e.preventDefault(); if(busy && live && live.ch === chat) busy.abort(); else send(); };
   $('#inp').addEventListener('input', () => { autoSize(); updateComposer(); });
   $('#inp').addEventListener('keydown', e => { if(e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches){ e.preventDefault(); $('#composer').requestSubmit(); } });
@@ -16890,8 +16928,10 @@ function bind(){
   $('#stExport').onclick = () => exportAll(false);
   $('#stExportShare').onclick = () => exportAll(true);
   $('#stWrapped').onclick = () => openWrapped();
-  $('#btnWrapped').onclick = () => openWrapped();
-  $('#btnBcast').onclick = () => bcastSheet();
+  $('#btnHomeMore').onclick = () => sheet([
+    ['📣', 'Întreabă-le pe toate', () => bcastSheet()],
+    ['📊', 'Taifas Wrapped', () => openWrapped()]
+  ]);
   $('#chCall').onclick = () => callChoice();
   $('#stMePick').onclick = () => $('#fMe').click();
   $('#fMe').onchange = e => { setMePhoto(e.target.files[0]); e.target.value = ''; };
