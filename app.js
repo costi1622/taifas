@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.5';
+const APP_VER = '14.14.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -52,7 +52,7 @@ const DEF = {
   imgProv:'none',
   wkBase:'', wkTok:'', wkModel:'eco', wkSize:'768x1024',
   sugg:'off', pro:'on', feed:'text', cross:'on', socLife:'on', news:'on', socPics:'on', plans:'on', smart:'echilibrat', idSheet:'on', drafts:'on', localFix:'on', callFill:'on', voiceReal:'on', vid:'on', vidQ:'rapid', vidS:'5', vidFid:'max', arc:'on', vidRep:'on', callGest:'on', callPre:'on', callLib:'on', callMoves:'1', callOutfit:'1', callHand:'on', callClips:'on', callTalk:'hybrid', callReal:'on', lenAuto:'on', cacheTtl:'1h', ctxCompact:'on', callLife:'on', callCam:'on', callGlitch:'on', callBg:'on', callSprites:'on', callMirror:'on', fx:'on', regen3:'on', pov:'on', shotPrev:'on', sceneRef:'on', poseCheck:'on', voice:'tap', tts:'tel', cfPlan:'free', cfCap:'free', theme:'dark', palette:'classic', vmsg:'rar', jrn:'on', aux:'on', ctxN:'30',
-  vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoFlow:'legacy', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
+  vault:'off', vaultHas:null, faceFix:'on', bodyFix:'on', bestOf:'3', autoModel:'chat', callFace:'on', handCheck:'off', crHands:'on', crAngles:'off', callAmb:'on', callBack:'on', callDepth:'on', callLight:'on', callPres:'on', autoRefs:'on', autoFull:'on', imgRoute:'mix', cfFallback:'off', photoEngine:'creator', photoFlow:'bounded', photoModel:'klein', people:'on', typeReal:'on', chatMode:'rp', rpStyle:'open', imgCheck:'on', story:'on', sky:'on', social:'on', userBday:'', lock:'off', pushOn:false, bkEvery:'week', bkLast:0, userPhoto:'', userPhys:'', userBox:null, wkChat:'ancorat', wkRef:'auto', rw:'off', rwKey:'', rwCap:'0.5', rwAvg:0, idBoost:'on', spont:'rar', sv:34, imgCost:'', pIn:'', pOut:''
 };
 let S = {...DEF};
 let chars = [];            // [{id,name,tag,photo,aspect,look,stil,persona,speech,greet,created,lastAt,last}]
@@ -2470,9 +2470,11 @@ async function headHide(blob, key){
 async function bodyRefFor(c, shot){
   if(!c.photoFull || looksYoung(c)) return null;   // 9.94 (D)
   const want = bodyPoseOf(shot), bs = bsheetOf(c).filter(x => x.pose === want), pick = want === 'full' ? null : bs.find(x => !x.weak) || (S.bodyWeak !== 'off' ? bs[0] : null);   // 14.0 (4): ⚠️ la corp = măsurătoare între poziții diferite, nu un corp greșit
-  const k = pick ? pick.k : c.photoFull, b = await DB.get(k).catch(() => null); if(!b) return null;
-  let full2 = null; if(pick){ const fb = await DB.get(c.photoFull).catch(() => null); if(fb) full2 = (await personCrop(fb, c.photoFull)) || await wholeRef(fb); }   // 9.89 (b): și poza întreagă, pentru proporții
-  return {blob:await headHide((await personCrop(b, k)) || await wholeRef(b), 'hb:' + k), pose:pick ? pick.pose : 'full', full2:full2 ? await headHide(full2, 'hf:' + c.photoFull) : null};   // 9.86: decupat pe siluetă; 13.6: capul estompat
+  let k = pick ? pick.k : c.photoFull, b = await DB.get(k).catch(() => null);
+  if(!b && k !== c.photoFull){ k = c.photoFull; b = await DB.get(k).catch(() => null); }
+  if(!b) return null;
+  let full2 = null; if(pick && k === pick.k){ const fb = await DB.get(c.photoFull).catch(() => null); if(fb) full2 = (await personCrop(fb, c.photoFull)) || await wholeRef(fb); }   // 9.89 (b): și poza întreagă, pentru proporții
+  return {blob:await headHide((await personCrop(b, k)) || await wholeRef(b), 'hb:' + k), pose:pick && k === pick.k ? pick.pose : 'full', full2:full2 ? await headHide(full2, 'hf:' + c.photoFull) : null};   // 9.86: decupat pe siluetă; 13.6: capul estompat
 }
 const BODY_SHEET_OK = .12, BODY_SHEET_LOOSE = .16;   // 10.9: rezerva, doar când poziția ar lipsi
 // distanța siluetelor (9.85): se compară doar ce e comparabil; null = nu se poate spune
@@ -3041,12 +3043,12 @@ async function finishPerson(c, r, shot, signal, opt = {}){
         if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; } } }catch(e){ if(e.name === 'AbortError') throw e; }
     }
     // 14.0 (2): a treia trecere, doar cu ArcFace, cât fața e sub țintă
-    if(r.fd != null && r.fd > fRet2(opt) && r.ret2 && !r.ret3 && !opt.idLeg && fdModeNow() === 'a' && fixBudget() && !late()){
+    if(r.fd != null && r.fd > fRet2(opt) && r.ret2 && !r.ret3 && !r.bounded && !opt.idLeg && fdModeNow() === 'a' && fixBudget() && !late()){
       r.ret3 = true; pstage(signal, '✨ Garanția: ultima trecere pe față', 98);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
         if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; } } }catch(e){ if(e.name === 'AbortError') throw e; }
     }
-    if(r.bd === undefined && !opt.together && c.photoFull && framingOf(shot).k !== 'close'){ try{ r.bd = await bodyMatch(c, await bodySig(r.blob).catch(() => null)); }catch(e){} }
+    if(r.bd === undefined && !opt.together && c.photoFull && framingOf(shot).k !== 'close'){ try{ r.bd = await bodyMatch(c, await measuredBody(r.blob).catch(() => null)); }catch(e){} }
     r.faceWarn = r.fd != null && r.fd > idMax(c) ? idPct(r.fd) : null;
     r.bodyWarn = r.bd != null && r.bd > bodyGate(c) && !opt.together ? bodyPct(r.bd) : null;
   }
@@ -4248,6 +4250,16 @@ async function bodyNormBlob(im, kp){
 /* ───────── 9.36: identitatea pe tot: corp, păr, semne ─────────
    (2) Silueta măsurată în telefon (gratuit): umerii și șoldurile din detectorul de poziție (MoveNet) + conturul persoanei
        (segmentarea MediaPipe), lățimea la piept, talie și șolduri raportată la umeri; se compară cu poza întreagă. */
+const bodyMeasurementJobs = new WeakMap();
+async function measuredBody(blob){
+  let pending = bodyMeasurementJobs.get(blob);
+  if(!pending){
+    pending = bodySig(blob);
+    bodyMeasurementJobs.set(blob,pending);
+    pending.then(value => { if(!value) bodyMeasurementJobs.delete(blob); }, () => bodyMeasurementJobs.delete(blob));
+  }
+  return pending;
+}
 async function bodySig(blob0, nn = false){
   const blob = (await personCrop(blob0).catch(() => null)) || blob0;   // 9.94 (A); 13.6 (4): nn = deja îndreptată (nu se mai îndreaptă o dată): pe persoana decupată (umerii, șoldurile, genunchii se găsesc mai sigur)
   const first = await measureBodyContour(blob,nn);
@@ -4472,24 +4484,24 @@ async function bestScene(c, shot, signal, corr, opt = {}){
     if(dr && S.photoEngine !== 'id' && !opt.partner){
       try{ const parts = m > 4 ? [4, m - 4] : [m];   // 13.7 (2): Runware dă cel mult 4 pe cerere: 6 = două cereri în paralel
         const got = await Promise.allSettled(parts.map((q, j) => scenePhoto(c, shot, signal, cr, {...o2, multi:q, ...(j ? {why:'variante'} : {})})));
-        const abx = got.find(g => g.status === 'rejected' && g.reason && g.reason.name === 'AbortError'); if(abx) throw abx.reason;
+        const abx = got.find(g => g.status === 'rejected' && stopPhotoRetry(g.reason)); if(abx) throw abx.reason;
         const okp = got.filter(g => g.status === 'fulfilled').map(g => g.value); if(!okp.length) throw got[0].reason;
         rs = okp.flatMap(r0 => (r0.blobs || [r0.blob]).map(b => ({status:'fulfilled', value:{...r0, blob:b, blobs:undefined}}))).slice(0, m);
         if(rs.length < m) rs = rs.concat(await Promise.allSettled(Array.from({length:m - rs.length}, () => scenePhoto(c, shot, signal, cr, {...o2, why:'variante'})))); }
-      catch(e){ if(e.name === 'AbortError') throw e; rs = null; } }
+      catch(e){ if(stopPhotoRetry(e)) throw e; rs = null; } }
     return rs || await Promise.allSettled(Array.from({length:Math.min(m, 4)}, (_, k) => scenePhoto(c, shot, signal, cr, k ? {...o2, why:'variante'} : o2)));
   };
   const rs = await batch(corr, n);
   tmAdd(opt, dr ? 'schite' : 'variante', tG);
-  const ab = rs.find(r => r.status === 'rejected' && r.reason && r.reason.name === 'AbortError'); if(ab) throw ab.reason;
+  const ab = rs.find(r => r.status === 'rejected' && stopPhotoRetry(r.reason)); if(ab) throw ab.reason;
   const ok = rs.filter(r => r.status === 'fulfilled').map(r => r.value);
   if(!ok.length) throw rs[0].reason;
   pstage(signal, '🎯 Alege poza cea mai reușită', 93);
   const tP = performance.now();
   await Promise.all(ok.map(async x => { x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.np = crowdOn(shot, opt) ? await extraPeople(x.blob) : 0; }));   // 13.3: toate schițele deodată   // 9.87 (4): și claritatea   // 10.4: și câte persoane   // 10.0: și culorile, proporțiile feței, vârsta aparentă
   // 9.36: și silueta (piept, talie, șolduri) față de poza întreagă, măsurată în telefon; fața rămâne criteriul principal
-  const rb = framingOf(shot).k !== 'close' ? await refBodySig(c).catch(() => null) : null;
-  const rbs = rb ? await refBodySigs(c).catch(() => []) : []; if(rb) await Promise.all(ok.map(async x => { x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); }));   // 13.3   // 9.85: față de poza de corp cu aceeași poziție
+  const rbs = framingOf(shot).k !== 'close' ? await refBodySigs(c).catch(() => []) : [];
+  const rb = rbs.length > 0; if(rb) await Promise.all(ok.map(async x => { x.bd = await bodyMatch(c, await measuredBody(x.blob).catch(() => null), rbs); }));   // 13.3   // 9.85: față de poza de corp cu aceeași poziție
   // 9.42: cu motorul „ca în creator”, contează și cât respectă cererea (altfel câștiga varianta care copia poza de profil)
   // 9.86 (d): cât respectă cererea se întreabă doar dacă ai cerut detalii sau dacă primele două sunt aproape (altfel e clar cine câștigă)
   const shMax = () => Math.max(0, ...ok.map(x => x.sh || 0));
@@ -4501,11 +4513,11 @@ async function bestScene(c, shot, signal, corr, opt = {}){
     pstage(signal, '🧍 Corpul nu seamănă în nicio schiță, încă o tură', 92);
     try{ let id = null; try{ id = await identityOf(c); }catch(e){}
       const rs2 = await batch([corr, `the body must match the full-body reference exactly: ${bodyOnly(c, id) || 'the same build and proportions'}`].filter(Boolean).join('; '), n);
-      const ab2 = rs2.find(r => r.status === 'rejected' && r.reason && r.reason.name === 'AbortError'); if(ab2) throw ab2.reason;
+      const ab2 = rs2.find(r => r.status === 'rejected' && stopPhotoRetry(r.reason)); if(ab2) throw ab2.reason;
       const ok2 = rs2.filter(r => r.status === 'fulfilled').map(r => r.value);
-      for(const x of ok2){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null), rbs); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.np = crowdOn(shot, opt) ? await extraPeople(x.blob) : 0; x.round2 = true; }
+      for(const x of ok2){ x.fd = (await localFace(x.blob, c)).d; x.sh = await sharpOf(x.blob); x.bd = await bodyMatch(c, await measuredBody(x.blob).catch(() => null), rbs); x.lk = await lookOf(c, x.blob, shot, opt); x.ps = await poseOfDraft(c, x, shot, opt); x.np = crowdOn(shot, opt) ? await extraPeople(x.blob) : 0; x.round2 = true; }
       ok.push(...ok2); opt.bodyRound = true;
-    }catch(e){ if(e.name === 'AbortError') throw e; } }
+    }catch(e){ if(stopPhotoRetry(e)) throw e; } }
   const tot = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) + posePen(x) + crowdPen(x) - (x.adh != null ? x.adh * .03 * pfbW(c, 'scene') : 0);   // 9.85 (4): corpul cântărește cât fața   // 9.83 (8): ce respingi des cântărește mai mult
   ok.sort((a, b) => (opt.bounded ? identityRank(c, a, !!rb) - identityRank(c, b, !!rb) : 0) || tot(a) - tot(b));
   if(ok.length > 1) addUsage(c.id, imgPrice() * (ok.length - 1), 'img', null, opt.tag || 'poze');   // prima e numărată de cine a cerut poza
@@ -4581,7 +4593,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   if(face != null && face > idMax(c)) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință.');
   let bodyUnknown = false;
   if(c.photoFull && framingOf(shot).k !== 'close'){
-    const body = await bodyMatch(c, await bodySig(blob).catch(() => null)).catch(() => null);
+    const body = await bodyMatch(c, await measuredBody(blob).catch(() => null)).catch(() => null);
     if(body != null && body > bodyGate(c)) throw failure('Poza a rămas nepublicată: proporțiile măsurate diferă de reperul de corp.');
     bodyUnknown = body == null;
   }
@@ -4610,7 +4622,7 @@ async function boundedScene(c, shot, signal, opt){
   const result = await bestScene(c, shot, signal, corrections || null, mode);
   result.bounded = true;
   result.fd ??= (await localFace(result.blob, c)).d;
-  const measureBody = async blob => bodyMatch(c, await bodySig(blob).catch(() => null)).catch(() => null);
+  const measureBody = async blob => bodyMatch(c, await measuredBody(blob).catch(() => null)).catch(() => null);
   if(c.photoFull && framingOf(shot).k !== 'close' && result.bd == null) result.bd = await measureBody(result.blob);
   const fixFace = result.fd != null && result.fd > idMax(c);
   const fixBody = result.bd != null && result.bd > bodyGate(c);
@@ -4628,13 +4640,13 @@ async function boundedScene(c, shot, signal, opt){
     if(result.fd != null && (fd == null || fd > result.fd + (fixFace ? 0 : .02) || (result.fd <= idMax(c) && fd > idMax(c)))) return result;
     if(result.bd != null && (bd == null || (fixFace ? bd > result.bd + .02 || (result.bd <= bodyGate(c) && bd > bodyGate(c)) : bd >= result.bd - .03))) return result;
     return {...result, blob, fd, bd, lk:undefined, ps:undefined, np:undefined, adh:undefined, fixed:[fixFace ? 'față' : 'corp']};
-  }catch(e){ if(e.name === 'AbortError') throw e; return result; }
+  }catch(e){ if(stopPhotoRetry(e)) throw e; return result; }
 }
 async function makeScenePhoto0(c, shot, signal, opt = {}){
   try{ await ageLook(c); }catch(e){}   // 9.94 (D)
   if([opt.requestedExposure, exposureMode(shot)].some(mode => mode && mode !== 'clothed') && !clearlyAdultCharacter(c)) throw new Error('Pentru acest cadru, fișa personajului trebuie să precizeze clar că este adult (18+).');
   if(looksYoung(c) && (exposureMode(shot) !== 'clothed' || /lingerie|underwear|bikini|thong|swimsuit|bra\b|panties|sexy|seductive|sensual|provocative|lenjerie|chilo[țt]i|sutien|costum de baie|tanga|sexi|seduc[ăa]t|senzual|provocat/i.test(String(shot || '')))) throw new Error('Personajul nu pare clar adult, așa că pozele de felul ăsta sunt oprite pentru el.');
-  if(S.photoFlow === 'bounded' && opt.kind === 'chat' && !isAuto(opt) && !opt.together && !opt.partner && sceneModel(opt) === 'ancorat' && S.photoEngine !== 'id' && idBoostOn(c, opt) && !useF3()) return boundedScene(c, shot, signal, opt);
+  if(S.photoFlow === 'bounded' && opt.kind === 'chat' && !isAuto(opt) && !opt.together && !opt.partner && !opt.spont && idBoostOn(c, opt) && !useF3()) return boundedScene(c, shot, signal, opt);
   const boost = idBoostOn(c, opt) && !useF3();
   const gen0 = (corr, o) => boost ? idBoost(c, shot, signal, corr, o) : scenePhoto(c, shot, signal, corr, o);
   // 9.50: o singură variantă: silueta se măsoară în telefon față de poza întreagă; dacă e alt corp, încă o încercare (o dată)
@@ -4642,14 +4654,14 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
     const x = await gen0(corr, o);
     if(x.bd !== undefined || o.together || o.partner || framingOf(shot).k === 'close' || (c.stil || 'photo') !== 'photo') return x;
     const rb = await refBodySig(c).catch(() => null); if(!rb) return x;
-    x.bd = await bodyMatch(c, await bodySig(x.blob).catch(() => null));
+    x.bd = await bodyMatch(c, await measuredBody(x.blob).catch(() => null));
     if(x.bd == null || x.bd <= bodyMax(c) || corr === 'body' || localFixOn(c, o) || (!rwFor(S.wkChat || S.wkModel) && !useF3())) return x;   // 9.85: cu repararea țintită, corpul se repară întâi local
     try{
       pstage(signal, '🧍 Corpul nu seamănă cu poza întreagă, mai încearcă', 94);
       let id = null; try{ id = await identityOf(c); }catch(e){}
       const y = await gen0(`the body must match exactly: ${bodyOnly(c, id) || 'the same build as the full-body reference'}`, o);
       addUsage(c.id, imgPrice(), 'img', null, o.tag || 'poze');
-      y.bd = await bodyMatch(c, await bodySig(y.blob).catch(() => null));
+      y.bd = await bodyMatch(c, await measuredBody(y.blob).catch(() => null));
       const fx = x.fd ?? (await localFace(x.blob, c)).d, fy = y.fd ?? (await localFace(y.blob, c)).d;
       if(y.bd != null && y.bd < x.bd - .03 && (fy == null || fx == null || fy <= fx + .05)){ y.fd = fy; y.bodyRetry = true; return y; }
       x.fd = fx;
@@ -4703,7 +4715,7 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
         if(needB && fixBudget()){ pstage(signal, '🧍 Potrivește doar corpul după poza întreagă', 95);
           const y = await bodyPass(c, blob, signal, shot, await exactSize(blob));
           if(y){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze');
-            const b2 = await bodyMatch(c, await bodySig(y).catch(() => null)), f0 = (await localFace(blob, c)).d, f1 = (await localFace(y, c)).d;
+            const b2 = await bodyMatch(c, await measuredBody(y).catch(() => null)), f0 = (await localFace(blob, c)).d, f1 = (await localFace(y, c)).d;
             if(b2 != null && b2 < a.bd - .03 && (f0 == null || f1 == null || f1 <= f0 + .03)){ blob = y; bd1 = b2; done.push('corp'); } } }   // rămâne doar dacă măsurătoarea se apropie și fața nu se strică
         if(done.length){
           const fc = await checkPhoto(c, blob, shot, signal, opt.together, opt.asked).catch(e => { if(e.name === 'AbortError') throw e; return null; });
@@ -4736,6 +4748,9 @@ let lastImgProv = '';   // 8.3: furnizorul folosit la ultima poză (fal pentru c
 function isImagePolicyError(e){
   const m = String(e && e.message || e || '').toLowerCase();
   return /(?:\b3030\b|image_other|nsfw|not safe for work|content.?policy|safety filter|safety.?check|moderation|sexual content|explicit content|prohibited content|content blocked|prompt blocked|unsafe prompt|nudity is not allowed|violat(?:es|ion) (?:the )?(?:policy|guidelines)|flagged as)/i.test(m);
+}
+function stopPhotoRetry(error){
+  return error?.name === 'AbortError' || error?.photoKind === 'provider' || error?.cap === true || isImagePolicyError(error);
 }
 async function genImage(prompt, ref, signal, ref2, opt = {}){
   if(!opt.quiet){
@@ -8104,7 +8119,7 @@ async function vidCheck(c, blob, start){
   const rbs = c.photoFull ? await refBodySigs(c).catch(() => []) : [];
   const F = [], B = [];
   for(const f of fr){ const d = (await localFace(f.blob, c)).d; if(d != null) F.push(idPct(d));
-    if(rbs.length){ const b = await bodyMatch(c, await bodySig(f.blob).catch(() => null), rbs).catch(() => null); if(b != null) B.push(bodyPct(b)); } }
+    if(rbs.length){ const b = await bodyMatch(c, await measuredBody(f.blob).catch(() => null), rbs).catch(() => null); if(b != null) B.push(bodyPct(b)); } }
   let s0 = null, b0 = null;
   if(start){ const sj = await toJpeg(start, 1280, .92); const d0 = (await localFace(sj, c)).d; s0 = d0 != null ? idPct(d0) : null;
     if(rbs.length){ const x = await bodyMatch(c, await bodySig(sj).catch(() => null), rbs).catch(() => null); b0 = x != null ? bodyPct(x) : null; } }
@@ -11558,7 +11573,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     }
     // 9.92: motorul unic: generarea + garanția + finisarea (și pentru editări și pozele împreună)
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && (!peopleIn.self || peopleIn.duo))})
-      : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt});
+      : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont});
     const bodyNotice = c.strictIdentity && c.photo && !duoBoth && !peopleIn && !edited
       ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true}) : '';
     if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
