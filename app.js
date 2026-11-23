@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.6';
+const APP_VER = '14.14.7';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -3023,17 +3023,20 @@ function kitEnsure(c, o = {}){
   setTimeout(go, o.delay ?? 1500);
 }
 // (3) garanția + finisarea, după orice generare cu personajul
+function faceRepairThreshold(c, opt){
+  return opt.verifyIdentity ? Math.min(fRet(opt), idMax(c)) : fRet(opt);
+}
 async function finishPerson(c, r, shot, signal, opt = {}){
   if(!r || !r.blob) return r;
   const photo = (c.stil || 'photo') === 'photo', tm = opt.tm, t0 = performance.now(), m0 = tm && tm.s ? tm.s.masurare || 0 : 0, f0 = tm && tm.s ? tm.s.finisare || 0 : 0;
   if(photo && !opt.noChar && S.imgProv === 'worker'){
     if(r.fd === undefined || opt.together){ try{ r.fd = (await localFace(r.blob, c)).d; }catch(e){} }   // împreună: fața ei, dintre cele două
     // fața prea departe → retuș cu același model, păstrat doar dacă telefonul măsoară că s-a apropiat
-    if(r.fd != null && r.fd > fRet(opt) && !r.retouched && !r.retTried && !r.bounded && fixBudget()){   // 13.7 (3)   // o singură dată: nu repetă un retuș deja încercat
+    if(r.fd != null && r.fd > faceRepairThreshold(c, opt) && !r.retouched && !r.retTried && !r.bounded && fixBudget()){   // 13.7 (3)   // o singură dată: nu repetă un retuș deja încercat
 
       pstage(signal, '✨ Garanția: potrivește fața', 96);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
-        if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; r.retouched = true; r.garRet = true; } } }catch(e){ if(e.name === 'AbortError') throw e; }
+        if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; r.bd = undefined; r.retouched = true; r.garRet = true; } } }catch(e){ if(stopPhotoRetry(e)) throw e; }
     }
     // 10.9: a doua trecere, o singură dată: fața tot peste prag după un retuș (al motorului sau al garanției)
     const late = () => tm && tm.t0 && performance.now() - tm.t0 > 90e3;   // 14.0: trecerile în plus nu țin poza mai mult de 90 s
@@ -4590,7 +4593,7 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
 async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const failure = message => Object.assign(new Error(message), {photoKind:'local'});
   const face = (await localFace(blob, c)).d;
-  if(face != null && face > idMax(c)) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință.');
+  if(face != null && face > idMax(c)) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
   let bodyUnknown = false;
   if(c.photoFull && framingOf(shot).k !== 'close'){
     const body = await bodyMatch(c, await measuredBody(blob).catch(() => null)).catch(() => null);
@@ -11572,9 +11575,10 @@ async function askPhoto0(spont, target, mode, opt = {}){
       }
     }
     // 9.92: motorul unic: generarea + garanția + finisarea (și pentru editări și pozele împreună)
+    const verifyIdentity = !!(c.strictIdentity && c.photo && !duoBoth && !peopleIn && !edited);
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && (!peopleIn.self || peopleIn.duo))})
-      : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont});
-    const bodyNotice = c.strictIdentity && c.photo && !duoBoth && !peopleIn && !edited
+      : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont, verifyIdentity:verifyIdentity && !together && !sceneOpt.partner});
+    const bodyNotice = verifyIdentity
       ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true}) : '';
     if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
