@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.14';
+const APP_VER = '14.14.15';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1980,6 +1980,9 @@ const sheetMaxOf = (c, ang) => (ang === 'side' || ang === 'side2' ? .52 : ang ==
 const sheetOn = c => S.idSheet !== 'off' && S.imgProv === 'worker' && !!S.wkBase && !!c && !!c.photo && (c.stil || 'photo') === 'photo';
 const sheetOf = c => c && c.sheet && c.sheet.k === c.photo ? (c.sheet.v || []).filter(x => SHEET_VIEWS[x.ang]) : [];   // 12.2: doar unghiurile de acum
 let sheetBusy = null;
+function refreshExistingReference(force, options, reference, version){
+  return !!(force && !options.redo && reference?.k && !reference.weak && (reference.bv || 0) === version);
+}
 async function sheetGen(c, force, onStep, o = {}){
   if(!sheetOn(c) || sheetBusy) return false;
   if(!o.redo){ await sheetTidy(c).catch(() => {}); await sheetRemeasure(c).catch(() => {}); }
@@ -2004,8 +2007,9 @@ async function sheetGen(c, force, onStep, o = {}){
   if(!want.length) return false;   // nu consumă ultima parte din plafon
   const k0 = c.photo; sheetBusy = c.id; keepAwake(true); if(!o.redo){ const at = sl ? Date.now() - 7 * 864e5 + 3600e3 : Date.now(); c.sheetTry = {k:k0, at, set:SHEET_SET(), bv:bodyVer(c)}; c.sheetFill = {k:k0, at, set:SHEET_SET(), bv:bodyVer(c)}; }   // tăiat de plafon: restul, peste o oră await saveChars();
   try{
-    const base = await DB.get(k0); const ref = base ? await profDesc(c).catch(() => null) : null; if(!base || !ref) return false;   // fără față măsurabilă în profil nu se poate verifica
-    const crs = closeOf(c), cr = crs ? await DB.get(crs.img).catch(() => null) : null;   // 10.9: portretul de aproape, al doilea reper (fața la rezoluție mare)
+    const crs = closeOf(c);
+    const [base, ref, cr] = await Promise.all([DB.get(k0), profDesc(c).catch(() => null), crs ? DB.get(crs.img).catch(() => null) : null]);
+    if(!base || !ref) return false;   // fără față măsurabilă în profil nu se poate verifica
     const out = [];
     let doneN = 0, noRes = 0; refProg.lbl = 'fața'; refProg.i = 0; refProg.n = want.length;
     const one = async ang => {   // 11.1 (V1, V2): un unghi; două unghiuri în același timp
@@ -2017,7 +2021,8 @@ async function sheetGen(c, force, onStep, o = {}){
       const cands = [], h0 = have.find(y => y.ang === ang), needTwo = !(h0 && h0.k && !force);
       let stop = false, weakC = null, gotAny = false, bestAny = null, rf = 0; const RF = o.redo ? 1 : 2;   // 11.9: rafinări ale feței
       const idImg = cr || base;
-      const TR = o.redo ? REFERENCE_REDO_MAX : SHEET_TRIES;
+      const refresh = refreshExistingReference(force, o, h0, bodyVer(c)) && h0.d != null && h0.d < mx && c.sheet?.rv === PROFD_V;
+      const TR = o.redo ? REFERENCE_REDO_MAX : refresh ? 1 : SHEET_TRIES;
       const comparable = c.sheet?.rv === PROFD_V && (h0?.bv || 0) === bodyVer(c);
       for(let t = 0; t < TR && !stop; ){
         const count = o.redo ? Math.min(redoReferenceBatch(t),referenceCapacity(mdl)) : Math.min(2, TR - t);
@@ -2031,7 +2036,7 @@ async function sheetGen(c, force, onStep, o = {}){
         const okN = cands.filter(x => x.d != null && x.strict).length, good = cands.filter(x => x.d != null && x.strict && x.d <= SHEET_GOOD).length;
         if(o.redo ? cands.some(x => (x.strict || x.d == null) && redoReferenceAccept(x,h0,comparable,'d')) : good >= 2 || (good >= 1 && okN >= (needTwo ? 2 : 1))) stop = true;   // destul de aproape: nu mai plătește alte încercări
         // 11.9: niciunul destul de asemănător → a doua trecere: același cadru (unghi, păr, haine, lumină), doar fața refăcută după portret
-        while(!stop && (!o.redo || t < TR && referenceCapacity(mdl) > 0) && rf < RF && bestAny && sheetRefineOn() && !cands.some(x => x.d != null && x.strict)){
+        while(!refresh && !stop && (!o.redo || t < TR && referenceCapacity(mdl) > 0) && rf < RF && bestAny && sheetRefineOn() && !cands.some(x => x.d != null && x.strict)){
           rf++;
           const pr = `Edit image 1: keep the pose, head angle, expression, framing, hair, clothes, light and background of image 1 exactly as they are. Change only the face so it is exactly the face of the person in image 2: the same face shape, eyes, eyebrows, nose, lips, jawline, skin and age${/glasses/i.test(c.physEn || '') ? ', the same glasses' : ''}. Photorealistic, natural, seamless. ${STIL_TAG.photo}`;
           let rbs = []; try{ rbs = await genMany(pr, bestAny.b, idImg, {model:mdl, size:'768x1024', force:{two:true}, px1:1024, px2:768, p1:pr, quiet:true, why:'profil', signal:o.signal}, o.redo ? 1 : 2); }catch(e){ if(o.redo) stop = true; break; }
@@ -2405,8 +2410,8 @@ async function bsheetGen(c, force, onStep, o = {}){
   const k0 = c.photoFull; sheetBusy = c.id; keepAwake(true); if(!o.redo){ const pp = c.bsheetTry && c.bsheetTry.k === k0 && c.bsheetTry.p ? c.bsheetTry.p : {}; for(const x of want) pp[x] = Date.now(); c.bsheetTry = {k:k0, at:Date.now(), n:want.join(','), p:pp}; } await saveChars();
   try{
     const base = await DB.get(k0); if(!base) return false;
-    const ref = await bodySig(base).catch(() => null);   // 9.94 (A): fără siluetă măsurabilă, se verifică doar fața
-    const crs = closeOf(c), cr = crs ? await DB.get(crs.img).catch(() => null) : null;   // 10.9
+    const crs = closeOf(c);
+    const [ref, cr] = await Promise.all([refBodySig(c).catch(() => null), crs ? DB.get(crs.img).catch(() => null) : null]);
     const out = [];
     let doneN = 0; refProg.lbl = 'corpul'; refProg.i = 0; refProg.n = want.length;
     const one = async pose => {   // 11.1 (V1, V2)
@@ -2418,16 +2423,17 @@ async function bsheetGen(c, force, onStep, o = {}){
       const noFace = pose === 'side' || pose === 'back', noBody = BSHEET_NOBODY.has(pose), tol = BSHEET_TOL[pose] || BODY_SHEET_OK;   // 11.0
       const previous = have.find(x => x.pose === pose);
       const comparable = (previous?.bv || 0) === bodyVer(c);
-      let keep = null, loose = null, weak = null, stop = false; const BT = o.redo ? REFERENCE_REDO_MAX : 3;
+      const refresh = refreshExistingReference(force, o, previous, bodyVer(c)) && (noBody || previous.bd != null && previous.bd <= tol);
+      let keep = null, loose = null, weak = null, stop = false; const BT = o.redo ? REFERENCE_REDO_MAX : refresh ? 1 : 3;
       for(let t = 0; t < BT && !stop; ){
-        const count = o.redo ? Math.min(redoReferenceBatch(t),referenceCapacity(mdl)) : t === 0 ? (o.firstPass ? 1 : 2) : 3 - t;
+        const count = o.redo ? Math.min(redoReferenceBatch(t),referenceCapacity(mdl)) : t === 0 ? Math.min(BT, o.firstPass ? 1 : 2) : BT - t;
         if(count <= 0) break;
         let bs; try{ bs = await genMany(p2, base, cr, {model:mdl, size:'832x1248', force:cr ? {two:true} : {two:false, px:1024}, px1:1024, px2:768, p1:p, quiet:true, why:'profil', signal:o.signal}, count); }catch(e){ if(o.redo || t) break; t++; continue; }
         t += Math.max(1, bs.length);
         for(let b of bs){
           addUsage(c.id, imgPrice(), 'img', null, 'fisa');
           try{ if(b.type === 'image/png') b = await toJpeg(b, 1536, .9); }catch(e){}
-          const fd = (await localFace(b, c).catch(() => ({d:null}))).d, sig = noBody ? null : await bodySig(b).catch(() => null);
+          const [{d:fd}, sig] = await Promise.all([localFace(b,c).catch(() => ({d:null})), noBody ? null : measuredBody(b).catch(() => null)]);
           const bd = sig && ref ? bodyDist2(sig, ref) : null;
           const faceOk = fd == null ? noFace : fd < .55, bodyOk = noBody || !ref ? true : bd != null && bd <= tol;
           if(faceOk && !noBody && (!weak || (bd ?? 9) < (weak.bd ?? 9))) weak = {pose, b, bd:bd == null ? null : Math.round(bd * 1000) / 1000, sig, sc:9, weak:true};   // 11.2: ultima rezervă
@@ -7816,7 +7822,7 @@ function drawSheet(c, box){
   const go = el.querySelector('#pfSheetGo'); if(go) go.onclick = async () => {
     if(sheetBusy) return; go.disabled = true; go.innerHTML = '<span class="spin"></span> Se face…';
     let ok = false; try{ ok = await sheetGen(c, true, (a, n) => { go.innerHTML = `<span class="spin"></span> ${SHEET_RO[a]} (${n + 1}/${Object.keys(SHEET_VIEWS).length})`; }); if(c.photoFull){ const okB = await bsheetGen(c, true, (a, n) => { go.innerHTML = `<span class="spin"></span> corp: ${BSHEET_RO[a]} (${n + 1}/${Object.keys(BSHEET_VIEWS).length})`; }); ok = ok || okB; } }catch(e){ toast(e.message, 3500); }
-    toast(ok ? '🧩 Fișa de identitate e gata' : 'Fișa n-a ieșit cu aceeași față (sau plafonul zilnic e aproape atins). Încearcă mai târziu.', 3500);
+    toast(ok ? '🧩 Am salvat reperele noi acceptate.' : 'Nu s-a salvat niciun reper nou. Reperele existente rămân disponibile.', 3500);
     el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); };
   const x = el.querySelector('#pfPfbX'); if(x) x.onclick = async () => { delete c.pfb; await saveChars(); el.remove(); const kk = $('#pfKit'); if(kk) kk.remove(); drawSheet(c, box); };
   fidHead(c);   // 10.2
