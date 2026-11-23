@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.7';
+const APP_VER = '14.14.8';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -923,6 +923,7 @@ const isAuto = opt => !!opt && (opt.tag === 'stories' || opt.tag === 'statusuri'
 const ECO_RESERVE = 600;
 const nineFits = () => rwFor('ancorat') || !Number.isFinite(capLeft()) || capLeft() >= (neurPerPhoto('ancorat') || 1455) + ECO_RESERVE;
 const sceneModel = (opt = {}) => { const m = isAuto(opt) && S.autoModel === 'eco' ? 'eco' : (S.wkChat || 'eco'); return m === 'ancorat' && S.imgProv === 'worker' && !nineFits() ? 'eco' : m; };
+const BUST_FIDELITY = 'Preserve the established bust volume, projection and width relative to this character’s ribcage, shoulders and waist, including under the requested clothes. A prominent bust stays equally prominent. Let the garment fit the same body naturally. Do not shrink, average out, flatten or exaggerate the reference proportions.';
 function idPrompt(c, shot, fr, R, fix, two){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
   const requestedBodyChange = /(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)[^.!?]{0,45}(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)|(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)[^.!?]{0,45}(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)/i.test(String(shot || ''));
@@ -930,8 +931,8 @@ function idPrompt(c, shot, fr, R, fix, two){
   const nx = two && R && R.extra ? R.extra.length : 0;
   const refs = two
     ? 'image 1 is a close-up of the face (the exact identity to keep: face shape, eyes, eyebrows, nose, lips, skin tone and skin texture), ' + (R && R.bodyFrom === 'intreaga' ? 'image 2 shows the same person\'s exact body: build, weight, bust size and shape, waist, belly, hips, arms and legs, plus hair and skin tone; reproduce that body exactly, but NOT its clothes, pose or background' : 'image 2 is the best available body reference: preserve the exact visible build and proportions, especially bust size and shape, shoulders, waist, hips and overall silhouette; do not shrink or idealize the body') + (nx ? `, image${nx > 1 ? 's 3 and 4 are' : ' 3 is'} the same face from other angles` : '')
-    : 'image 1 is the same person (face and hair); image 2 is the body reference and defines the exact visible build and proportions, especially bust size and shape, shoulders, waist, hips, and overall silhouette';
-  return `${stilLead(c.stil)}${fr.p}. ${shot}.${fix ? ` Important corrections from the previous attempt: ${fix}.` : ''} IDENTITY LOCK — the reference images define one specific character, not a lookalike. Reproduce the same individual: preserve face shape, eye spacing and shape, eyebrows, nose, lips, jaw, apparent age, skin tone and texture, hairline, hair color, curl/strand texture and hairstyle. BODY IDENTITY LOCK — match the body reference, not a generic default body. Preserve the same visible body build and proportions, including the exact relative bust size and shape, shoulders, waist, hips, belly, arms and legs. ${bodyChangePriority} ${refs}.${phys} SCENE FLEXIBILITY — do not copy the reference photo's background, outfit, pose, expression, camera angle or framing. Those are allowed to change and must follow the current scene description above. Change only temporary details required by the scene; the character's identity and natural body proportions stay fixed. ${STIL_TAG[c.stil || 'photo']}`;
+    : 'the single image is the identity reference; use the stated permanent body traits where the body is not visible';
+  return `${stilLead(c.stil)}${fr.p}. ${shot}.${fix ? ` Important corrections from the previous attempt: ${fix}.` : ''} IDENTITY LOCK — the reference images define one specific character, not a lookalike. Reproduce the same individual: preserve face shape, eye spacing and shape, eyebrows, nose, lips, jaw, apparent age, skin tone and texture, hairline, hair color, curl/strand texture and hairstyle. BODY IDENTITY LOCK — match the available body reference and permanent traits. ${requestedBodyChange || fr.k === 'close' ? '' : BUST_FIDELITY} Preserve the same visible body build and proportions, including the exact relative bust size and shape, shoulders, waist, hips, belly, arms and legs. ${bodyChangePriority} ${refs}.${phys} SCENE FLEXIBILITY — do not copy the reference photo's background, outfit, pose, expression, camera angle or framing. Those are allowed to change and must follow the current scene description above. Change only temporary details required by the scene; the character's identity and natural body proportions stay fixed. ${STIL_TAG[c.stil || 'photo']}`;
 }
 // încadrarea scrisă explicit la început (altfel modelul copiază încadrarea referinței)
 /* ═════════ 🎬 10.1 cadrul scenei: poza arată exact momentul din conversație ═════════
@@ -1802,12 +1803,13 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     else { sref = opt.sref; srefN = angRef ? (ang2 ? 4 : 3) : 2; }
   }
   const fiS = !sref ? faceInstruction : (srefN === 2 ? 'Image 1 is a close-up of this person’s head: keep exactly this face and identity (' + HEAD_KEEP + ').' : faceInstruction) + srefText(srefN);
-  const prompt = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
+  const bustLock = !bustChange && fr.k !== 'close' && (clothedBody || bodyRef || c.photoFull) ? BUST_FIDELITY + ' ' : '';
+  const prompt = `${stilLead(st)}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
   if(useF3()){   // 9.43/9.53: FLUX 3 folosește fața + reperul de corp și prioritizează proporțiile bustului la cereri topless/nud
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
-    const body = bodyRef || (fb ? await headHide(await fullBodyRef(fb, c.fullBox), 'hx:' + c.photoFull) : null);   // 13.6: capul estompat
+    const body = fr.k === 'close' ? bodyRef : bodyRef || clothedBody?.blob || (fb ? await headHide(await fullBodyRef(fb, c.fullBox), 'hx:' + c.photoFull) : null);   // 13.6: capul estompat
     const face2 = await headRefOf(c, full, id);   // 10.3
-    const p3 = `${stilLead(st)}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair and glasses exactly as shown (the same color, length, curls, volume, parting and frames).${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
+    const p3 = `${stilLead(st)}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair and glasses exactly as shown (the same color, length, curls, volume, parting and frames).${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
     let b3 = await f3Image(s3 ? p3 + srefText(body ? 3 : 2) : p3, [face2, body, s3].filter(Boolean), S.wkSize, signal), ret = false;
     // 9.50: și pe FLUX 3 fața se măsoară în telefon și se retușează dacă s-a îndepărtat (înainte, pe FLUX 3 nu se verifica)
@@ -1817,11 +1819,13 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     }
     return {prompt:p3, blob:b3, engine:'flux3', refs:(body ? 'față + corp' : 'față') + (s3 ? ' + decorul pozei dinainte' : ''), retouched:ret, sref:!!s3};
   }
+  const singleInstruction = 'The single reference is the exact face and hair. Use the stated permanent body traits for proportions, with the requested pose and clothing.';
+  const singlePrompt = prompt.replace(faceInstruction, singleInstruction).replace(/Image 2 defines[^.]*\./g, '');
   const genOpt = bodyRef
-    ? {model, one:face, p1:prompt, why:opt.why || 'chat', size:opt.size} // încearcă față + corp; la eroare revine automat la față, nu pierde identitatea
-    : {model, force:{two:false, px:768}, p1:prompt, why:opt.why || 'chat', size:opt.size};   // 9.83: size = schița, când e cazul
-  const genOpt2 = {...(clothedBody ? {model, one:face, p1:prompt, why:opt.why || 'chat', size:opt.size, extra:[angRef, clothedBody.full2].filter(Boolean), px2:768}
-    : angRef ? {model, force:{two:true}, p1:prompt, why:opt.why || 'chat', size:opt.size, ...(ang2 ? {extra:[ang2.img]} : {})} : genOpt), multi:opt.multi || 0};
+    ? {model, one:face, p1:singlePrompt, why:opt.why || 'chat', size:opt.size} // încearcă față + corp; la eroare revine automat la față, nu pierde identitatea
+    : {model, force:{two:false, px:768}, p1:singlePrompt, why:opt.why || 'chat', size:opt.size};   // 9.83: size = schița, când e cazul
+  const genOpt2 = {...(clothedBody ? {model, one:face, p1:singlePrompt, why:opt.why || 'chat', size:opt.size, extra:[angRef, clothedBody.full2].filter(Boolean), px2:768}
+    : angRef ? {model, force:{two:true}, p1:singlePrompt, why:opt.why || 'chat', size:opt.size, ...(ang2 ? {extra:[ang2.img]} : {})} : genOpt), multi:opt.multi || 0};
   const promptS = sref ? prompt.replace(faceInstruction, fiS) : prompt;   // 10.1 (S5); p1 (rezerva cu un singur reper) rămâne fără decor
   if(sref){ if(clothedBody) genOpt2.extra = [...(genOpt2.extra || []), sref]; else if(angRef) genOpt2.extra = [...(ang2 ? [ang2.img] : []), sref]; else genOpt2.force = {two:true}; }
   let blob = await genImage(promptS, face, signal, clothedBody ? clothedBody.blob : angRef || bodyRef || sref, genOpt2);
@@ -4204,7 +4208,7 @@ async function bodyPass(c, blob, signal, shot, size){   // 9.88: size = mărimea
     : exposure === 'topless'
       ? 'Preserve the exact topless state in image 1: keep the breasts uncovered, with no shirt or bra; preserve the lower-body clothing exactly and do not turn the image into full nudity.'
       : 'Preserve the exact clothing state and outfit in image 1; do not change garments, colors, coverage or accessories.';
-  const prompt = `Edit image 1. Change ONLY the person's body proportions to match the same person's body in image 2${bt ? ': ' + bt : ''}. Match the same build, weight, shoulders, arms, bust size and volume, waist, belly, hips, thighs and legs; never slim down, reduce the bust, enlarge unrelated features or idealize the body. ${clothing} Keep everything else in image 1 unchanged: face and identity, hair, expression, pose, hands, room, background, camera angle, framing, lighting and photo grain. The second image is a BODY reference only; take no clothing, pose, background or camera details from it. One seamless, photorealistic, unretouched phone photo.`
+  const prompt = `Edit image 1. Change ONLY the person's body proportions to match the same person's body in image 2${bt ? ': ' + bt : ''}. Match the same build, weight, shoulders, arms, bust size and volume, waist, belly, hips, thighs and legs. ${BUST_FIDELITY} In particular, never slim down, reduce the bust, enlarge unrelated features or idealize the body. ${clothing} Keep everything else in image 1 unchanged: face and identity, hair, expression, pose, hands, room, background, camera angle, framing, lighting and photo grain. The second image is a BODY reference only; take no clothing, pose, background or camera details from it. One seamless, photorealistic, unretouched phone photo.`
   return await genImage(prompt, blob, signal, bodyRef, {model:'eco', force:{two:true}, size:size || S.wkSize || '768x1024', px1:Math.max(...String(size || S.wkSize || '768x1024').split('x').map(Number)), quiet:true, why:'corp'});
 }
 /* 9.35: poza întreagă și variantele din creator ieșeau des cu „altă față” (fața e mică în cadru și generatorul o redesenează).
@@ -4441,18 +4445,18 @@ Score strictly from 0 to 10:
 - "scene": does the generated photo match the requested place, activity, clothing and pose?
 - "framing": does the camera framing match the requested selfie / mirror / full-body / close-up view?
 - "body": is the body in image 2 the same body as in ${fb ? 'image 3' : 'image 1'} (build, weight, bust size, waist, hips, proportions)? Ignore clothing and pose. Use null if too little of the body is visible in image 2${fb ? '' : ' or in image 1'}.
-- "hair": same hair color, length and texture as image 1 (a different hairstyle is fine only if the scene asks for it)? null if the hair is not visible.
+${fb ? '- "bust": compare visible bust volume and projection relative to shoulders and waist in images 2 and 3. Score 0–10 for fidelity, with 5 or less only for a clear size difference. Use null if pose, crop or loose clothing prevents comparison.\n' : ''}- "hair": same hair color, length and texture as image 1 (a different hairstyle is fine only if the scene asks for it)? null if the hair is not visible.
 - "hands": are the visible hands natural and anatomically correct (five fingers each, no extra, missing or fused fingers)? null if no hand is visible.
 - "skin": same skin tone and skin texture as image 1, ignoring the light of the scene? null if too little skin is visible.${marks.length ? `
 - "marks": are these permanent marks visible in the right place when that area is visible: ${marks.join('; ')}? null if none of those areas is visible.` : ''}${asked && asked.length ? `
 - "asked": the user explicitly asked for these details: ${asked.map(a => '"' + a + '"').join(', ')}. 10 = every one is clearly visible in image 2, 0 = none; list the ones that are missing or wrong in "missing".` : ''}${must.length ? `
 - "must": this character's mandatory traits, numbered: ${must.map((x, i) => (i + 1) + '. ' + x.en).join('; ')}. Give a list with one answer per trait, in order: true = clearly matches in image 2; false = that part is visible in image 2 and it does NOT match; null = that part is not visible or too small to judge. Judge each one on its own, strictly, ignoring the light of the scene.` : ''}
 "fix": if face is below 8 or scene below 6 or framing below 5 or body below 7 or hair below 6${marks.length ? ' or marks below 6' : ''}${asked && asked.length ? ' or asked below 8' : ''}, give ONE short concrete English correction prioritizing identity first (face, then body: say exactly what differs, e.g. "fuller bust and wider hips as in the reference"), then hair${asked && asked.length ? ', then the missing requested details' : ''}, then scene; otherwise "".
-JSON: {"face":0,"scene":0,"framing":0,"body":0,"hair":0,"hands":0,"skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`}], {max:must.length ? 340 : 260, signal, cid:c.id, aux:true, tag:'pozeai'});
+JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`}], {max:must.length ? 340 : 260, signal, cid:c.id, aux:true, tag:'pozeai'});
   const j = parseJSON(out), n = k => Math.max(0, Math.min(10, Math.round(+j[k] || 0)));
   const r = {face:n('face'), scene:n('scene'), framing:n('framing'), fix:String(j.fix || '').slice(0, 300)};
   const nn = k => j[k] == null || j[k] === '' ? null : n(k);   // 9.36: null = nu se vede
-  r.body = nn('body'); r.hair = nn('hair'); r.hands = nn('hands'); r.skin = nn('skin'); if(marks.length) r.marks = nn('marks'); if(fb) r.bodyRef = 'intreaga';
+  r.body = nn('body'); r.hair = nn('hair'); r.hands = nn('hands'); r.skin = nn('skin'); if(marks.length) r.marks = nn('marks'); if(fb){ r.bodyRef = 'intreaga'; r.bust = nn('bust'); }
   if(must.length && Array.isArray(j.must)){ r.must = must.map((x, i) => j.must[i] === true || j.must[i] === 'true' ? true : j.must[i] === false || j.must[i] === 'false' ? false : null);
     const miss = must.filter((x, i) => r.must[i] === false).map(x => ({en:x.en, zone:x.zone}));
     if(miss.length){ r.mustMiss = miss; r.fix = ('Must be exactly: ' + miss.map(x => x.en).join('; ') + '. ' + r.fix).slice(0, 300); } }
@@ -4601,15 +4605,17 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     bodyUnknown = body == null;
   }
   const dressedShot = identityOutfit(c,shot,opt), fixed = dressedShot !== shot;
-  if(face == null || bodyUnknown || fixed){
+  const compareBust = opt.compareBust && c.photoFull && framingOf(shot).k !== 'close';
+  if(face == null || bodyUnknown || fixed || compareBust){
     const checked = await checkPhoto(c,blob,dressedShot,signal,false,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : []).catch(error => {
       if(error.name === 'AbortError') throw error;
       return null;
     });
     if(face == null && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
     if(bodyUnknown && checked?.body == null && !opt.allowBodyUnknown) throw failure('Poza a rămas nepublicată: corpul nu se poate verifica. Cere un cadru cu silueta clar vizibilă.');
-    if(checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
+    if((face == null || bodyUnknown || fixed) && checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
     if(fixed && (checked?.asked == null || checked.asked < 8)) throw failure('Poza a rămas nepublicată: ținuta fixă nu a trecut verificarea.');
+    if(checked?.bust != null && checked.bust <= 5) return 'Volumul bustului diferă vizibil de reperul de corp.';
     if(bodyUnknown && checked?.body == null) return 'Corpul nu a putut fi verificat în acest cadru.';
   }
 }
@@ -11579,7 +11585,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && (!peopleIn.self || peopleIn.duo))})
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont, verifyIdentity:verifyIdentity && !together && !sceneOpt.partner});
     const bodyNotice = verifyIdentity
-      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true}) : '';
+      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
     if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
     if(gdiag){ gdiag.tm = {...tm.s, total:performance.now() - tm.t0}; gdiag.rwc = rwCalls.filter(x => x.i > rwC0).map(({i, ...x}) => x); if(gdiag.mdl === 'Klein 9B') gdiag.mdl = kleinLbl(); }   // 13.3: tot, inclusiv pașii de după (garanția, măsurarea, finisarea)
