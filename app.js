@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.12';
+const APP_VER = '14.14.13';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2211,7 +2211,8 @@ async function closeGen(c, force){
   if(!force && !stale && (closeOf(c) || (c.closeRef && c.closeRef.k === c.photo && (c.closeRef.off || c.closeRef.skip)))) return false;
   if(!force && c.closeTry && c.closeTry.k === c.photo && (c.closeTry.bv || 0) === bodyVer(c) && Date.now() - c.closeTry.at < 7 * 864e5) return false;
   const mdl = rwFor('ancorat') ? 'ancorat' : (S.wkChat || 'ancorat');
-  if(rwFor(mdl) ? rwCapLeft() < rwPer() * (CLOSE_TRIES + 1) : capLeft() < (neurPerPhoto(mdl) || 5000) * (CLOSE_TRIES + 1)) return false;
+  const affordable = rwFor(mdl) ? Math.floor(rwCapLeft() / rwPer()) : Math.floor(capLeft() / (neurPerPhoto(mdl) || 5000));
+  const tries = Math.max(0, Math.min(CLOSE_TRIES, affordable));
   const k0 = c.photo; sheetBusy = c.id; keepAwake(true); c.closeTry = {k:k0, at:Date.now(), bv:bodyVer(c)}; await saveChars();
   try{
     const base = await DB.get(k0), ref = base ? await profDesc(c).catch(() => null) : null; if(!base || !ref) return false;
@@ -2219,8 +2220,8 @@ async function closeGen(c, force){
     const gl = id && !id.none && id.glasses ? ` The same glasses (${idCut(id.glasses, 80)}), the same frames.` : '';
     const p = `Edit this exact photo: the same person in a close-up portrait, head and shoulders filling the frame, straight front view, eyes towards the camera, relaxed natural expression with the mouth closed, even soft daylight on the face, plain softly blurred background. Keep exactly the same face and identity, the same skin with its texture, freckles and marks, the same age, the same hair (the same color, length, curls, volume and parting, all of it visible) and the same clothes.${gl}${bodyHint(c)} Sharp focus on the face, natural skin texture, no retouching. ${STIL_TAG.photo}`;
     let keep = null;
-    for(let t = 0, stop = false; t < CLOSE_TRIES && !stop; ){   // 11.1 (V1): câte două pe cerere
-      let bs; try{ bs = await genMany(p, base, null, {model:mdl, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}, Math.min(2, CLOSE_TRIES - t)); }catch(e){ if(t) break; t++; continue; }
+    for(let t = 0, stop = false; t < tries && !stop; ){   // 11.1 (V1): câte două pe cerere
+      let bs; try{ bs = await genMany(p, base, null, {model:mdl, size:'768x1024', force:{two:false, px:1024}, p1:p, quiet:true, why:'profil'}, Math.min(2, tries - t)); }catch(e){ if(stopPhotoRetry(e)) throw e; break; }
       t += Math.max(1, bs.length);
       for(let b of bs){
         addUsage(c.id, imgPrice(), 'img', null, 'fisa');
@@ -2235,9 +2236,22 @@ async function closeGen(c, force){
       if(c.photo !== k0 || !charById(c.id)) return false;
     }
     if(c.photo !== k0 || !charById(c.id)) return false;
+    if(!keep || keep.d > CLOSE_MAX){
+      const faces = await faceDescs(base).catch(() => []);
+      const f = faces.slice().sort((a,b) => b.a - a.a)[0];
+      if(f){
+        const b = await cropFace(base, {x:f.box.x/f.W,y:f.box.y/f.H,w:f.box.w/f.W,h:f.box.h/f.H}).catch(() => null);
+        const found = b ? await faceDescs(b).catch(() => []) : [];
+        const d = found.length ? Math.min(...found.map(x => fdist(x.d,ref))) : Infinity;
+        if(d <= CLOSE_MAX) keep = {b,d:Math.round(d * 1000)/1000,crop:true};
+      }
+    }
+    if(c.photo !== k0 || !charById(c.id)) return false;
     const old = c.closeRef && c.closeRef.img;
     if(!keep || keep.d > CLOSE_MAX){ c.closeRef = {k:k0, fail:true, best:keep ? keep.d : null, at:Date.now(), img:old && c.closeRef.k === k0 && !c.closeRef.fail ? old : undefined}; if(c.closeRef.img) delete c.closeRef.fail; await saveChars(); return false; }
-    c.closeRef = {k:k0, img:await saveImg(keep.b), d:keep.d, at:Date.now(), bv:bodyVer(c)}; await saveChars();
+    const img = await saveImg(keep.b);
+    if(c.photo !== k0 || !charById(c.id)){ await delImg(img).catch(() => {}); return false; }
+    c.closeRef = {k:k0, img, d:keep.d, at:Date.now(), bv:bodyVer(c), crop:!!keep.crop}; await saveChars();
     if(old && old !== c.closeRef.img) delImg(old).catch(() => {});
     headCache.clear();
     return true;
@@ -2304,7 +2318,7 @@ function drawCloseRef(c, box){
   if(!sheetOn(c)) return;
   const cr = c.closeRef && c.closeRef.k === c.photo ? c.closeRef : null, busy = sheetBusy === c.id;
   let txt, btn = '';
-  if(cr && cr.img && !cr.off){ txt = `✅ E reperul de față trimis la toate pozele${cr.d != null ? ' · fața ' + idPct(cr.d) + '% față de portret' : ''}.`; btn = '<button class="btn sm" data-cl="re">↻ Refă</button><button class="btn sm" data-cl="off">✕ Nu-l folosi</button>'; }
+  if(cr && cr.img && !cr.off){ txt = (cr.crop ? 'Decupaj verificat din portretul original. ' : '') + `✅ E reperul de față trimis la toate pozele${cr.d != null ? ' · fața ' + idPct(cr.d) + '% față de portret' : ''}.`; btn = '<button class="btn sm" data-cl="re">↻ Refă</button><button class="btn sm" data-cl="off">✕ Nu-l folosi</button>'; }
   else if(cr && cr.img && cr.off){ txt = 'Oprit de tine: la poze pleacă decupajul din portret.'; btn = '<button class="btn sm" data-cl="on">✓ Folosește-l</button><button class="btn sm" data-cl="re">↻ Refă</button>'; }
   else if(cr && cr.skip){ txt = 'Nu e nevoie: fața e destul de mare în portret.'; btn = '<button class="btn sm" data-cl="re">🔍 Fă-l oricum</button>'; }
   else if(cr && cr.fail){ txt = `N-a ieșit destul de fidel${cr.best != null ? ' (cel mai bun: ' + idPct(cr.best) + '%)' : ''}; la poze pleacă decupajul din portret.`; btn = '<button class="btn sm" data-cl="re">↻ Încearcă din nou</button>'; }
@@ -2317,7 +2331,9 @@ function drawCloseRef(c, box){
     if(a === 'off' || a === 'on'){ c.closeRef.off = a === 'off'; await saveChars(); headCache.clear(); fidRedraw(c, 'pfClose', drawCloseRef); return; }
     b.disabled = true; b.innerHTML = '<span class="spin"></span> Fac portretul…';
     for(let i = 0; i < 240 && sheetBusy; i++) await sleep(500);
-    const ok = await closeGen(c, true).catch(() => false);
+    let ok = false;
+    try{ ok = await closeGen(c, true); }
+    catch(error){ if(profIs(c)) drawPics(c); toast(error.message || 'Portretul nu s-a putut genera.',4000); return; }
     if(profIs(c)) drawPics(c);
     toast(ok ? '🔍 Portretul de aproape e gata și se folosește la toate pozele.' : '🔍 N-a ieșit destul de fidel; rămâne decupajul din portret.', 3500);
   });
@@ -3004,11 +3020,12 @@ async function kitBuild0(c, o = {}){
   if(typeof call !== 'undefined' && call && !o.force){ setTimeout(() => kitEnsure(c, o), 60e3); return false; }   // nu în timpul unui apel: telefonul are nevoie de el
   kitBusy.add(c.id); const portrait = c.photo; let k0 = kitKey(c); const step = o.onStep || (() => {}); if(o.gen) keepAwake(true);   // 11.1 (V4)
   try{
-    if(aiReady()){ step('pasaport'); try{ await identityOf(c); }catch(e){} }
+    if(aiReady()) step('pasaport');
+    const passport = aiReady() ? identityOf(c).catch(() => null) : null;
     const originalBody = c.photoFull;
     const bodyText = ensureBodyText(c).catch(() => false);
     step('amprenta');
-    await Promise.all([refDescs(c).catch(() => {}), bodyText]);
+    await Promise.all([passport, refDescs(c).catch(() => {}), bodyText]);
     try{ await ageLook(c); }catch(e){}   // 9.94 (D)
     step('verificare'); try{ await refMigrate(c); }catch(e){}   // 11.0 (C4)
     if((c.stil || 'photo') === 'photo'){
@@ -3021,7 +3038,7 @@ async function kitBuild0(c, o = {}){
         if(c.photoFull !== originalBody) await ensureBodyText(c).catch(() => false);
         k0 = kitKey(c);
         const valid = () => kitKey(c) === k0;
-        step('aproape'); try{ await closeGen(c, false); }catch(e){}
+        step('aproape'); try{ await closeGen(c, !!o.force && !closeOf(c) && !c.closeRef?.off); }catch(e){ if(stopPhotoRetry(e)) throw e; }
         if(!valid()) return false;
         await kitBuildSheets(c, o, step, valid);
         if(!valid()) return false;
@@ -3033,9 +3050,10 @@ async function kitBuild0(c, o = {}){
         if(aiReady()){ step('pasaport2'); try{ await passportMulti(c); }catch(e){} }   // 9.99 (4)
       }
       if(!o.gen){ step('detalii'); try{ await detailGen(c); }catch(e){} }   // 11.0 (A2): fără cost
+      const look = o.gen ? lookRefOf(c).catch(() => null) : null;
       step('silueta'); try{ await refBodySigs(c); }catch(e){}
       step('prag'); try{ await bodyNoise(c); }catch(e){}
-      if(o.gen){ step('culori'); try{ await lookRefOf(c); }catch(e){} }   // 10.0: culorile și proporțiile feței, calibrate pe tot pachetul (ultimul pas: nu ține în loc ce costă); altfel se măsoară la prima poză
+      if(o.gen){ step('culori'); await look; }   // 10.0: culorile și proporțiile feței, calibrate pe tot pachetul (ultimul pas: nu ține în loc ce costă); altfel se măsoară la prima poză
     }
     if(kitKey(c) === k0){ c.kit = {v:KIT_V, k:k0, at:Date.now(), gen:!!o.gen || !!(c.kit && c.kit.gen && c.kit.k === k0)}; await saveChars(); }
     if(false){ /* 12.2: setul-etalon e scos */ const sg = refsSig(c); if(c.etalonAsk !== sg){ c.etalonAsk = sg; await saveChars(); if(o.toast) toast(`🎯 Reperele lui ${c.name} s-au schimbat. Când vrei, verifică-le: profil → Poze → Reperele → „Verifică fișa”.`, 5000); } }   // 11.3 (E2): o singură dată pe set de repere
@@ -4602,19 +4620,20 @@ async function idBoost(c, shot, signal, corr, opt = {}){
 async function makeScenePhoto(c, shot, signal, opt = {}){
   photoWarm(c);   // 10.6 (C): modelele din telefon se încarcă în timp ce se generează poza (nu la deschiderea chatului)
   if(lookOn(c, opt) && S.imgProv === 'worker') lookRefOf(c).catch(() => {});   // 10.0
-  let refDistance = null;
-  if(c.photo && c.photoFull && opt.kind === 'chat' && !opt.together && !opt.partner){
-    const key = c.photo + '|' + c.photoFull;
-    if(c.pfDist?.k !== key){
-      const body = await DB.get(c.photoFull).catch(() => null);
-      const d = body ? (await localFace(body, c)).d : null;
-      c.pfDist = {k:key, d};
-      saveChars();
-    }
-    refDistance = c.pfDist.d;
-    if(refDistance != null && refDistance > idMax(c)) toast('Fața din poza întreagă pare diferită de portret. Verifică reperele personajului.', 5000);
-  }
-  const r = await makeScenePhoto0(c, shot, signal, opt);
+  const portrait = c.photo, bodyKey = c.photoFull;
+  const refDistance = async () => {
+    if(!portrait || !bodyKey || opt.usePortraitBody) return null;
+    const key = portrait + '|' + bodyKey;
+    if(c.pfDist?.k === key) return c.pfDist.d;
+    const body = await DB.get(bodyKey).catch(() => null);
+    const d = body ? (await localFace(body, c)).d : null;
+    if(c.photo !== portrait || c.photoFull !== bodyKey) return null;
+    c.pfDist = {k:key,d}; saveChars();
+    return d;
+  };
+  const [r, referenceDistance] = await Promise.all([makeScenePhoto0(c, shot, signal, opt), refDistance().catch(() => null)]);
+  if(opt.kind === 'chat' && !opt.together && !opt.partner && referenceDistance != null && referenceDistance > idMax(c))
+    toast('Fața din poza întreagă pare diferită de portret. Verifică reperele personajului.', 5000);
   if(r.bd != null && r.bd > bodyGate(c) && !opt.together && !opt.partner) r.bodyWarn = bodyPct(r.bd);   // 9.85 (6)
   // 9.50: ce a primit generatorul și cât seamănă, pentru „Ce scenă a ales” (de ce arată diferit)
   try{
@@ -4625,9 +4644,7 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
       src:T.src, look:T.t.slice(0, 600), fd:r.fd != null ? Math.round(r.fd * 1000) / 1000 : null, ret:!!r.retouched, bfix:!!r.bodyRetry,
       sheet:sheetPick(c, shot).map(s => SHEET_RO[s.ang]), bwarn:r.bodyWarn ?? null, flow:r.bounded ? 'direct' : 'legacy', fast:!!r.fast, tm:tmOn(opt) ? {...opt.tm.s} : null, dr:r.drafts || 0, dfd:r.draftFd != null ? Math.round(r.draftFd * 1000) / 1000 : null, fix:r.fixed || [], miss:opt.miss || '', corr:r.corr0 ? r.corr0.slice(0, 300) : ''};   // 9.83
     // portretul și poza întreagă: aceeași persoană? (chatul ia fața din portret)
-    if(c.photoFull){ const k = c.photo + '|' + c.photoFull;
-      if(!c.pfDist || c.pfDist.k !== k){ const fb = await DB.get(c.photoFull).catch(() => null); const d = fb ? (await localFace(fb, c)).d : null; c.pfDist = {k, d}; saveChars(); }
-      if(c.pfDist.d != null) r.gen.pf = Math.round((refDistance ?? c.pfDist.d) * 1000) / 1000; }
+    if(referenceDistance != null) r.gen.pf = Math.round(referenceDistance * 1000) / 1000;
   }catch(e){}
   return r;
 }
