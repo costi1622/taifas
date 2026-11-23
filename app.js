@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.9';
+const APP_VER = '14.14.10';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1253,6 +1253,12 @@ function latestPhotoExposure(ch, exclude){
 }
 // cuvintele importante dintr-un detaliu cerut („red dress” → red, dress): lipsește din descriere dacă niciunul nu apare
 const askMissing = (asked, shot) => { const t = String(shot || '').toLowerCase(); return (asked || []).filter(a => { const w = String(a).toLowerCase().match(/[a-z]{4,}/g) || []; return w.length && !w.some(x => t.includes(x.replace(/(ing|ed|es|s)$/, ''))); }); };
+async function photoWeather(c){
+  let timer;
+  try{
+    return await Promise.race([weatherOf(c).catch(() => null), new Promise(resolve => { timer = setTimeout(() => resolve(null), 1200); })]);
+  }finally{ clearTimeout(timer); }
+}
 async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = '', requestedExposure = ''} = {}){
   pstage(signal, '🎬 Își alege locul și cadrul', 22);
   const u = S.userName.trim() || 'User';
@@ -1264,7 +1270,7 @@ async function planShot(c, ch, {promised = '', exclude = null, signal, together 
   const lf = lifeNow(c), meta = {}, ask = photoAsk(ch, exclude);
   const exposure = photoExposureRequest(fix) || requestedExposure;
   const clothingRule = exposure && (exposure === 'clothed' || clearlyAdultCharacter(c)) ? 'Latest clothing instruction for a solo photo: ' + exposure + '. Apply exactly and disregard older or quoted clothing instructions.\n' : '';
-  let wx = null; try{ wx = await weatherOf(c); }catch(e){}
+  const wx = aiReady() ? await photoWeather(c) : null;
   const out = !aiReady() ? '': await stream(`You are the photo planner of a chat app where ${c.name}, a fictional adult character when explicitly established as 18+, sends ${u} photos from their phone. You read the conversation and decide exactly where the character is and how, then describe the photo. The conversation is the only truth. Answer with JSON only.`, [{role:'user', text:
 `Character: ${c.name}.${c.persona ? ' About: ' + plain(c.persona).slice(0, 500) : ''}
 Now: ${todEn()}.${wx ? ` Real weather right now in ${wx.city}, where the character lives: ${wx.t}°C, ${wx.en}, ${wx.day ? 'daylight' : 'dark outside'} (use it for anything outdoors and for the light through windows).` : ''}${lf ? ' Daily routine says right now: ' + lf.w + ' (use only if the conversation says nothing else).' : ''}
@@ -4433,13 +4439,15 @@ async function localFace(blob, c){ let m = null; try{ m = await idDistance(c, bl
 // verificarea: fața în telefon (gratuit) + scena, părul și semnele prin Haiku (doar poza nouă, ~jumătate din costul vechi)
 async function checkPhoto(c, blob, shot, signal, together, asked){
   pstage(signal, '🔍 Se uită dacă a ieșit bine', 97);
-  const full = c.photo ? await DB.get(c.photo) : null; if(!full || !aiReady()) return null;
-  // 9.36: și poza întreagă (corpul), părul și semnele din pașaport
-  const fb = c.photoFull && !together ? await DB.get(c.photoFull).catch(() => null) : null;
-  let id = null; try{ id = await identityOf(c); }catch(e){}
+  if(!c.photo || !aiReady()) return null;
+  const [full, fb] = await Promise.all([DB.get(c.photo), c.photoFull && !together ? DB.get(c.photoFull).catch(() => null) : null]);
+  if(!full) return null;
+  const [id, imgs] = await Promise.all([
+    identityOf(c).catch(() => null),
+    Promise.all([full, blob, fb].filter(Boolean).map(async image => blobToB64(await toJpeg(image, 768, .85))))
+  ]);
   const marks = id && !id.none ? marksFor(c, id, shot).slice(0, 6) : [];   // 10.0 (F7): doar semnele din zonele care intră în cadru
   const must = together ? [] : mustOf(c);   // 10.0 (F6)
-  const imgs = [await blobToB64(await toJpeg(full, 768, .85)), await blobToB64(await toJpeg(blob, 768, .85))]; if(fb) imgs.push(await blobToB64(await toJpeg(fb, 768, .85)));
   const out = await stream('You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:
 `${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${shot}". Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
 Score strictly from 0 to 10:
@@ -4598,16 +4606,20 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
 }
 async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const failure = message => Object.assign(new Error(message), {photoKind:'local'});
-  const face = (await localFace(blob, c)).d;
+  const bodyVisible = !!c.photoFull && framingOf(shot).k !== 'close';
+  const [faceResult, body] = await Promise.all([
+    localFace(blob,c),
+    bodyVisible ? Promise.all([refBodySigs(c), measuredBody(blob)]).then(([refs,sig]) => bodyMatch(c,sig,refs)).catch(() => null) : null
+  ]);
+  const face = faceResult.d;
   if(face != null && face > idMax(c)) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
   let bodyUnknown = false;
-  if(c.photoFull && framingOf(shot).k !== 'close'){
-    const body = await bodyMatch(c, await measuredBody(blob).catch(() => null)).catch(() => null);
+  if(bodyVisible){
     if(body != null && body > bodyGate(c)) throw failure('Poza a rămas nepublicată: proporțiile măsurate diferă de reperul de corp.');
     bodyUnknown = body == null;
   }
   const dressedShot = identityOutfit(c,shot,opt), fixed = dressedShot !== shot;
-  const compareBust = opt.compareBust && c.photoFull && framingOf(shot).k !== 'close';
+  const compareBust = opt.compareBust && bodyVisible;
   if(face == null || bodyUnknown || fixed || compareBust){
     const checked = await checkPhoto(c,blob,dressedShot,signal,false,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : []).catch(error => {
       if(error.name === 'AbortError') throw error;
@@ -11586,13 +11598,15 @@ async function askPhoto0(spont, target, mode, opt = {}){
     const verifyIdentity = !!(c.strictIdentity && c.photo && !duoBoth && !peopleIn && !edited);
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && (!peopleIn.self || peopleIn.duo))})
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont, verifyIdentity:verifyIdentity && !together && !sceneOpt.partner, sceneWardrobe:true});
+    const tVerify = performance.now();
     const bodyNotice = verifyIdentity
       ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true,sceneWardrobe:true,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
+    if(verifyIdentity) tm.s.verificare = performance.now() - tVerify;
     if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
     if(gdiag){ gdiag.tm = {...tm.s, total:performance.now() - tm.t0}; gdiag.rwc = rwCalls.filter(x => x.i > rwC0).map(({i, ...x}) => x); if(gdiag.mdl === 'Klein 9B') gdiag.mdl = kleinLbl(); }   // 13.3: tot, inclusiv pașii de după (garanția, măsurarea, finisarea)
     const k = await saveImg(blob);
-    clearInterval(pT); if(live && live.stage){ live.stage.t = '✅ Gata'; live.stage.pv = 100; const st = $('#msgs .picload .plst'); if(st) st.textContent = '✅ Gata'; pDraw(100); await new Promise(r => setTimeout(r, 420)); }
+    clearInterval(pT); if(live && live.stage){ live.stage.t = '✅ Gata'; live.stage.pv = 100; const st = $('#msgs .picload .plst'); if(st) st.textContent = '✅ Gata'; pDraw(100); }
     if(target){
       if(!m.imgAlts && m.img) m.imgAlts = [m.img];
       // variantele rămân pe mesaj: le poți compara cu ‹ › și păstra pe cea mai bună (cel mult 5)
