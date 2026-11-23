@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.4';
+const APP_VER = '14.14.5';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1263,7 +1263,7 @@ async function planShot(c, ch, {promised = '', exclude = null, signal, together 
   const exposure = photoExposureRequest(fix) || requestedExposure;
   const clothingRule = exposure && (exposure === 'clothed' || clearlyAdultCharacter(c)) ? 'Latest clothing instruction for a solo photo: ' + exposure + '. Apply exactly and disregard older or quoted clothing instructions.\n' : '';
   let wx = null; try{ wx = await weatherOf(c); }catch(e){}
-  const out = await stream(`You are the photo planner of a chat app where ${c.name}, a fictional adult character when explicitly established as 18+, sends ${u} photos from their phone. You read the conversation and decide exactly where the character is and how, then describe the photo. The conversation is the only truth. Answer with JSON only.`, [{role:'user', text:
+  const out = !aiReady() ? '': await stream(`You are the photo planner of a chat app where ${c.name}, a fictional adult character when explicitly established as 18+, sends ${u} photos from their phone. You read the conversation and decide exactly where the character is and how, then describe the photo. The conversation is the only truth. Answer with JSON only.`, [{role:'user', text:
 `Character: ${c.name}.${c.persona ? ' About: ' + plain(c.persona).slice(0, 500) : ''}
 Now: ${todEn()}.${wx ? ` Real weather right now in ${wx.city}, where the character lives: ${wx.t}°C, ${wx.en}, ${wx.day ? 'daylight' : 'dark outside'} (use it for anything outdoors and for the light through windows).` : ''}${lf ? ' Daily routine says right now: ' + lf.w + ' (use only if the conversation says nothing else).' : ''}
 ${ch.scene ? 'Scene set by the user (has priority, translate to English): ' + ch.scene + '\n' : ''}${ch.where ? 'Last known state of the character (from earlier photos): ' + JSON.stringify(ch.where) + '\n' : ''}${frameLine(c, ch, exclude)}${ch.plot ? 'Ongoing activity noted by the character (Romanian, "activity › current step"): ' + ch.plot.t + '\n' : ''}${home ? `Rooms of ${c.name}'s home (reuse these details EXACTLY when the photo is in one of them, so the home always looks the same):\n${home}\n` : ''}
@@ -1409,12 +1409,13 @@ async function fdPersist(blob){
   const m = fdMem.get(fp); if(m){ fdMem.delete(fp); fdMem.set(fp, m); return m; }
   const p = (async () => {
     const fv = await fdMode() === 'a' ? 'a1' : 1;   // 14.0: amprentele ArcFace se țin separat de cele vechi
-    try{ const v = await DB.get(thKey('f', fp)); if(v && v.v === fv && Array.isArray(v.r)){ fdTouch(fp); return v.r; } }catch(e){}
+    try{ const v = await DB.get(thKey('f', fp)); if(v && v.v === fv && Array.isArray(v.r) && v.r.length){ fdTouch(fp); return v.r; } }catch(e){}
     const r = await faceDescs0(blob), fv2 = r.length && r[0].j === 'a' ? 'a1' : 1;
-    DB.set(thKey('f', fp), {v:fv2, r}).catch(() => {}); fdTouch(fp);
+    if(r.length){ DB.set(thKey('f', fp), {v:fv2, r}).catch(() => {}); fdTouch(fp); }
     return r;
   })();
-  fdMem.set(fp, p); p.catch(() => fdMem.delete(fp));
+  fdMem.set(fp, p);
+  p.then(r => { if(!r.length && fdMem.get(fp) === p) fdMem.delete(fp); }, () => { if(fdMem.get(fp) === p) fdMem.delete(fp); });
   while(fdMem.size > 200) fdMem.delete(fdMem.keys().next().value);
   return p;
 }
@@ -1849,7 +1850,10 @@ function fallbackShot(c, ch, exclude){
   const w = ch.where || {}, last = [...ch.msgs].reverse().find(x => x !== exclude && x.role === 'ai' && x.text && !x.err);
   const acts = last ? (last.text.match(/\*[^*]+\*/g) || []).map(a => a.replace(/\*/g, '').trim()).filter(a => !/trimite o poz/i.test(a)).join('; ') : '';
   const parts = ['selfie', w.room && w.room !== 'other' ? 'in the ' + w.room : w.place, w.position, w.outfit, acts, w.light || todEn()].filter(Boolean);
-  return parts.length > 2 ? parts.join(', ') : '';
+  const user = [...ch.msgs].reverse().find(x => x !== exclude && x.role === 'user' && x.text && !x.err && !x.pending);
+  const request = user && PHOTO_ASK.test(user.text) ? user.text.trim().slice(0, 400) : '';
+  if(request) return ['Natural photo of the reference character', 'Current photo direction: ' + request, ...parts.slice(1)].join(', ');
+  return [...parts, 'natural lighting, keeping the same person as in the reference'].join(', ');
 }
 // promptul final + generarea; poza de profil e reperul pentru orice poză (identitate), scena vine din descriere
 function identityOutfit(c, shot, opt = {}){
@@ -2485,10 +2489,10 @@ function bodyDist2(a, b){
   return .6 * t / n + .4 * tp;   // media + cele mai mari 2 diferențe: o talie sau niște picioare diferite nu se mai pierd în medie
 }
 async function refBodySigs(c){
-  const full = await refBodySig(c); if(!full) return [];
-  const out = [{pose:'full', sig:full}];
+  const full = await refBodySig(c);
+  const out = full ? [{pose:'full', sig:full}] : [];
   for(const x of bsheetOf(c).filter(x => !x.weak && !['waist', 'waist34', 'bend'].includes(x.pose))){   // 11.0: talia în sus / aplecată nu sunt siluete întregi
-    if(x.sig === undefined || (x.sig === null && x.sigV !== APP_VER)){ const b = await DB.get(x.k).catch(() => null); x.sig = b ? await bodySig(b).catch(() => null) : null; x.sigV = APP_VER; saveChars(); }   // 10.3
+    if(x.sigMeasure !== 2 || (x.sig === null && x.sigV !== APP_VER)){ const b = await DB.get(x.k).catch(() => null); x.sig = b ? await bodySig(b).catch(() => null) : null; x.sigV = APP_VER; x.sigMeasure = 2; saveChars(); }   // 10.3
     if(x.sig) out.push({pose:x.pose, sig:x.sig});
   }
   return out;
@@ -2710,10 +2714,22 @@ async function exactSize(blob){
 }
 // (3) se vede corpul în poză? (umeri + șolduri + genunchi; „întreg” = și gleznele)
 async function bodyInPhoto(blob){
-  const u = URL.createObjectURL(blob);
-  try{ const im = await loadImgEl(u), kp = await crPose(im), H = im.naturalHeight, ok = i => kp && kp[i] && kp[i][2] >= .3 && kp[i][1] > 0 && kp[i][1] < H * .99;
-    const body = [5, 6, 11, 12].every(ok) && [13, 14].some(ok), full = body && [15, 16].some(ok); return {body, full}; }
-  catch(e){ return {body:false, full:false}; } finally { URL.revokeObjectURL(u); }
+  const read = async image => {
+    const u = URL.createObjectURL(image);
+    try{
+      const im = await loadImgEl(u), kp = await crPose(im), W = im.naturalWidth, H = im.naturalHeight;
+      const ok = i => posePointVisible(kp, i, W, H);
+      const body = [5, 6, 11, 12].every(ok) && [13, 14].some(ok);
+      return {body, full:body && [15, 16].some(ok)};
+    }catch(e){ return {body:false, full:false}; }
+    finally{ URL.revokeObjectURL(u); }
+  };
+  const original = await read(blob);
+  if(original.full) return original;
+  const cropped = await personCrop(blob).catch(() => null);
+  if(!cropped || cropped === blob) return original;
+  const retry = await read(cropped);
+  return retry.full || (!original.body && retry.body) ? retry : original;
 }
 async function confirmBodyReference(blob){
   if((await bodyInPhoto(blob)).body) return true;
@@ -2871,7 +2887,7 @@ function kitState(c){
   add('pasaport', '🪪 Trăsăturile citite (față, păr, corp, semne)', !!(fb && c.faceBox.phys !== undefined), fb ? 'citite' : 'se citesc la prima poză');
   add('amprenta', '🧬 Amprenta feței', !!(c.faceEmb && c.faceEmb.d && c.faceEmb.d.length), c.faceEmb && c.faceEmb.d && c.faceEmb.d.length ? c.faceEmb.d.length + ' fețe de referință' + (c.refSet && c.refSet.e ? ' + ' + c.refSet.e.filter(x => (x.kind === 'unghi' || x.kind === 'aproape') && x.d && !x.out).length + ' pe unghiuri' : '') : 'se măsoară în telefon');
   if(photo){
-    if(c.photoFull && !looksYoung(c)) add('corptext', '📝 Corpul descris din poza întreagă', bodyTextOk(c), bodyTextOk(c) ? (c.bodyFull.source === 'local' ? 'proporții măsurate local' : 'descris din poza întreagă') : 'descriere indisponibilă');
+    if(c.photoFull && !looksYoung(c)) add('corptext', '📝 Corpul descris din poza întreagă', bodyTextOk(c), bodyTextOk(c) ? (c.bodyFull.source === 'local' ? 'proporții măsurate local' : 'descris din poza întreagă') : 'opțională pentru poze: reperul vizual este folosit direct', false, !bodyTextOk(c));
     add('intreaga', '🧍 Poza întreagă (modelul de corp)', !!c.photoFull, c.photoFull ? (c.fullOwn ? 'poza ta (exactă)' : 'generată din portret') : 'lipsește: corpul ar fi aproximativ');
     const sv = sheetOf(c).length, bv = bsheetOf(c).length, kf = c.photoFull || '';
     const sTried = !sv && c.sheetTry && c.sheetTry.k === c.photo, bTried = !bv && c.bsheetTry && c.bsheetTry.k === kf;
@@ -3952,7 +3968,7 @@ async function arcEmb(im, lm){
 const arcSim = d => d == null ? null : Math.round((1 - d) * 100) / 100;
 async function faceDescs(blob){
   if(!(blob instanceof Blob)) return faceDescs0(blob);
-  let p = fdCache.get(blob); if(!p){ p = fdPersist(blob); fdCache.set(blob, p); p.catch(() => fdCache.delete(blob)); }   // 10.6 (C): și după conținut, peste reporniri
+  let p = fdCache.get(blob); if(!p){ p = fdPersist(blob); fdCache.set(blob, p); p.then(r => { if(!r.length) fdCache.delete(blob); }, () => fdCache.delete(blob)); }   // 10.6 (C): și după conținut, peste reporniri
   return (await p).map(x => ({...x}));
 }
 function faceDescs0(blob){ return faceApi().then(() => tfRun('fața', () => faceDescs0x(blob), TF_TO.face)); }   // modelele se încarcă în afara limitei de timp   // 10.8
@@ -4237,12 +4253,16 @@ async function bodySig(blob0, nn = false){
   const first = await measureBodyContour(blob,nn);
   return first || (blob !== blob0 ? await measureBodyContour(blob0,nn) : null);
 }
+function posePointVisible(points, i, width, height){
+  const p = points?.[i];
+  return !!p && p[2] >= .3 && p[0] >= 0 && p[0] < width && p[1] >= 0 && p[1] < height;
+}
 async function measureBodyContour(blob, nn){
   const u = URL.createObjectURL(blob);
   try{
     const im = await loadImgEl(u), W = im.naturalWidth, H = im.naturalHeight;
     const kp = await crPose(im); if(!kp){ bodySigWhy = 'nu am găsit persoana în poză'; return null; }
-    const ok = i => kp[i] && kp[i][2] >= .3;
+    const ok = i => posePointVisible(kp, i, W, H);
     if(![5, 6, 11, 12].every(ok)){ bodySigWhy = 'umerii sau șoldurile nu se văd clar'; return null; }
     if(!nn && Math.abs(Math.atan2((kp[11][0] + kp[12][0] - kp[5][0] - kp[6][0]) / 2, (kp[11][1] + kp[12][1] - kp[5][1] - kp[6][1]) / 2)) > .3){ const b2 = await bodyNormBlob(im, kp); if(b2) return await bodySig(b2, true); }   // 13.6 (4): trunchiul înclinat peste ~17° → îndreptat   // fără umeri și șolduri vizibile nu se poate măsura
     const S2 = Math.hypot(kp[5][0] - kp[6][0], kp[5][1] - kp[6][1]); if(S2 < W * .04){ if(!nn){ const b2 = await bodyNormBlob(im, kp); if(b2) return await bodySig(b2, true); } bodySigWhy = 'persoana e prea mică în poză'; return null; }
@@ -4252,11 +4272,18 @@ async function measureBodyContour(blob, nn){
     const width = t => { const y = shY + len * t, cx = cxAt(t), step = Math.max(1, W / 256); let l = cx, r = cx;
       if(at(cx, y) < .5) return 0;
       while(l > 0 && at(l - step, y) >= .5) l -= step; while(r < W - 1 && at(r + step, y) >= .5) r += step; return (r - l) / S2; };
-    const sig = [width(.3), width(.62), width(1.02)];
+    const stableWidth = t => {
+      const rows = [t - .025, t, t + .025].map(y => {
+        const pixelY = shY + len * y;
+        return pixelY >= 0 && pixelY < H ? width(y) : 0;
+      }).sort((a,b) => a - b);
+      return rows[1];
+    };
+    const sig = [.3, .62, 1.02].map(stableWidth);
     const hd = ok(3) && ok(4) ? Math.round(Math.hypot(kp[3][0] - kp[4][0], kp[3][1] - kp[4][1]) / S2 * 1000) / 1000 : null;   // 9.83 (4): lățimea capului (urechi) față de umeri
     if(!sig.every(x => x > .3 && x < 4)){ bodySigWhy = 'conturul corpului nu s-a putut citi (' + sig.map(x => x.toFixed(2)).join(' / ') + ')'; return null; }
     // 9.85 (3): conturul în 7 puncte, raportat la lungimea trunchiului (nu la umeri, care se îngustează când se întoarce)
-    const r3 = x => Math.round(x * 1000) / 1000, w = [.15, .3, .45, .62, .8, 1.02, 1.15].map(t => r3(width(t) * S2 / len));
+    const r3 = x => Math.round(x * 1000) / 1000, w = [.15, .3, .45, .62, .8, 1.02, 1.15].map(t => r3(stableWidth(t) * S2 / len));
     const knY = ok(13) && ok(14) ? (kp[13][1] + kp[14][1]) / 2 : null, anY = ok(15) && ok(16) ? (kp[15][1] + kp[16][1]) / 2 : null;
     const sit = knY != null && knY - hpY < len * .55;   // genunchii aproape de nivelul șoldurilor: stă jos
     const leg = !sit && anY != null && anY > hpY ? r3((anY - hpY) / len) : null;
@@ -4267,11 +4294,11 @@ async function measureBodyContour(blob, nn){
 async function refBodySig(c, force = false){
   const k = c.photoFull || (c.photo ? 'p:' + c.photo : '');   // 9.83 (4): fără poză întreagă, poza de profil, dacă se văd umerii și șoldurile
   if(!k) return null;
-  if(!force && c.bodySig && c.bodySig.k === k && c.bodySig.v3 && (c.bodySig.v || (c.bodySig.ver === APP_VER && Date.now() - (c.bodySig.at || 0) < 6 * 36e5))) return c.bodySig.v;
+  if(!force && c.bodySig && c.bodySig.k === k && c.bodySig.measure === 2 && (c.bodySig.v || (c.bodySig.ver === APP_VER && Date.now() - (c.bodySig.at || 0) < 6 * 36e5))) return c.bodySig.v;
   const b = await DB.get(c.photoFull || c.photo).catch(() => null); if(!b) return null;
   bodySigWhy = ''; const v = await bodySig(b);
   if((c.photoFull || (c.photo ? 'p:' + c.photo : '')) !== k) return null;
-  c.bodySig = {k, v, v2:true, v3:true, ver:APP_VER, at:Date.now(), why:v ? undefined : bodySigWhy || undefined}; saveChars(); return v;
+  c.bodySig = {k, v, v2:true, v3:true, measure:2, ver:APP_VER, at:Date.now(), why:v ? undefined : bodySigWhy || undefined}; saveChars(); return v;
 }
 // distanța siluetelor: diferența relativă medie (0 = identic; ~0,1 = puțin diferit; 0,25+ = alt corp)
 // 9.83 (4): + lungimea trunchiului și lățimea capului față de umeri (cântărite mai puțin: depind de poză și de unghi)
@@ -4551,7 +4578,7 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
 async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const failure = message => Object.assign(new Error(message), {photoKind:'local'});
   const face = (await localFace(blob, c)).d;
-  if(face == null || face > idMax(c)) throw failure('Poza a rămas nepublicată: fața nu a trecut verificarea de fidelitate.');
+  if(face != null && face > idMax(c)) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință.');
   let bodyUnknown = false;
   if(c.photoFull && framingOf(shot).k !== 'close'){
     const body = await bodyMatch(c, await bodySig(blob).catch(() => null)).catch(() => null);
@@ -4559,11 +4586,12 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     bodyUnknown = body == null;
   }
   const dressedShot = identityOutfit(c,shot,opt), fixed = dressedShot !== shot;
-  if(bodyUnknown || fixed){
+  if(face == null || bodyUnknown || fixed){
     const checked = await checkPhoto(c,blob,dressedShot,signal,false,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : []).catch(error => {
       if(error.name === 'AbortError') throw error;
       return null;
     });
+    if(face == null && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
     if(bodyUnknown && checked?.body == null && !opt.allowBodyUnknown) throw failure('Poza a rămas nepublicată: corpul nu se poate verifica. Cere un cadru cu silueta clar vizibilă.');
     if(checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
     if(fixed && (checked?.asked == null || checked.asked < 8)) throw failure('Poza a rămas nepublicată: ținuta fixă nu a trecut verificarea.');
