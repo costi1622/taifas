@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.15';
+const APP_VER = '14.14.16';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -4670,19 +4670,22 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   ]);
   const face = faceResult.d;
   if(face != null && face > idMax(c)) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
-  let bodyUnknown = false;
-  if(bodyVisible){
-    if(body != null && body > bodyGate(c)) throw failure('Poza a rămas nepublicată: proporțiile măsurate diferă de reperul de corp.');
-    bodyUnknown = body == null;
-  }
+  const bodyUnknown = bodyVisible && body == null;
+  const limit = bodyVisible && body != null ? bodyGate(c) : null;
+  const bodyMismatch = bodyVisible && body != null && body > limit;
+  const borderlineBody = bodyMismatch && opt.sceneWardrobe && body - limit <= .04;
+  if(bodyMismatch && !borderlineBody) throw failure('Poza a rămas nepublicată: diferență clară la măsurarea proporțiilor față de reperul de corp.');
   const dressedShot = identityOutfit(c,shot,opt), fixed = dressedShot !== shot;
   const compareBust = opt.compareBust && bodyVisible;
-  if(face == null || bodyUnknown || fixed || compareBust){
+  if(face == null || bodyUnknown || borderlineBody || fixed || compareBust){
     const checked = await checkPhoto(c,blob,dressedShot,signal,!!opt.together,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : [],opt).catch(error => {
       if(error.name === 'AbortError') throw error;
       return null;
     });
     if(face == null && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
+    if(borderlineBody && (!(checked?.body >= 9) || (checked.bust != null && checked.bust < 8))) throw failure(checked?.body == null
+      ? 'Poza a rămas nepublicată: măsurătoarea corpului a depășit puțin limita, iar comparația vizuală nu a putut confirma proporțiile. Încearcă un cadru mai apropiat ca poziție de reper.'
+      : 'Poza a rămas nepublicată: comparația vizuală nu confirmă proporțiile reperului de corp.');
     if(bodyUnknown && checked?.body == null && !opt.allowBodyUnknown) throw failure('Poza a rămas nepublicată: corpul nu se poate verifica. Cere un cadru cu silueta clar vizibilă.');
     if(bodyVisible && (face == null || bodyUnknown || fixed) && checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
     if(fixed && (checked?.asked == null || checked.asked < 8)) throw failure('Poza a rămas nepublicată: ținuta fixă nu a trecut verificarea.');
