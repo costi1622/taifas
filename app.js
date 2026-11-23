@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.13';
+const APP_VER = '14.14.14';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2546,9 +2546,11 @@ async function photoBodySigs(c, opt = {}){
   const sig = blob ? await measuredBody(blob) : null;
   return sig && c.photo === key ? [{pose:'full',sig}] : [];
 }
-async function bodyMatch(c, sig, refs){
+async function bodyMatch(c, sig, refs, comparableOnly = false){
   refs = refs || await refBodySigs(c); if(!sig || !refs.length) return null;
-  let best = null; for(const r of refs){ const d = bodyDist2(sig, r.sig); if(d != null && (best == null || d < best)) best = d; }
+  let best = null; for(const r of refs){
+    if(comparableOnly && (!sig.w || !r.sig?.w || !!sig.sit !== !!r.sig.sit || Math.abs((sig.yaw || 0) - (r.sig.yaw || 0)) >= .25)) continue;
+    const d = bodyDist2(sig, r.sig); if(d != null && (best == null || d < best)) best = d; }
   return best;
 }
 const bodyGate = c => bodyMax(c) + .05;   // (6) garanția: peste asta, poza se reface o dată
@@ -3472,10 +3474,10 @@ function lookLineRo(L, c){
         verificare doar când zona e în cadru. Le poți scoate pe cele greșite. */
 const hashS = s => { let h = 5381; s = String(s); for(let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
 const AUD_FIELDS = {aspect:{p:'aspect', l:'Aspect'}, phys:{p:'physUser', l:'Cum arată, pentru poze'}, creator:{p:'appPrompt', l:'Descrierea din creator'}};
-const auditKey = c => hashS([c.photo || '', c.photoFull || '', ...Object.values(AUD_FIELDS).map(f => c[f.p] || '')].join('\u0001'));
+const auditKey = c => hashS(['body-audit-2', c.photo || '', c.photoFull || '', chatBodyKey(c), ...Object.values(AUD_FIELDS).map(f => c[f.p] || '')].join('\u0001'));
 const auditOf = c => c && c.audit ? c.audit : null;
 const auditFresh = c => !!(c && c.audit && c.audit.k === auditKey(c));
-const auditOpen = c => auditOf(c) ? (c.audit.v || []).filter(x => !x.st) : [];
+const auditOpen = c => auditFresh(c) ? (c.audit.v || []).filter(x => !x.st) : [];
 const MUST_MAX = 8, MUST_ZONES = ['eyes', 'face', 'hair', 'skin', 'body', 'marks', 'glasses', 'hands'];
 // cele automate (citite din poze) țin doar cât pozele sunt aceleași; cele puse de tine rămân
 const mustOf = c => c && c.must && Array.isArray(c.must.v) ? c.must.v.filter(x => x && x.en && !x.off && (x.src !== 'auto' || c.must.k === marksKey(c))).slice(0, MUST_MAX) : [];
@@ -3494,15 +3496,20 @@ function marksFor(c, id, shot){
   const fr = framingOf(shot).k, t = String(shot).toLowerCase(), back = /\b(from behind|from the back|back view|rear view|seen from behind|(her|his) back to the camera)\b/.test(t);
   return live.filter(m => m.zone === 'back' ? back : (MARK_IN[fr] || MARK_IN.full).includes(m.zone)).map(m => m.en).slice(0, 8);
 }
+function bodyAuditEvidence(conflict, description, bodyImage){
+  return conflict.visible === true && Number(conflict.img) === bodyImage && !!conflict.quote && description.includes(conflict.quote);
+}
 async function auditRun(c, signal){
   if(!c || !c.photo) throw new Error('Personajul nu are poză de profil.');
   if(!aiReady()) throw new Error('Pune cheia Anthropic în Setări.');
-  const pb = await DB.get(c.photo), fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null; if(!pb) throw new Error('Nu găsesc poza de profil.');
+  const k0 = auditKey(c), portrait = c.photo, whole = c.photoFull;
+  const pb = await DB.get(portrait), fb = whole ? await DB.get(whole).catch(() => null) : null; if(!pb) throw new Error('Nu găsesc poza de profil.');
   const images = [await blobToB64(await toJpeg(pb, 1280, .88))]; if(fb) images.push(await blobToB64(await toJpeg(fb, 1280, .88)));
   const texts = Object.entries(AUD_FIELDS).map(([k, f]) => `[${k}] ${String(c[f.p] || '').trim().slice(0, 1400) || '(empty)'}`).join('\n');
-  const k0 = auditKey(c), meta = {};
+  const meta = {};
+  const bodyImage = fb && chatBodyKey(c) !== portrait ? 2 : 1;
   const out = await stream('You audit a character sheet against its reference photos for an image generator. Be precise and literal. Answer with JSON only.', [{role:'user', images, text:
-`Image 1 is the character's portrait${fb ? '; image 2 is the same character\'s full-body photo' : ''}. Below are the written descriptions (Romanian). Compare ONLY permanent physical traits: apparent age, face shape, eye color and shape, eyebrows, nose, lips, skin tone, freckles, moles, scars, tattoos, piercings, glasses, hair color, hair length, hair texture, fringe, height impression, build, bust, waist, hips, legs. IGNORE clothing, jewelry, makeup, expression, pose, background, light and personality.
+`Image 1 is the character's portrait${fb ? '; image 2 is the same character\'s full-body photo' : ''}. Below are the written descriptions (Romanian). Compare ONLY permanent physical traits: apparent age, face shape, eye color and shape, eyebrows, nose, lips, skin tone, freckles, moles, scars, tattoos, piercings, glasses, hair color, hair length, hair texture, fringe, height impression, build, bust, waist, hips, legs. IGNORE clothing, jewelry, makeup, expression, pose, background, light and personality. For body traits, use image ${bodyImage} as the authoritative reference. Only report a conflict if that specific proportion is plainly visible there and genuinely contradicts a literal statement. Omit apparent differences caused by crop, pose, perspective or clothing. Never infer precise measurements. For body conflicts include "visible":true and "img":${bodyImage}.
 
 TEXTS:
 ${texts}
@@ -3516,7 +3523,7 @@ JSON: {"conflicts":[],"traits":[],"marks":[]}`}], {max:1500, signal, cid:c.id, t
   const j = parseJSON(out); if(!j || typeof j !== 'object') throw new Error('Răspuns neașteptat de la AI. Încearcă din nou.');
   const S1 = (x, n) => faraLiniute(String(x || '').trim()).slice(0, n), E1 = (x, n) => String(x || '').trim().replace(/\s+/g, ' ').slice(0, n);
   const conflicts = (Array.isArray(j.conflicts) ? j.conflicts : []).map(x => ({id:uid(), field:AUD_FIELDS[x && x.field] ? x.field : '', trait:S1(x && x.trait, 40), text:S1(x && x.text, 120), photo:S1(x && x.photo, 120),
-    quote:String(x && x.quote || '').trim().slice(0, 200), fix:String(x && x.fix || '').trim().slice(0, 200), en:E1(x && x.en, 80), zone:MUST_ZONES.includes(x && x.zone) ? x.zone : 'face', st:''})).filter(x => x.field && x.trait && x.photo).slice(0, 10);
+    quote:String(x && x.quote || '').trim().slice(0, 200), fix:String(x && x.fix || '').trim().slice(0, 200), en:E1(x && x.en, 80), zone:MUST_ZONES.includes(x && x.zone) ? x.zone : 'face', visible:x?.visible, img:x?.img, st:''})).filter(x => x.field && x.trait && x.photo && (x.zone !== 'body' || bodyAuditEvidence(x,String(c[AUD_FIELDS[x.field].p] || ''),bodyImage))).slice(0, 10);
   const traits = (Array.isArray(j.traits) ? j.traits : []).map(x => ({id:uid(), ro:S1(x && x.ro, 60), en:E1(x && x.en, 80), zone:MUST_ZONES.includes(x && x.zone) ? x.zone : 'face', src:'auto'})).filter(x => x.ro && x.en).slice(0, MUST_MAX);
   const marks = (Array.isArray(j.marks) ? j.marks : []).map(x => ({id:uid(), ro:S1(x && x.ro, 110), en:E1(x && x.en, 140), zone:MARK_ZONES.includes(x && x.zone) ? x.zone : 'face', img:+(x && x.img) === 2 && fb ? 2 : 1,
     x:Math.max(0, Math.min(1, +(x && x.x) || 0)), y:Math.max(0, Math.min(1, +(x && x.y) || 0))})).filter(x => x.ro && x.en.length > 3).slice(0, 10);
@@ -4499,7 +4506,7 @@ Score strictly from 0 to 10:
 - "face": is this unmistakably the same person, not merely a similar-looking person? 10 = strong match, 5 = noticeable identity drift, 0 = different person.
 - "scene": does the generated photo match the requested place, activity, clothing and pose?
 - "framing": does the camera framing match the requested selfie / mirror / full-body / close-up view?
-- "body": is the body in image 2 the same body as in ${fb ? 'image 3' : 'image 1'} (build, weight, bust size, waist, hips, proportions)? Ignore clothing and pose. Use null if too little of the body is visible in image 2${fb ? '' : ' or in image 1'}.
+- "body": is the body in image 2 the same body as in ${fb ? 'image 3' : 'image 1'} (build, weight, bust size, waist, hips, proportions)? Ignore clothing and pose. Use null if too little of the body is visible in either image, or if pose, perspective, crop or clothing makes the proportions unreliable to compare. Do not count changes due to those factors as body differences.
 ${fb ? '- "bust": compare visible bust volume and projection relative to shoulders and waist in images 2 and 3. Score 0–10 for fidelity, with 5 or less only for a clear size difference. Use null if pose, crop or loose clothing prevents comparison.\n' : ''}- "hair": same hair color, length and texture as image 1 (a different hairstyle is fine only if the scene asks for it)? null if the hair is not visible.
 - "hands": are the visible hands natural and anatomically correct (five fingers each, no extra, missing or fused fingers)? null if no hand is visible.
 - "skin": same skin tone and skin texture as image 1, ignoring the light of the scene? null if too little skin is visible.${marks.length ? `
@@ -4653,7 +4660,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const bodyVisible = !opt.together && !!(opt.usePortraitBody ? c.photo : c.photoFull) && framingOf(shot).k !== 'close';
   const [faceResult, body] = await Promise.all([
     localFace(blob,c),
-    bodyVisible ? Promise.all([photoBodySigs(c,opt), measuredBody(blob)]).then(([refs,sig]) => bodyMatch(c,sig,refs)).catch(() => null) : null
+    bodyVisible ? Promise.all([photoBodySigs(c,opt), measuredBody(blob)]).then(([refs,sig]) => bodyMatch(c,sig,refs,true)).catch(() => null) : null
   ]);
   const face = faceResult.d;
   if(face != null && face > idMax(c)) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
