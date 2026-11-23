@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.10';
+const APP_VER = '14.14.11';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1298,8 +1298,9 @@ JSON, keys in exactly this order, nothing else:
  "where":{"place":"home / office / café / street …","room":"bedroom | living room | kitchen | bathroom | hallway | balcony | office | other","position":"exact body position and what it rests on","outfit":"what is worn now","activity":"what is being done","light":"light now"${PLAN_WHERE_X}},${planKeysX(ch)}
  "home":{"<room>":"English description, max 45 words; only rooms that are new or changed"}}`}], {max:1500, signal, cid:c.id, aux:true, meta, tag:'pozeai'});
   // 7.1: refuzul filtrului lui Claude se spune ca atare (nu se ocolește); un răspuns tăiat sau fără JSON nu mai oprește poza
-  if(meta.stop === 'refusal' && !promised) throw new Error('Claude a refuzat să descrie poza asta (filtrul lui de siguranță). Încearcă altă scenă.');
-  let j = {}; try{ j = parseJSON(out); }catch(e){}
+  if(meta.stop === 'refusal') throw new Error('Claude a refuzat să descrie poza asta (filtrul lui de siguranță). Încearcă altă scenă.');
+  let j = {}; try{ const parsed = parseJSON(out); if(parsed && typeof parsed === 'object' && !Array.isArray(parsed)) j = parsed; }catch(e){}
+  if(typeof j.shot !== 'string') j.shot = '';
   if(!j.shot){ const mm = String(out).match(/"shot"\s*:\s*"((?:[^"\\]|\\.)*)/); if(mm) j.shot = mm[1].replace(/\\"/g, '"'); }
   if(!j.camera){ const mm = String(out).match(/"camera"\s*:\s*"([^"]*)"/); if(mm) j.camera = mm[1]; }
   let shot = String(j.shot || promised || '').trim().replace(/^["„]|["”]$/g, '').replace(/[.\s]+$/, '');
@@ -3048,14 +3049,14 @@ async function finishPerson(c, r, shot, signal, opt = {}){
 
       pstage(signal, '✨ Garanția: potrivește fața', 96);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
-        if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; r.bd = undefined; r.retouched = true; r.garRet = true; } } }catch(e){ if(stopPhotoRetry(e)) throw e; }
+        if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; r.bd = undefined; delete r.check; r.retouched = true; r.garRet = true; } } }catch(e){ if(stopPhotoRetry(e)) throw e; }
     }
     // 10.9: a doua trecere, o singură dată: fața tot peste prag după un retuș (al motorului sau al garanției)
     const late = () => tm && tm.t0 && performance.now() - tm.t0 > 90e3;   // 14.0: trecerile în plus nu țin poza mai mult de 90 s
     if(r.fd != null && r.fd > fRet2(opt) && (r.retouched || (r.retTried && !opt.idLeg)) && !r.ret2 && !r.bounded && fixBudget() && !late()){   // 13.7 (3): și când primul retuș n-a apropiat fața
       r.ret2 = true; pstage(signal, '✨ Garanția: încă o trecere pe față', 97);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
-        if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; } } }catch(e){ if(e.name === 'AbortError') throw e; }
+        if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; r.bd = undefined; delete r.check; } } }catch(e){ if(e.name === 'AbortError') throw e; }
     }
     // 14.0 (2): a treia trecere, doar cu ArcFace, cât fața e sub țintă
     if(r.fd != null && r.fd > fRet2(opt) && r.ret2 && !r.ret3 && !r.bounded && !opt.idLeg && fdModeNow() === 'a' && fixBudget() && !late()){
@@ -3075,7 +3076,7 @@ async function finishPerson(c, r, shot, signal, opt = {}){
     if(!r.bounded && r.lk && r.lk.age != null && Math.abs(r.lk.age) >= 8 && !r.ageTried && rwReady() && fixBudget()){ r.ageTried = true;
       try{ const y = await facePass(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus', null, 'face', 'The face must have exactly the same apparent age as the person in image 2: the same skin smoothness, the same fine lines and no more, the same firmness of the cheeks, jaw and neck.');
         if(y){ const lk2 = await lookOf(c, y, shot, opt), fd2 = (await localFace(y, c)).d;
-          if(lk2 && lk2.age != null && Math.abs(lk2.age) <= Math.abs(r.lk.age) - 3 && (fd2 == null || r.fd == null || fd2 <= r.fd + .02)){ r.blob = y; r.lk = lk2; if(fd2 != null) r.fd = fd2; r.ageFix = true; addUsage(c.id, imgPrice(), 'img', null, 'retus'); } } }
+          if(lk2 && lk2.age != null && Math.abs(lk2.age) <= Math.abs(r.lk.age) - 3 && (fd2 == null || r.fd == null || fd2 <= r.fd + .02)){ r.blob = y; r.lk = lk2; r.bd = undefined; delete r.check; r.fd = fd2; r.ageFix = true; addUsage(c.id, imgPrice(), 'img', null, 'retus'); } } }
       catch(e){ if(e.name === 'AbortError') throw e; } }
     const lb = lookBadOf(r.lk); r.lookWarn = lb ? lb.map(k => LOOK_RO[k]) : null; }
   if(photo && S.photoFinish !== 'off' && !opt.noFinish){ const tF = performance.now(); const f2 = await photoFinish(r.blob); if(f2 && f2 !== r.blob){ r.blob = f2; r.fin = true; } if(tm && tm.s) tm.s.finisare = (tm.s.finisare || 0) + performance.now() - tF; }
@@ -4560,14 +4561,14 @@ async function idBoost(c, shot, signal, corr, opt = {}){
       const b2 = await bestScene(c, shot, signal, corr, {...opt, n, why:'variante'});
       addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze');
       if(b2.fd != null && b2.fd < best.fd) best = b2;
-    }catch(e){ if(e.name === 'AbortError') throw e; }
+    }catch(e){ if(stopPhotoRetry(e)) throw e; }
   }
   if(rwFor('ancorat') && rwCapLeft() >= rwPer() && (best.fd == null || best.fd > fRet(opt))){   // 13.7 (3)   // 9.86 (e): fața deja foarte apropiată → fără retuș
     pstage(signal, '✨ Potrivește fața după poza de profil', 95); const tR = performance.now(); best.retTried = true;
     try{
       const r = await retouchBest(c, best.blob, signal, 'ancorat', shot, 'retus');
-      if(r){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(r.used){ best.blob = r.blob; best.fd = r.d; best.retouched = true; } }
-    }catch(e){ if(e.name === 'AbortError') throw e; }
+      if(r){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(r.used){ best.blob = r.blob; best.fd = r.d; best.bd = undefined; delete best.check; best.retouched = true; } }
+    }catch(e){ if(stopPhotoRetry(e)) throw e; }
     tmAdd(opt, 'retus', tR);
   }
   return best;
@@ -4606,7 +4607,7 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
 }
 async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const failure = message => Object.assign(new Error(message), {photoKind:'local'});
-  const bodyVisible = !!c.photoFull && framingOf(shot).k !== 'close';
+  const bodyVisible = !opt.together && !!c.photoFull && framingOf(shot).k !== 'close';
   const [faceResult, body] = await Promise.all([
     localFace(blob,c),
     bodyVisible ? Promise.all([refBodySigs(c), measuredBody(blob)]).then(([refs,sig]) => bodyMatch(c,sig,refs)).catch(() => null) : null
@@ -4621,13 +4622,13 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const dressedShot = identityOutfit(c,shot,opt), fixed = dressedShot !== shot;
   const compareBust = opt.compareBust && bodyVisible;
   if(face == null || bodyUnknown || fixed || compareBust){
-    const checked = await checkPhoto(c,blob,dressedShot,signal,false,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : []).catch(error => {
+    const checked = await checkPhoto(c,blob,dressedShot,signal,!!opt.together,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : []).catch(error => {
       if(error.name === 'AbortError') throw error;
       return null;
     });
     if(face == null && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
     if(bodyUnknown && checked?.body == null && !opt.allowBodyUnknown) throw failure('Poza a rămas nepublicată: corpul nu se poate verifica. Cere un cadru cu silueta clar vizibilă.');
-    if((face == null || bodyUnknown || fixed) && checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
+    if(bodyVisible && (face == null || bodyUnknown || fixed) && checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
     if(fixed && (checked?.asked == null || checked.asked < 8)) throw failure('Poza a rămas nepublicată: ținuta fixă nu a trecut verificarea.');
     if(checked?.bust != null && checked.bust <= 5) return 'Volumul bustului diferă vizibil de reperul de corp.';
     if(bodyUnknown && checked?.body == null) return 'Corpul nu a putut fi verificat în acest cadru.';
@@ -4662,7 +4663,7 @@ async function boundedScene(c, shot, signal, opt){
     const bd = result.bd != null ? await measureBody(blob) : result.bd;
     if(result.fd != null && (fd == null || fd > result.fd + (fixFace ? 0 : .02) || (result.fd <= idMax(c) && fd > idMax(c)))) return result;
     if(result.bd != null && (bd == null || (fixFace ? bd > result.bd + .02 || (result.bd <= bodyGate(c) && bd > bodyGate(c)) : bd >= result.bd - .03))) return result;
-    return {...result, blob, fd, bd, lk:undefined, ps:undefined, np:undefined, adh:undefined, fixed:[fixFace ? 'față' : 'corp']};
+    return {...result, blob, fd, bd, check:undefined, lk:undefined, ps:undefined, np:undefined, adh:undefined, fixed:[fixFace ? 'față' : 'corp']};
   }catch(e){ if(stopPhotoRetry(e)) throw e; return result; }
 }
 async function makeScenePhoto0(c, shot, signal, opt = {}){
@@ -4688,7 +4689,7 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
       const fx = x.fd ?? (await localFace(x.blob, c)).d, fy = y.fd ?? (await localFace(y.blob, c)).d;
       if(y.bd != null && y.bd < x.bd - .03 && (fy == null || fx == null || fy <= fx + .05)){ y.fd = fy; y.bodyRetry = true; return y; }
       x.fd = fx;
-    }catch(e){ if(e.name === 'AbortError') throw e; }
+    }catch(e){ if(stopPhotoRetry(e)) throw e; }
     return x;
   };
   // 9.83 (8): ce ai spus că n-a mers (și ce respingi des la personajul ăsta) intră ca o corectură de la prima încercare
@@ -4703,7 +4704,7 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
   if(!opt.together && !opt.partner && !opt.miss && !(opt.asked && opt.asked.length) && !PFB_KEYS.some(k => P1[k] >= 1.5)
     && a.fd != null && a.fd <= FACE_RET && (framingOf(shot).k === 'close' || (a.bd != null && a.bd <= bodyMax(c) * .8)) && (a.adh == null || a.adh >= 7) && (adhTop == null || adhTop >= 7) && !lookBadOf(a.lk) && !mustOf(c).length){ a.fast = true; return a; }   // 10.0: cu trăsături obligatorii sau culori în afara toleranței, verificarea rămâne
   const tC = performance.now();
-  try{ a.check = await checkPhoto(c, a.blob, shot, signal, opt.together, opt.asked); }catch(e){ if(e.name === 'AbortError') throw e; return a; }
+  try{ a.check = await checkPhoto(c, a.blob, shot, signal, opt.together, opt.asked); }catch(e){ if(stopPhotoRetry(e)) throw e; return a; }
   tmAdd(opt, 'verificare', tC);
   // 9.39: dacă verificarea vede o nepotrivire de corp, încearcă o editare localizată după referința corporală.
   // Se păstrează editarea numai dacă scorul general nu scade și fața/scena rămân stabile.
@@ -4715,13 +4716,13 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
         const fixed = await bodyPass(c, a.blob, signal, shot);
         if(fixed){
           addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze');
-          const fc = await checkPhoto(c, fixed, shot, signal, opt.together, opt.asked).catch(e => { if(e.name === 'AbortError') throw e; return null; });
+          const fc = await checkPhoto(c, fixed, shot, signal, opt.together, opt.asked).catch(e => { if(stopPhotoRetry(e)) throw e; return null; });
           const quality = x => !x ? 0 : x.face * 2 + x.scene + x.framing * .5 + (x.asked ?? 6) * 1.2 + (x.body ?? 6) * 1.5 + (x.hair ?? 6) * .7 + (x.marks ?? 6) * .5;
           if(fc && fc.body != null && fc.body > a.check.body && fc.face >= a.check.face - 1 && fc.scene >= a.check.scene - 1 && quality(fc) >= quality(a.check) - .5){
             a = {...a, blob:fixed, check:fc, bodyCorrected:true};
           }
         }
-      }catch(e){ if(e.name === 'AbortError') throw e; console.warn('Potrivirea corpului nu a reușit:', e); }
+      }catch(e){ if(stopPhotoRetry(e)) throw e; console.warn('Potrivirea corpului nu a reușit:', e); }
     }
   }
   // 9.83 (5): scena e bună și doar fața / părul nu se potrivesc → se repară numai acolo, nu toată poza
@@ -4741,12 +4742,12 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
             const b2 = await bodyMatch(c, await measuredBody(y).catch(() => null)), f0 = (await localFace(blob, c)).d, f1 = (await localFace(y, c)).d;
             if(b2 != null && b2 < a.bd - .03 && (f0 == null || f1 == null || f1 <= f0 + .03)){ blob = y; bd1 = b2; done.push('corp'); } } }   // rămâne doar dacă măsurătoarea se apropie și fața nu se strică
         if(done.length){
-          const fc = await checkPhoto(c, blob, shot, signal, opt.together, opt.asked).catch(e => { if(e.name === 'AbortError') throw e; return null; });
+          const fc = await checkPhoto(c, blob, shot, signal, opt.together, opt.asked).catch(e => { if(stopPhotoRetry(e)) throw e; return null; });
           const q = x => x.face * 2 + x.scene + x.framing * .5 + (x.asked ?? 6) * 1.2 + (x.body ?? 6) + (x.hair ?? 6) * .9 + (x.marks ?? 6) * .5 - (x.mustMiss ? x.mustMiss.length * 2 : 0);   // 10.0 (F6)
           const onlyBody = done.length === 1 && done[0] === 'corp';   // corpul e deja confirmat prin măsurare
           if(fc && (q(fc) > q(ck) || (onlyBody && fc.face >= ck.face - 1)) && fc.scene >= ck.scene - 1){ a = {...a, blob, check:fc, fixed:done, bd:bd1}; if(done.includes('față')){ a.retouched = true; a.fd = (await localFace(blob, c)).d; } }
         }
-      }catch(e){ if(e.name === 'AbortError') throw e; console.warn('Repararea țintită n-a mers:', e); }
+      }catch(e){ if(stopPhotoRetry(e)) throw e; console.warn('Repararea țintită n-a mers:', e); }
       tmAdd(opt, 'reparare', tX);
     }
   }
@@ -4755,8 +4756,8 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
   if(!bad(a.check) || (!rwFor(S.wkChat || S.wkModel) && capLeft() < (neurPerPhoto(S.wkChat || S.wkModel) || 5000))) return a;
   let b;
   try{ b = await gen([a.check.fix || (bodyBad(a) ? '' : 'follow the scene and keep the face of the reference'), bodyBad(a) ? 'the body must be exactly the body of the full-body reference: the same build, weight and proportions' : '', corr0].filter(Boolean).join('; '), opt); addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); }
-  catch(e){ if(e.name === 'AbortError') throw e; return a; }
-  try{ b.check = await checkPhoto(c, b.blob, shot, signal, opt.together, opt.asked); }catch(e){ if(e.name === 'AbortError') throw e; }
+  catch(e){ if(stopPhotoRetry(e)) throw e; return a; }
+  try{ b.check = await checkPhoto(c, b.blob, shot, signal, opt.together, opt.asked); }catch(e){ if(stopPhotoRetry(e)) throw e; }
   if(b.lk === undefined && lookOn(c, opt)) b.lk = await lookOf(c, b.blob, shot, opt);
   const sc = x => x ? x.face * 2 + x.scene + x.framing * .5 + (x.asked != null ? x.asked * 1.5 : 0) + (x.body ?? 6) * 1.2 + (x.hair ?? 6) * .7 + (x.marks ?? 6) * .5 - (x.mustMiss ? x.mustMiss.length * 2 : 0) : 0;   // 9.36: „nu se vede” = neutru, nu 0
   const sc2 = x => sc(x.check) - (x.bd != null ? Math.min(.5, x.bd) * 20 : 0) - lookPen(x) * 20;   // 9.85: și corpul măsurat
@@ -11557,7 +11558,21 @@ async function askPhoto0(spont, target, mode, opt = {}){
       }
       if(!edited){ const r = await makeScenePhoto(cx, shot, busy.signal, {together:false, asked}); edited = r; }
     }
-    else if(target && mode === 'same' && target.scene){ shot = target.scene; where = target.where || null; asked = target.asked || []; sceneOpt = await sceneOptSame(c, target, opt); }
+    else if(target && mode === 'same' && target.scene){
+      shot = target.scene; where = target.where || null; asked = target.asked || []; sceneOpt = await sceneOptSame(c, target, opt);
+      if(duoBoth){
+        peopleIn = target.people || {duo:true,self:true,names:[duoNm(c0, 1 - who)]};
+        edited = await duoBothPhoto(c0, who, shot, busy.signal, asked);
+      } else if(target.people){
+        const pp = await savedPhotoPerson(c, target.people.pid);
+        if(!pp) throw Object.assign(new Error('Reperul celeilalte persoane nu mai este disponibil pentru aceeași scenă.'), {photoKind:'local'});
+        peopleIn = target.people;
+        edited = peopleIn.self ? await makeScenePhoto(c, shot, busy.signal, {together:true, partner:pp, asked})
+          : await otherPhoto(c, pp, shot, busy.signal, asked);
+      } else if(target.together && !together){
+        throw Object.assign(new Error('Pentru aceeași poză împreună, adaugă din nou fotografia ta de profil.'), {photoKind:'local'});
+      }
+    }
     else { const tS = performance.now(); let pl = await planShot(c, ch, {promised, exclude:m, signal:busy.signal, together, requestedExposure:spont ? '' : latestPhotoExposure(ch, m)}); tm.s.scena = performance.now() - tS;
       { const tC = performance.now(); pl = await framePreview(c, ch, m, pl, {spont, target, mode, promised, together, signal:busy.signal}); const dC = performance.now() - tC; if(dC > 300) tm.s.cadru = dC; }   // 13.3: confirmarea cadrului, separat   // 10.1 (S4): confirmi sau corectezi cadrul
       sceneOpt = await sceneOptOf(c, ch, m, pl, pl.together);   // 10.1 (S5, S8)
@@ -11600,7 +11615,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont, verifyIdentity:verifyIdentity && !together && !sceneOpt.partner, sceneWardrobe:true});
     const tVerify = performance.now();
     const bodyNotice = verifyIdentity
-      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true,sceneWardrobe:true,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
+      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true,sceneWardrobe:true,together,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
     if(verifyIdentity) tm.s.verificare = performance.now() - tVerify;
     if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
@@ -11849,6 +11864,17 @@ async function editPhoto(c, base, en, signal, asked, shot){
    aplicație (după nume), se folosește poza lui. Telefonul verifică să nu semene cu personajul (altfel o reface). Doar adulți,
    îmbrăcați, poze obișnuite. Fișele se văd și se șterg din profil (👥). */
 const pnorm = x => String(x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+async function savedPhotoPerson(c, pid){
+  if(!pid || typeof pid !== 'string') return null;
+  const app = pid.startsWith('app:') ? charById(pid.slice(4)) : null;
+  const rec = app ? null : (c.people || []).find(x => x.id === pid);
+  const key = app?.photo || rec?.img;
+  if(!key) return null;
+  const blob = await DB.get(key).catch(() => null);
+  if(!blob) return null;
+  const id = app ? await identityOf(app).catch(() => null) : null;
+  return {id:pid, name:app?.name || rec?.name || rec?.relation, blob, box:app ? (id && !id.none ? id : null) : rec.box || null, desc:app ? app.physEn || app.look || '' : rec.desc};
+}
 async function personFor(c, ch, p, signal){
   const nm = pnorm(p.name), rl = pnorm(p.relation);
   const app = nm && chars.find(x => x.id !== c.id && pnorm(x.name) === nm && x.photo);
