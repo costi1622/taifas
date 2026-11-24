@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.17';
+const APP_VER = '14.14.18';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -4074,13 +4074,15 @@ async function faceDescs0x(blob){
 async function refDescs(c){
   if(!c.photo) return [];
   const k = [await fdMode(), c.photo, ...(c.refs || []).slice(0, 2).filter(x => !refOut(c, x))].join('|');   // 10.5 (R3): o poză în plus ieșită din grup nu mai intră   // 14.0: și judecătorul
-  if(c.faceEmb && c.faceEmb.k === k && c.faceEmb.d.length) return c.faceEmb.d;
+  if(c.faceEmb?.v === 2 && c.faceEmb.k === k && c.faceEmb.d.length) return c.faceEmb.d;
   const d = [];
   for(const key of k.split('|').slice(1)){
     const b = await DB.get(key).catch(() => null); if(!b) continue;
-    const fs = await faceDescs(b); if(fs.length) d.push(fs.sort((x, y) => y.a - x.a)[0].d.map(v => Math.round(v * 1e4) / 1e4));
+    const fs = await faceDescs(b).catch(() => []);
+    const f = fs.sort((x, y) => y.a - x.a)[0];
+    if(f){ for(const v of [f.d,f.fa].filter(Boolean)) d.push(v.map(x => Math.round(x * 1e4) / 1e4)); }
   }
-  c.faceEmb = {k, d}; saveChars();
+  c.faceEmb = {k, d, v:2}; saveChars();
   return d;
 }
 // 14.0: amprentele ArcFace (512) → 1 − asemănarea (cosinus); cele vechi (128) → distanța obișnuită; amestecate → departe
@@ -4092,11 +4094,19 @@ async function idDistance(c, blob){
   const ref = await refDescs(c); if(!ref.length) return null;
   const got = await faceDescs(blob); if(!got.length) return {d:null, n:0};
   let rs = null; if(S.refAng !== 'off' && !(got[0] && got[0].j === 'a')){ try{ rs = await refSet(c); }catch(e){} }   // 10.5 (R1): și unghiurile verificate   // 14.0: cu ArcFace, doar portretul
-  let best = 9, via = null;
-  for(const g of got){ let dP = 9; for(const r of ref) dP = Math.min(dP, fdist(g.d, r)); const a = angDist(rs, g, dP); let dd = a.d;
-    if(rs && rs.cen && rs.cen.length === g.d.length){ const yg = yawOfLm(g.lm); if(yg == null || Math.abs(yg) <= .3) dd = (dd + fdist(g.d, rs.cen) + (rs.off || 0)) / 2; }   // 11.0 (A3): și față de fața medie (fețele din față)
-    if(dd < best){ best = dd; via = a.via || null; } }
-  return {d:Math.round(best * 1000) / 1000, n:got.length, via, j:got[0] && got[0].j || 'f'};
+  let best = null, via = null;
+  for(const g of got){
+    for(const descriptor of [g.d,g.fa].filter(Boolean)){
+      const compatible = ref.filter(r => r.length === descriptor.length);
+      if(!compatible.length) continue;
+      const direct = Math.min(...compatible.map(r => fdist(descriptor,r)));
+      const angle = descriptor === g.d && rs ? angDist(rs,g,direct) : {d:direct,via:null};
+      if(Number.isFinite(angle.d) && (best == null || angle.d < best)){ best = angle.d; via = angle.via || null; }
+      // Prefer the active model whenever it has a comparable reference.
+      break;
+    }
+  }
+  return {d:best == null ? null : Math.round(best * 1000) / 1000, n:got.length, via, j:got[0]?.j || 'f'};
 }
 const ID_MAX = .5;
 const idPct = d => Math.round(100 * Math.max(0, Math.min(1, (.9 - d) / .55)));
@@ -4636,7 +4646,7 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
   const portrait = c.photo, bodyKey = c.photoFull;
   const refDistance = async () => {
     if(!portrait || !bodyKey || opt.usePortraitBody) return null;
-    const key = portrait + '|' + bodyKey;
+    const key = 'face-v2|' + portrait + '|' + bodyKey;
     if(c.pfDist?.k === key) return c.pfDist.d;
     const body = await DB.get(bodyKey).catch(() => null);
     const d = body ? (await localFace(body, c)).d : null;
@@ -4671,7 +4681,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const face = faceResult.d;
   const faceLimit = idMax(c);
   const faceMismatch = face != null && face > faceLimit;
-  const borderlineFace = faceMismatch && opt.spontaneous && face - faceLimit <= .03;
+  const borderlineFace = faceMismatch && opt.sceneWardrobe && face - faceLimit <= (opt.spontaneous ? .06 : .03);
   if(faceMismatch && !borderlineFace) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
   const bodyUnknown = bodyVisible && body == null;
   const limit = bodyVisible && body != null ? bodyGate(c) : null;
@@ -7784,7 +7794,7 @@ function drawSheet(c, box){
       const el = $('#pfKit'); if(el){ const sh = $('#pfSheet'); el.remove(); if(sh) sh.remove(); drawSheet(c, box); } }; }
   box.insertAdjacentHTML('beforeend', `<div class="refbox" id="pfSheet"><b>🧩 Fișa de identitate</b><small>${Object.keys(SHEET_VIEWS).length} unghiuri ale aceleiași fețe, făcute o dată din poza de profil și verificate în telefon (intră doar cele aproape identice). La fiecare poză se folosesc cele potrivite scenei: trei-sferturi, profil, zâmbet, selfie de sus, lumina caldă de seară, ziua afară; și în pozele cu mai multe persoane. ${S.idSheet === 'off' ? 'Oprită din Setări → Poze.' : v.length ? 'Atinge ✕ pe un unghi care nu seamănă: se reface doar el, mai strict.' : 'Se face singură după prima poză din chat (~7–15 imagini, o dată).'}</small>
     ${v.length ? `<div class="shgrid">${v.map(x => `<figure><img data-k="${esc(x.k)}" data-sk="${esc(x.k)}" data-t="g" alt="">${sheetOn(c) ? `<button type="button" class="shx" data-shx="${esc(x.ang)}" aria-label="Nu seamănă: refă unghiul">✕</button>` : ''}${x.weak && sheetOn(c) ? `<button type="button" class="shok" data-sok="${esc(x.ang)}" aria-label="E bună: folosește-l">✓</button>` : ''}<figcaption>${esc(SHEET_RO[x.ang] || x.ang)}<br>${x.weak ? '⚠️ ' : x.okU ? '✓ ' : ''}${(x.bv || 0) !== bodyVer(c) ? '🔄 ' : ''}${x.d != null ? '👤 ' + idPct(x.d) + '%' : '—'}</figcaption></figure>`).join('')}</div>` : ''}
-    ${bv.length ? `<small style="margin-top:6px">🧍 Fișa de corp (din poza întreagă, verificată prin măsurare; se alege după poziția din scenă):</small><div class="shgrid">${bv.map(x => `<figure><img data-k="${esc(x.k)}" data-sk="${esc(x.k)}" data-t="g" alt="">${sheetOn(c) ? `<button type="button" class="shx" data-bsx="${esc(x.pose)}" aria-label="Nu seamănă: refă poziția">✕</button>` : ''}${x.weak && sheetOn(c) ? `<button type="button" class="shok" data-bok="${esc(x.pose)}" aria-label="E bună: folosește-o">✓</button>` : ''}<figcaption>${esc(BSHEET_RO[x.pose] || x.pose)}<br>${x.weak ? '⚠️ ' : x.okU ? '✓ ' : ''}${(x.bv || 0) !== bodyVer(c) ? '🔄 ' : ''}${x.bd != null && !BSHEET_NOBODY.has(x.pose) ? '🧍 ' + bodyPct(x.bd) + '%' : '—'}</figcaption></figure>`).join('')}</div>` : c.photoFull && S.idSheet !== 'off' ? '<small style="margin-top:6px">🧍 Fișa de corp (¾, profil, așezată) se face singură după fișa feței.</small>' : ''}
+    ${bv.length ? `<small style="margin-top:6px">🧍 Fișa de corp (din poza întreagă, verificată prin măsurare; se alege după poziția din scenă):</small><div class="shgrid">${bv.map(x => `<figure><img data-k="${esc(x.k)}" data-sk="${esc(x.k)}" data-t="g" alt="">${sheetOn(c) ? `<button type="button" class="shx" data-bsx="${esc(x.pose)}" aria-label="Nu seamănă: refă poziția">✕</button>` : ''}${x.weak && sheetOn(c) ? `<button type="button" class="shok" data-bok="${esc(x.pose)}" aria-label="E bună: folosește-o">✓</button>` : ''}<figcaption>${esc(BSHEET_RO[x.pose] || x.pose)}<br>${x.weak ? '⚠️ ' : x.okU ? '✓ ' : ''}${(x.bv || 0) !== bodyVer(c) ? '🔄 ' : ''}${x.bd != null && !BSHEET_NOBODY.has(x.pose) ? '🧍 ' + bodyPct(x.bd) + '%' : BSHEET_NOBODY.has(x.pose) ? 'Unghi fără scor de siluetă' : 'Siluetă nemăsurată'}</figcaption></figure>`).join('')}</div>` : c.photoFull && S.idSheet !== 'off' ? '<small style="margin-top:6px">🧍 Fișa de corp (¾, profil, așezată) se face singură după fișa feței.</small>' : ''}
     ${v.some(x => x.weak) || bv.some(x => x.weak) ? `<small style="margin-top:6px">⚠️ = măsurat ca mai puțin asemănător${fdModeNow() === 'a' ? ' (judecător: ArcFace)' : ''}. La față nu se folosește; la corp se folosește oricum (silueta se compară greu între poziții diferite). ✓ = e bun, folosește-l; ✕ = refă-l.</small>` : ''}
     ${(() => { const st = sheetStale(c).length + bsheetStale(c).length + (closeStale(c) ? 1 : 0); return st ? `<small style="margin-top:6px">🔄 ${st} ${st === 1 ? 'reper e făcut' : 'repere sunt făcute'} pentru corpul de dinainte: se refac la „Completează”, iar până atunci rămân cele vechi.</small>` : ''; })()}
     ${v.length || bv.length ? '<div class="btns" style="margin-top:6px"><button class="btn sm" id="pfSheetSave" type="button">⬇ Salvează toate pozele din fișă</button></div>' : ''}
@@ -7939,7 +7949,7 @@ function fidHead(c){
   const chip = (t, v, w) => v == null ? '' : `<span class="fidchip${w ? ' w' : ''}">${t} <b>${v}${typeof v === 'number' ? '%' : ''}</b></span>`;
   const act = !c.photo ? '' : K && !K.ok && !kb ? '🧬 Completează și verifică' : c.photo && photo && (!a || !fresh) ? '🔎 Verifică descrierea cu pozele' : open.length ? '✍️ Rezolvă contradicțiile' : '';
   h.innerHTML = `<b>🎯 Fidelitatea · ${esc(c.name)}</b>${sc ? `<div class="idbig"><b>${sc.n}</b><span>/100 · nota de identitate<small>${sc.low.length ? 'Cele mai mari scăderi: ' + sc.low.map(p => esc(p.l) + ' −' + p.lost.toFixed(1) + ' p').join(', ') : 'totul e în regulă'}</small></span></div>` : ''}
-    ${sc ? '<details class="hint"><summary>Din ce se calculează nota</summary><p>Nota combină reperele, verificarea descrierii și rezultatele măsurate din chat. Un profil complet poate avea sub 100.</p><ul>' + sc.parts.map(p => '<li>' + esc(p.l) + ' · ' + Math.round(p.v * 100) + '% · −' + p.lost.toFixed(1) + ' p</li>').join('') + '</ul></details>' : ''}
+    ${sc ? '<details class="hint"><summary>Din ce se calculează nota</summary><p>Nota arată separat reperele existente și asemănarea măsurată. Un unghi fără procent poate conta ca reper dacă este acceptat. Un profil complet poate avea sub 100.</p><ul>' + sc.parts.map(p => '<li>' + esc(p.l) + ' · ' + Math.round(p.v * 100) + '% · −' + p.lost.toFixed(1) + ' p</li>').join('') + '</ul></details>' : ''}
     <div class="fidchips">${chip('👤 fața', s.face, s.face != null && s.face < 70)}${chip('🧍 corpul', s.body, s.body != null && s.body < 70)}${chip('🎨 culori', s.look, s.look != null && s.look < 70)}${s.n ? `<span class="fidchip dim">din ${plural(s.n, 'poză', 'poze')}</span>` : '<span class="fidchip dim">cifrele apar de la prima poză</span>'}</div>
     <small class="fidtodo">${todo.length ? '⚠️ ' + todo.map(esc).join(' · ') : c.photo ? `✅ Reperele sunt complete${a ? ', descrierea e verificată' : ''}${must.length ? ', ' + plural(must.length, 'trăsătură obligatorie', 'trăsături obligatorii') : ''}.` : ''}</small>
     ${act ? `<div class="btns"><button class="btn sm pri" id="pfFidGo">${act}</button></div>` : ''}
@@ -16456,9 +16466,11 @@ function idScore(c){
   const required = kitState(c).items.filter(x => x.need !== false);
   add('kit', 'reperele de bază', required.length ? required.filter(x => x.ok || x.warn).length / required.length : 0, 25);
   const nV = Math.max(1, Object.keys(SHEET_VIEWS).length - sheetDropOf(c).size), sv = sheetOf(c).filter(x => !x.weak), sd = sv.filter(x => x.d != null);   // 12.2
-  add('fata', 'fișa feței', .5 * sv.length / nV + .5 * (sd.length ? sd.reduce((a, x) => a + idPct(x.d), 0) / sd.length / 100 : 0), 20);
+  add('fataRepere', 'acoperirea fișei feței', sv.length / nV, 10);
+  if(sd.length) add('fata', 'asemănarea unghiurilor feței', sd.reduce((a,x) => a + idPct(x.d),0) / sd.length / 100, 10);
   if(c.photoFull){ const nB = Object.keys(BSHEET_VIEWS).length, bv = bsheetOf(c).filter(x => !x.weak), bd = bv.filter(x => x.bd != null);
-    add('corp', 'fișa corpului', .5 * bv.length / nB + .5 * (bd.length ? bd.reduce((a, x) => a + bodyPct(x.bd), 0) / bd.length / 100 : .7), 10); }
+    add('corpRepere', 'acoperirea fișei corpului', bv.length / nB, 5);
+    if(bd.length) add('corp', 'asemănarea siluetelor măsurabile', bd.reduce((a,x) => a + bodyPct(x.bd),0) / bd.length / 100, 5); }
   const s = statsOf(c); if(s.face != null && s.nf >= 3) add('chat', 'fața în pozele din chat', s.face / 100, 20); if(s.body != null && s.nb >= 3) add('chatCorp', 'corpul în pozele din chat', s.body / 100, 10);
   const a = auditOf(c); add('desc', 'descrierea verificată cu pozele', !a ? 0 : !auditFresh(c) ? .5 : auditOpen(c).length ? .6 : 1, 5);
   const W = parts.reduce((x, p) => x + p.w, 0); if(!W) return null;
