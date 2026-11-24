@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.18';
+const APP_VER = '14.14.19';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -4672,7 +4672,8 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
   return r;
 }
 async function verifyStudioPhoto(c, blob, shot, signal, opt){
-  const failure = message => Object.assign(new Error(message), {photoKind:'local'});
+  const diagnostic = {};
+  const failure = message => Object.assign(new Error(message), {photoKind:'local',photoDiagnostic:diagnostic});
   const bodyVisible = !opt.together && !!(opt.usePortraitBody ? c.photo : c.photoFull) && framingOf(shot).k !== 'close';
   const [faceResult, body] = await Promise.all([
     localFace(blob,c),
@@ -4680,11 +4681,12 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   ]);
   const face = faceResult.d;
   const faceLimit = idMax(c);
+  Object.assign(diagnostic,{face,faceLimit,body,bodyLimit:bodyVisible && body != null ? bodyGate(c) : null,reference:!bodyVisible ? 'fără comparație corp' : opt.usePortraitBody ? 'portret' : 'poza întreagă / fișa de corp',spontaneous:!!opt.spontaneous});
   const faceMismatch = face != null && face > faceLimit;
   const borderlineFace = faceMismatch && opt.sceneWardrobe && face - faceLimit <= (opt.spontaneous ? .06 : .03);
   if(faceMismatch && !borderlineFace) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
   const bodyUnknown = bodyVisible && body == null;
-  const limit = bodyVisible && body != null ? bodyGate(c) : null;
+  const limit = diagnostic.bodyLimit;
   const bodyMismatch = bodyVisible && body != null && body > limit;
   const borderlineBody = bodyMismatch && opt.sceneWardrobe && body - limit <= (opt.spontaneous ? .06 : .04);
   if(bodyMismatch && !borderlineBody) throw failure('Poza a rămas nepublicată: diferență clară la măsurarea proporțiilor față de reperul de corp.');
@@ -4695,6 +4697,9 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
       if(error.name === 'AbortError') throw error;
       return null;
     });
+    diagnostic.visualFace = checked?.face ?? null;
+    diagnostic.visualBody = checked?.body ?? null;
+    diagnostic.visualBust = checked?.bust ?? null;
     if((face == null || borderlineFace) && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
     if(borderlineBody && (!(checked?.body >= 9) || (checked.bust != null && checked.bust < 8))) throw failure(checked?.body == null
       ? 'Poza a rămas nepublicată: măsurătoarea corpului a depășit puțin limita, iar comparația vizuală nu a putut confirma proporțiile. Încearcă un cadru mai apropiat ca poziție de reper.'
@@ -11727,7 +11732,16 @@ async function askPhoto0(spont, target, mode, opt = {}){
     const failure = flag ? 'Furnizorul de imagini a refuzat cererea conform regulilor sale de conținut.' : (msg || 'Eroare tehnică la generarea pozei.');
     if(target && m.img){ if(e.name !== 'AbortError') toast(failure, 4000); }   // poza veche rămâne
     else if(e.name === 'AbortError'){ m.err = 'Oprit.'; if(e.cancelFrame) m._drop = true; }   // 10.1: „Renunță” la cadrul propus: mesajul gol dispare
-    else { m.err = failure; if(flag) m.errKind = 'flag'; else if(e.photoKind) m.errKind = e.photoKind; }
+    else {
+      const d = e.photoDiagnostic, fmt = n => Number.isFinite(n) ? n.toFixed(3) : '—';
+      const visual = n => Number.isFinite(n) ? n + '/10' : '—';
+      const details = d ? '\nDiagnostic foto ' + APP_VER + ' · ' + (d.spontaneous ? 'spontană' : 'la cerere')
+        + ' · față ' + fmt(d.face) + ' (prag ' + fmt(d.faceLimit) + ')'
+        + ' · corp ' + fmt(d.body) + ' (prag ' + fmt(d.bodyLimit) + ', ' + d.reference + ')'
+        + (Object.hasOwn(d,'visualFace') ? ' · vizual: față ' + visual(d.visualFace) + ', corp ' + visual(d.visualBody) + ', bust ' + visual(d.visualBust) : ' · fără comparație vizuală') : '';
+      m.err = failure + details;
+      if(flag) m.errKind = 'flag'; else if(e.photoKind) m.errKind = e.photoKind;
+    }
   }
   clearInterval(pT);
   delete m.pendingImg; busy = null; live = null;
