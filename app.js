@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.14.16';
+const APP_VER = '14.14.17';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1222,7 +1222,9 @@ function exposureMode(text){
   return 'clothed';
 }
 function clearlyAdultCharacter(c){
-  if(looksYoung(c)) return false;   // 9.94 (D): aspectul contează, nu doar descrierea
+  return !looksYoung(c) && declaredAdultCharacter(c);
+}
+function declaredAdultCharacter(c){
   const t = [c?.persona, c?.look, c?.aspect, c?.physEn].filter(Boolean).join(' ')
     .normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   if(/\b(?:minor[ae]?|underage|(?:[0-9]|1[0-7])(?:\s+(?:de\s+)?ani|\s+years? old|[ -]year[ -]old))\b/.test(t)) return false;
@@ -3153,14 +3155,13 @@ const warnLine = m => { const a = [m.duoId && m.duoNm ? m.duoNm.map((n, i) => m.
    (B) Fața, al doilea reper: poziția feței o dă detectorul din telefon (precis), nu estimarea din text; „Caută din nou” chiar caută.
    (C) Fidelitate: retuș de la 0,36 (nu 0,40); tenul blocat pe tenul din portret (pe telefon); mâinile verificate; corpul mai stabil.
    (D) Vârsta după aspect: personajele care nu par clar adulte nu primesc funcțiile de corp și nici conținut intim. */
-const AGE_MIN = 21;   // estimarea din telefon greșește cu câțiva ani: pragul e mai sus de 18, intenționat
-/* 11.8: înainte, vârsta venea dintr-o singură estimare pe o singură poză (rețeaua de vârstă din telefon greșește ușor cu 10+ ani:
-   ochelari, lumină, unghi, zâmbet), iar rezultatul rămânea blocat pentru totdeauna. Acum: estimarea se face pe mai multe poze ale
-   aceleiași fețe (portretul și oglinda lui, portretul de aproape, poza întreagă, unghiurile din față ale fișei) și se ia mediana;
-   a doua părere e vârsta aparentă scrisă de Claude când se uită la poză (pașaportul). Pragul rămâne 21: blochează dacă pașaportul
-   spune adolescent / sub 21 sau dacă mediana iese sub 21, cu o singură excepție: pașaportul vede clar 25+ și mediana e de adult (18+).
-   Se reface când se schimbă poza sau când apar repere noi (mai multe poze = estimare mai sigură). */
-const AGE_V = 2;
+const AGE_MIN = 19;
+const AGE_V = 3;
+function ageLookYoung(detected, apparent, minorText, declaredAdult){
+  if(minorText || (apparent != null && apparent < 18) || (detected != null && detected < 18)) return true;
+  const borderline = (apparent != null && apparent < AGE_MIN) || (detected != null && detected < AGE_MIN);
+  return borderline && !(declaredAdult || (apparent != null && apparent >= 25));
+}
 async function ageOne(f, b, flip){
   const u = URL.createObjectURL(b);
   try{ let im = await loadImgEl(u);
@@ -3172,7 +3173,8 @@ async function ageOne(f, b, flip){
 async function ageLook(c){
   if(!c || !c.photo) return null;
   const front = sheetOf(c).filter(x => !x.weak && ['l34', 'r34', 'smile', 'serious', 'warm', 'sun'].includes(x.ang)).slice(0, 4), cr = closeOf(c);
-  const srcKey = [c.photo, cr ? cr.img : '', c.photoFull || '', front.map(x => x.k).join(',')].join('|');
+  const portrait = c.photo;
+  const srcKey = [portrait, cr ? cr.img : '', c.photoFull || '', front.map(x => x.k).join(','), declaredAdultCharacter(c)].join('|');
   if(c.ageLook && c.ageLook.k === c.photo && c.ageLook.v === AGE_V && c.ageLook.src === srcKey) return c.ageLook;
   const ages = [];
   try{ const f = await faceApi(); if(!f.nets.ageGenderNet.isLoaded) await f.nets.ageGenderNet.loadFromUri(FA + 'model');
@@ -3181,15 +3183,13 @@ async function ageLook(c){
   }catch(e){}
   ages.sort((x, y) => x - y);
   const med = ages.length ? (ages.length % 2 ? ages[(ages.length - 1) / 2] : (ages[ages.length / 2 - 1] + ages[ages.length / 2]) / 2) : null, a = med == null ? null : Math.round(med);
-  let txt = null;
   const ph = String((c.faceBox && c.faceBox.k === c.photo && c.faceBox.phys) || '').toLowerCase();
-  if(/\b(teen|teenage|teenager|adolescent|schoolgirl|schoolboy|young girl|young boy|child|kid|minor|underage)\b/.test(ph)) txt = 'tânăr';
+  const minorText = /\b(teen|teenage|teenager|adolescent|schoolgirl|schoolboy|young girl|young boy|child|kid|minor|underage)\b/.test(ph);
   const m = ph.match(/\b(?:aged?|around|about|apparent age[: ]*(?:early|mid|late)?[- ]?)\s*(\d{1,2})\b|\b(\d{1,2})\s*(?:-|–|to)\s*(\d{1,2})\s*years?\b|\b(\d{2})s\b/);
-  const ta = m ? +(m[1] || m[2] || m[4]) : null;
-  if(ta != null && ta < AGE_MIN) txt = 'tânăr';
-  const adultSure = ta != null && ta >= 25 && a != null && a >= 18;   // pașaportul vede clar un adult, iar măsurătoarea nu contrazice
-  const young = txt === 'tânăr' || (a != null && a < AGE_MIN && !adultSure);
-  c.ageLook = {k:c.photo, v:AGE_V, src:srcKey, a, n:ages.length, all:ages.map(x => Math.round(x)), ta, young, at:Date.now()}; saveChars();
+  const ta = m ? +(m[1] || (m[3] ? Math.floor((+m[2] + +m[3]) / 2) : m[4])) : null;
+  const young = ageLookYoung(a, ta, minorText, declaredAdultCharacter(c));
+  if(c.photo !== portrait) return null;
+  c.ageLook = {k:portrait, v:AGE_V, src:srcKey, a, n:ages.length, all:ages.map(x => Math.round(x)), ta, young, at:Date.now()}; saveChars();
   return c.ageLook;
 }
 const looksYoung = c => !!(c && c.ageLook && c.ageLook.k === c.photo && c.ageLook.young);
@@ -4669,20 +4669,23 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     bodyVisible ? Promise.all([photoBodySigs(c,opt), measuredBody(blob)]).then(([refs,sig]) => bodyMatch(c,sig,refs,true)).catch(() => null) : null
   ]);
   const face = faceResult.d;
-  if(face != null && face > idMax(c)) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
+  const faceLimit = idMax(c);
+  const faceMismatch = face != null && face > faceLimit;
+  const borderlineFace = faceMismatch && opt.spontaneous && face - faceLimit <= .03;
+  if(faceMismatch && !borderlineFace) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
   const bodyUnknown = bodyVisible && body == null;
   const limit = bodyVisible && body != null ? bodyGate(c) : null;
   const bodyMismatch = bodyVisible && body != null && body > limit;
-  const borderlineBody = bodyMismatch && opt.sceneWardrobe && body - limit <= .04;
+  const borderlineBody = bodyMismatch && opt.sceneWardrobe && body - limit <= (opt.spontaneous ? .06 : .04);
   if(bodyMismatch && !borderlineBody) throw failure('Poza a rămas nepublicată: diferență clară la măsurarea proporțiilor față de reperul de corp.');
   const dressedShot = identityOutfit(c,shot,opt), fixed = dressedShot !== shot;
   const compareBust = opt.compareBust && bodyVisible;
-  if(face == null || bodyUnknown || borderlineBody || fixed || compareBust){
+  if(face == null || borderlineFace || bodyUnknown || borderlineBody || fixed || compareBust){
     const checked = await checkPhoto(c,blob,dressedShot,signal,!!opt.together,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : [],opt).catch(error => {
       if(error.name === 'AbortError') throw error;
       return null;
     });
-    if(face == null && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
+    if((face == null || borderlineFace) && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
     if(borderlineBody && (!(checked?.body >= 9) || (checked.bust != null && checked.bust < 8))) throw failure(checked?.body == null
       ? 'Poza a rămas nepublicată: măsurătoarea corpului a depășit puțin limita, iar comparația vizuală nu a putut confirma proporțiile. Încearcă un cadru mai apropiat ca poziție de reper.'
       : 'Poza a rămas nepublicată: comparația vizuală nu confirmă proporțiile reperului de corp.');
@@ -11675,7 +11678,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont, verifyIdentity:verifyIdentity && !together && !sceneOpt.partner, sceneWardrobe:true,usePortraitBody:chatBodyKey(c) === c.photo});
     const tVerify = performance.now();
     const bodyNotice = verifyIdentity
-      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true,sceneWardrobe:true,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
+      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
     if(verifyIdentity) tm.s.verificare = performance.now() - tVerify;
     if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
