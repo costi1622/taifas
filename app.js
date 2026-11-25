@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.15.1';
+const APP_VER = '14.15.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -5462,7 +5462,7 @@ function renderGroup(toEnd){
   hydrate(box);
   if(toEnd || near){ box.scrollTop = box.scrollHeight; requestAnimationFrame(() => box.scrollTop = box.scrollHeight); }
   $('#gChips').innerHTML = sp
-    ? `<button type="button" class="on" data-gspx>⏹ Oprește (${gSpect.left} runde)</button><button type="button" data-gsubj>🎬 Subiect</button><button type="button" data-gbomb>💣 Bombă</button>`
+    ? `<button type="button" class="on" data-gspx>⏹ Oprește (${gSpect.left} intervenții)</button><button type="button" data-gsubj>🎬 Subiect</button><button type="button" data-gbomb>💣 Bombă</button>`
     : '<button type="button" data-gspect>👀 Spectator</button>' + ms.map(c => { const m = gMeOf(gchat, c), sn = gShort(c, ms); return `<button type="button" data-gto="${esc(sn)}">@${esc(sn)} <small class="gmei" style="--mc:${gMeCol(m.care)}" data-gmei="${c.id}" title="cât ține la tine / cât te ajută">💗${m.care}·🤝${m.help}</small></button>`; }).join('') + (S.imgProv !== 'none' ? '<button type="button" data-gpic>📸 Poză cu voi</button>' : '');
   gSendBtn();
 }
@@ -5601,7 +5601,7 @@ async function gDirector(g, ms, more, mentioned, photoAsk, toAll, gc = gchat, x 
     const out = await stream('You direct a realistic group chat between a user and several characters. Answer with JSON only.', [{role:'user', text:
 `Group "${g.name}"${g.topic ? ' (' + g.topic + ')' : ''}. Characters: ${ms.map(c => c.name + (c.tag ? ' (' + c.tag + ')' : '')).join('; ')}.
 ${gc.dyn ? 'Group dynamic (Romanian): ' + gc.dyn + '\n' : ''}${rels ? 'Relationships between them (Romanian): ' + rels + '\n' : ''}Toward ${u}: ${gMeLines(gc, ms)}. Characters who care more answer ${u} more often and more warmly; when ${u} asks for help or has a problem, the ones with high "helps" reply first with concrete help, low ones may only react or stay silent.
-Group tone: ${T.dir}.\n${giPrompt(g)}
+Group tone: ${T.dir}.\n${giPrompt(g)}\n${gPresenceContext(gc)}
 ${(gc.rules || []).length ? 'Group rules set by ' + u + ' (Romanian), everyone follows them: ' + gc.rules.map(r => r.t).join('; ') + '\n' : ''}${lead ? `${u} LEADS this group. If ${u}'s last message asks the group or someone to DO something now (a task, a game, a round where each answers, a question for everyone, "each of you…", "Ana, sing…"), set "task" (Romanian, short and concrete: what exactly to do) and "who" ("all" or the names asked); everyone in "who" replies and does it, no refusing or dodging. If ${u} sets a standing rule for the group from now on ("from now on…", "no more…", "everyone always…"), set "rule" (Romanian, short). If ${u} cancels a rule, set "unrule" with that rule. Otherwise leave them null.\n` : ''}${gc.subj ? 'New topic set for the group (Romanian), they get into it naturally: ' + gc.subj + '\n' : ''}Recent messages:
 ${recent}
 ${x.spect ? 'The user is only watching silently now: the characters talk among themselves (answer each other, not the user); 1-' + T.max + ' replies.' : more ? 'The user wants the characters to keep talking among themselves now.' : 'The last message is from ' + u + '.'}${x.bomb ? ' The user just dropped big news: almost everyone reacts, most of them with text.' : ''}${mentioned.length ? ' The user addressed: ' + mentioned.map(c => c.name).join(', ') + ' (they reply first).' : ''}${toAll ? ' The user addressed everyone: most of them react (reply or emoji), but not necessarily all with text.' : ''}${photoAsk ? ' The user asked for a photo: decide who sends it ("photo": the names of who must be IN the photo, and "by": who sends it; a photo of several of them together is fine).' : ''}
@@ -5687,6 +5687,7 @@ function gTurn(c, g, gc = gchat, x = {}){
   return [
     `--- Acum e rândul tău. Ești ${c.name}.`,
     giPrompt(g),
+    gPresenceContext(gc),
     `## Tu și celelalte, acum\n${rels || '-'}`,
     `## Ce simți pentru ${u}, aici\n${gCareWord(m.care)} (${m.care}/100).${m.why ? ' De ce: ' + m.why + '.' : ''}\nCât îl ajuți: ${gHelpWord(m.help)} (${m.help}/100). Când ${u} cere ajutor sau are o problemă, asta decide cât de repede și cât de concret sari (sau nu). Arată asta prin fapte și ton, nu spunând cifrele.`,
     pn && (pn.mood || pn.carry || (pn.others || []).length || (pn.secrets || []).length) && `## Din discuțiile tale private cu ${u} (doar tu știi asta)\n${pn.mood ? 'Cum ești acum cu el: ' + pn.mood + '\n' : ''}${(pn.others || []).length ? 'Ce i-ai zis în privat despre celelalte: ' + pn.others.map(o => o.name + ': ' + o.t).join('; ') + '\n' : ''}${pn.carry ? 'Poți face aluzie firesc, fără să explici: ' + pn.carry + '\n' : ''}${(pn.secrets || []).length ? 'NU spui în grup și nu lași să se înțeleagă: ' + pn.secrets.join('; ') + '\n' : ''}Se simte în ton și în cum îi răspunzi (mai caldă, mai rece, complice), nu povestești conversația privată.`,
@@ -5698,7 +5699,7 @@ function gTurn(c, g, gc = gchat, x = {}){
     x.regen && `## Altă variantă\n${u} a cerut o altă replică în locul celei de mai jos. Scrie alta, pentru același moment din conversație: alt conținut sau alt unghi, nu o reformulare.\nVarianta respinsă: „${x.regen}”`,
     x.followup && `## Continuare directă\n${x.followup} tocmai ți s-a adresat. Răspunde-i firesc la ultima replică, fără să repeți salutul sau ideile deja spuse.`,
     `Nu presupune prezența fizică împreună dacă scena nu o stabilește. Evită repetarea salutului și a ideilor celorlalte.`,
-    x.spect && `## Acum\n${u} doar citește. Vorbiți între voi: răspunde-le celorlalte, pe nume; lui ${u} i te adresezi rar.`,
+    x.spect && `## Acum\n${u} doar citește. Vorbiți între voi: răspunde-le celorlalte, pe nume; nu cere răspunsul lui ${u} și nu redirecționa conversația către el. Schimbă subiectul când se epuizează.`,
     `Scrie acum DOAR replica lui ${c.name}, fără „${c.name}:” în față.`
   ].filter(Boolean).join('\n\n');
 }
@@ -5719,6 +5720,7 @@ function gFindQuoted(frag, beforeIdx, gc = gchat){
 async function gSend(bomb){
   const t = $('#gInp').value.trim(); if(!t || !grp) return;
   if(!aiReady()){ toast('Adaugă cheia în Setări.'); return; }
+  if(gSpect){ if(gbusy) gbusy.abort(); gSpectStop(true); }
   $('#gInp').value = ''; $('#gInp').style.height = '';
   const m = {id:uid(), role:'user', text:t, ts:Date.now()}; if(gReply){ m.re = gReply; gReply = null; $('#gReplyBar').hidden = true; }
   if(bomb) m.bomb = true;
@@ -5731,6 +5733,8 @@ const gWait = (ms, ac, g) => S.typeReal === 'off' ? Promise.resolve() : naps(ms 
 async function gRespond(text, more, forcePhoto, x = {}){
   if(!grp || gbusy) return;
   const g = grp, gc = gchat, ms = gMembers(g); if(!ms.length){ toast('Grupul nu mai are personaje. Adaugă-le din meniul grupului (👥).', 4000); return; }
+  if(gListenOnly(text)) x={...x,spect:true};
+  const session=x.session; const budget=session?session.left:(x.spect?12:Infinity);
   const ac = new AbortController(); gbusy = ac; ac.typing = []; ac.g = g;
   if(gBusyP.know[g.id]){ ac.typing = ms.slice(0, 1); renderGroup(); await gBusyP.know[g.id].catch(() => {}); }   // 9.58: întâi află cum se cunosc
   if(!x.spect){ const pp = gPrivSync(g).catch(() => {}); if(gBusyP.priv[g.id]){ ac.typing = ms.slice(0, 1); renderGroup(); } await pp; }   // 9.61: dacă tocmai ai vorbit cu una în privat (fără schimbări: doar o citire locală)
@@ -5758,10 +5762,12 @@ async function gRespond(text, more, forcePhoto, x = {}){
     if(photo && !photo.names.length) photo.names = [photo.by];
     if(photo && photo.by && !repl.includes(photo.by)) repl.push(photo.by);
     let extraReplies=0; const followups=new Map();
-    for(let k = 0; k < repl.length; k++){
+    for(let k = 0; k < repl.length && k < budget; k++){
       const c = repl[k];
+      if(session && (gSpect!==session || session.left<=0 || document.hidden)) break;
+      if(session) session.left--;
       if(ac.signal.aborted || gc.dead) break;
-      ac.typing = [c].concat(k + 1 < repl.length && Math.random() < .35 ? [repl[k + 1]] : []); if(grp === g) renderGroup();
+      ac.typing = [c]; if(grp === g) renderGroup();
       const t0 = Date.now(); let out = '';
       const eco = gEco(k, c, text, more, x, mentioned, photo, gc);   // 9.60: amestecul și în grup
       const meta = {};   // 9.65: aflăm dacă răspunsul s-a oprit la limită (înainte: mesajul tăiat intra în grup așa, chiar la jumătatea unui cuvânt)
@@ -5772,10 +5778,10 @@ async function gRespond(text, more, forcePhoto, x = {}){
         if(ac.signal.aborted || gc.dead) break;
         const waitMs = p ? Math.min(2600, 500 + parts[p].length * 45) : Math.max(0, typeMs({text:parts[p]}) - (Date.now() - t0));
         await gWait(waitMs, ac, g);
-        if(gc.dead) break;
+        if(gc.dead || ac.signal.aborted || (session && gSpect!==session)) break;
         const msg = {id:uid(), role:'ai', cid:c.id, name:c.name, text:parts[p], ts:Date.now()}; if(p === 0 && re) msg.re = re; if(p === 0 && x.task) msg.task = x.task; if(p === 0 && x.spect) msg.spect = true; if(eco) msg.eco = true;
         push(msg); await gSave(g, gc); if(grp === g) renderGroup();
-        if(gDmPromise(g, c, parts[p])) ac.dmDone = true;   // 9.58: „îți scriu în privat” → chiar îți scrie
+        if(!x.spect && gDmPromise(g, c, parts[p])) ac.dmDone = true;   // 9.58: „îți scriu în privat” → chiar îți scrie
         if(navigator.vibrate && !document.hidden) try{ navigator.vibrate(8); }catch(e){}
       }
       if(!ac.signal.aborted && !gc.dead && !x.task && !photoAsk && giSettings(g).interaction >= 50){
@@ -5787,7 +5793,7 @@ async function gRespond(text, more, forcePhoto, x = {}){
       }
       ac.typing = [];
       if(photo && c === photo.by && !ac.signal.aborted){ ac.typing = [c]; ac.photo = true; if(grp === g) renderGroup(); await gPhoto(g, photo, ac.signal, gc).catch(e => { if(e.name !== 'AbortError') gc.msgs.push({id:uid(), role:'ai', cid:c.id, text:'', err:'Poza n-a mers: ' + (e.message || 'eroare'), ts:Date.now()}); }); ac.photo = false; ac.typing = []; await gSave(g, gc); photo = null; }
-      if(k + 1 < repl.length) await gWait(400 + Math.random() * 900, ac, g);
+      if(k + 1 < repl.length && k+1<budget) await gWait(650 + Math.random() * 1450, ac, g);
     }
     if(!ac.signal.aborted && !gc.dead){
       gc.dynN = (gc.dynN || 0) + 1;
@@ -6147,12 +6153,19 @@ function gMeEdit(g, gc, c){
   if($('#gmAuto')) $('#gmAuto').onclick = async () => { gc.me[c.id].lock = false; await gSave(g, gc); back(); toast('↺ AI-ul le poate schimba din nou'); };
 }
 /* 9.48 (14): modul spectator: te uiți cum vorbesc între ele; dai un subiect sau o „bombă” și urmărești reacțiile */
-const G_SPECT_ROUNDS = 8;
+const G_SPECT_ROUNDS = 12;
+function gListenOnly(t){return /(?:doar|numai)\s+(?:vă|va|te)?\s*(?:ascult|citesc|privesc)|povestiți între voi|vorbiți între voi/i.test(t || '');}
+function gPresenceContext(gc){
+  const now=new Date(), month=now.getMonth(), season=month===11||month<2?'iarnă':month<5?'primăvară':month<8?'vară':'toamnă';
+  const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-12);
+  const counts={}; for(const m of recent) counts[m.name]=(counts[m.name]||0)+1;
+  return `Local device time: ${now.toLocaleString('ro-RO')}; season: ${season}. Do not infer actual weather. Recent message counts: ${JSON.stringify(counts)}. Prefer relevant less-heard speakers, not forced rotation. Avoid repeating recent details; if topic is exhausted, introduce a fresh relevant topic or finish. Plans are tentative unless confirmed in dialogue.`;
+}
 function gSpectStart(g){
-  if(!g || !aiReady()) return;
+  if(!g || !aiReady() || gSpect) return;
   if(gMembers(g).length < 2){ toast('Ai nevoie de cel puțin 2 personaje în grup.'); return; }
   gSpect = {g, left:G_SPECT_ROUNDS};
-  if(gchat) gchat.msgs.push({id:uid(), role:'sys', text:'👀 Te uiți. Ele vorbesc între ele (' + G_SPECT_ROUNDS + ' runde)', ts:Date.now()});
+  if(gchat) gchat.msgs.push({id:uid(), role:'sys', text:'👀 Te uiți. Ele vorbesc între ele (' + G_SPECT_ROUNDS + ' intervenții maximum)', ts:Date.now()});
   gSave(); renderGroup(true); gSpectLoop(gSpect);
 }
 function gSpectStop(quiet){
@@ -6164,13 +6177,14 @@ async function gSpectLoop(s){
   while(gSpect === s && s.left > 0){
     if(grp !== s.g || $('#vGroup').hidden || document.hidden){ await naps(1500); if(gSpect !== s) return; if(grp !== s.g){ gSpectStop(true); return; } continue; }
     if(gbusy){ await naps(700); continue; }
-    s.left--; renderGroup();
-    await gRespond(null, true, false, {spect:true}).catch(() => {});
+    const before=s.left; renderGroup();
+    await gRespond(null, true, false, {spect:true,session:s}).catch(() => {});
+    if(s.left===before) break;
     if(gSpect !== s) return;
     await naps(S.typeReal === 'off' ? 50 : (1200 + Math.random() * 1600) * gTone(s.g).pace);
   }
   if(gSpect === s){   // 9.60: întâi mesajul de final, apoi oprirea (altfel ecranul arăta o clipă „oprit” fără mesaj)
-    if(grp === s.g && gchat){ delete gchat.subj; gchat.msgs.push({id:uid(), role:'sys', text:'👀 Pauză după ' + G_SPECT_ROUNDS + ' runde. Atinge „👀 Spectator” ca să continui.', ts:Date.now()}); }
+    if(grp === s.g && gchat){ delete gchat.subj; gchat.msgs.push({id:uid(), role:'sys', text:'👀 Pauză după ' + G_SPECT_ROUNDS + ' intervenții maximum. Atinge „👀 Spectator” ca să continui.', ts:Date.now()}); }
     gSpect = null; if(grp === s.g && gchat){ renderGroup(); await gSave(); } }
 }
 function gSubjSheet(bomb){
@@ -6183,7 +6197,7 @@ function gSubjSheet(bomb){
     const t = $('#gsTxt').value.trim(); if(!t) return; closeSheet(); if(!grp) return;
     if(bomb){ $('#gInp').value = t; await gSend(true); return; }
     gchat.subj = t.slice(0, 300); gchat.msgs.push({id:uid(), role:'sys', text:'🎬 Subiect nou: ' + t.slice(0, 160), ts:Date.now()}); await gSave(); renderGroup(true);
-    if(gSpect && gSpect.g === grp) gSpect.left = Math.max(gSpect.left, 4); else gSpectStart(grp);
+    if(!gSpect || gSpect.g !== grp) gSpectStart(grp);
   };
 }
 // (9) în chatul separat: ce s-a vorbit recent în grupurile din care face parte
