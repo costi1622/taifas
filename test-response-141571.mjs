@@ -1,0 +1,15 @@
+import fs from 'node:fs';import vm from 'node:vm';import assert from 'node:assert/strict';
+const s=fs.readFileSync(new URL('./app.js',import.meta.url),'utf8');
+const ctx=vm.createContext({S:{userName:'Costi'},stripMood:x=>x,stripReact:x=>x,faraLiniute:x=>x,RE_ANY:/NEVER/g});
+vm.runInContext(s.slice(s.indexOf('function giOwnLabel('),s.indexOf('/* 9.60: cine scrie'))+s.slice(s.indexOf('function gTrimCut('),s.indexOf('/* (5) + (6): pozele')),ctx);
+const parse=(out,stop='end_turn')=>{ctx.out=out;ctx.stop=stop;return JSON.parse(vm.runInContext(`JSON.stringify(gParse(out,{id:'a',name:'Stela Dobre'},[{id:'a',name:'Stela Dobre'},{id:'b',name:'Florica Stan'}],{}, {stop},0).parts)`,ctx));};
+assert.deepEqual(parse('Stela Dobre: Bună, Florico!'),['Bună, Florico!']);
+assert.deepEqual(parse('**Stela Dobre**: Bună!'),['Bună!']);
+assert.deepEqual(parse('Florica: Bună!'),[]);
+assert.deepEqual(parse('Bună!\nFlorica: Salut!'),['Bună!']);
+assert.deepEqual(parse(''),[]);
+assert.deepEqual(parse('[cadru: test]'),[]);
+assert.deepEqual(parse('Bună, Florico! Următoarea','max_tokens'),['Bună, Florico!']);
+assert.deepEqual(parse('Bună!\n//\nCe faci?'),['Bună!','Ce faci?']);
+assert.ok(s.includes('(s.recovery||0)>=1'));assert.ok(s.includes('session.left--;session.failure=null'));assert.ok(s.includes('Response Inspector'));
+console.log('11 assertions passed (parser helpers with metadata stubs, recovery wiring)');

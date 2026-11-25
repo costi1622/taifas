@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.15.7';
+const APP_VER = '14.15.7.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -523,7 +523,7 @@ function giFitRequest(session,payload,model,max,cache,cid){
  const remaining=session.limit-session.spent;
  const candidates=[model]; const small=modelFor(true);
  if(S.aux!=='off'&&!auxBroken&&small!==model&&(!cid||mixLvl(charById(cid))!=='off'))candidates.push(small);
- for(const m of candidates)for(const n of [...new Set([max,Math.min(max,240),Math.min(max,120)])]){
+ for(const m of candidates)for(const n of [...new Set([max,Math.min(max,320),Math.min(max,240)])]){
    if(geEstimate(payload.system,payload.messages,n,m,cache).estimate<=remaining)return {model:m,max:n};
  }
  return {model,max}; // reserve rejects without sending
@@ -537,7 +537,8 @@ function giSpeaker(ms,gc,targets=[]){
  const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-10), last=recent.at(-1)?.cid;
  return ms.filter(c=>c.id!==last).map(c=>({c,score:(targets.some(t=>t.id===c.id)?5:0)-recent.filter(m=>m.cid===c.id).length*2})).sort((a,b)=>b.score-a.score)[0]?.c||ms[0];
 }
-function giLength(session){return [220,340,160,280][Math.max(0,12-session.left)%4];}
+function giLength(session){return session.recovery?480:[320,420,280,360][Math.max(0,12-session.left)%4];}
+function giResponseSheet(){const r=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)?.response;openSheet(`<h4>Response Inspector</h4><div class="pad">${r?`<p>Personaj: ${esc(r.speaker)}</p><p>Stop: ${esc(r.stop)} · caractere: ${r.chars} · bule: ${r.parts}</p><p>${esc(r.reason)} · recuperare: ${r.retry}/1</p>`:'<p>Nicio replică diagnosticată încă.</p>'}</div>`);}
 function giContextSheet(){const t=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)||{},c=t.context;openSheet(`<h4>Context Inspector</h4><div class="pad">${c?`<p>Ultima cerere: ${esc(c.model)} · maximum ${c.max} tokeni ieșire</p><p>Prefix sistem: ${c.system} octeți · context dinamic: ${c.history} octeți</p><p>Blocuri statice: ${esc((c.blocks||[]).join(" / "))} octeți</p>`:'<p>Nu există încă o cerere de personaj în această sesiune.</p>'}<p>Cache citit: ${t.cr||0} · scris: ${t.cw||0}</p><p>Promptul master activ este păstrat integral; istoricul dinamic nu este marcat pentru cache în Spectator.</p></div>`);}
 // 14.15.5 — local, group-scoped emotional state; no extra API calls.
 const EM_BASE={joy:50,energy:65,concern:20,tension:15,warmth:65};
@@ -629,6 +630,7 @@ async function streamOnce(sys, msgs, {max = 700, signal, onText, cid, aux, meta,
       let j; try{ j = JSON.parse(d); }catch(e){ continue; }
       let piece = '';
       if(j.type === 'content_block_delta' && j.delta?.text) piece = j.delta.text;
+      else if(j.type === 'content_block_start' && j.content_block?.type === 'text') piece = j.content_block.text || '';
       else if(j.type === 'message_start' && j.message?.usage) usage = {...j.message.usage};
       else if(j.type === 'message_delta'){ if(j.usage) usage = Object.assign(usage || {}, j.usage); if(j.delta?.stop_reason) stop = j.delta.stop_reason; }
       else if(j.type === 'message_stop') ended = true;
@@ -5606,6 +5608,7 @@ function groupMenu(){
     ['🎚️', 'Tonul grupului: ' + gTone(grp).e + ' ' + gTone(grp).n, () => setTimeout(() => groupEditSheet(grp), 60)],
     gSpect && gSpect.g === grp ? ['⏹', 'Oprește modul spectator', () => gSpectStop()] : ['👀', 'Mod spectator (te uiți cum vorbesc între ele)', () => gSpectStart(grp)],
     ['💵', 'AI Economy Monitor', () => setTimeout(geSheet,60)],
+    ['🔎', 'Response Inspector', () => setTimeout(giResponseSheet,60)],
     ['🔎', 'Context Inspector', () => setTimeout(giContextSheet,60)],
     ['🧠', 'Memorie și locații grup', () => setTimeout(giPersistentSheet,60)],
     ['💗', 'Emotional Inspector', () => setTimeout(emSheet,60)],
@@ -5819,7 +5822,7 @@ function gTurn(c, g, gc = gchat, x = {}){
     `--- Acum e rândul tău. Ești ${c.name}.`,
     
     gPresenceContext(gc,!!x.session),
-    x.session && `Use ${giLength(x.session)<=220?"one concise natural message":"one or two natural messages"}. If the last exchange has resolved its question, introduce a different relevant topic from your own routine; do not force a topic change during an open question.`,
+    x.session && `Use ${giLength(x.session)<=320?"one concise natural message":"one or two natural messages"}. If the last exchange has resolved its question, introduce a different relevant topic from your own routine; do not force a topic change during an open question.`,
     x.spect && `Avoid exhausted topics and repeated wording: ${lwTopics(gc).join(", ")}. ${x.session?.recovery?"Choose a genuinely new angle or topic; do not paraphrase previous messages.":""}` ,
     emContext(gc,[c]),
     lwContext(gc,gMembers(g)),
@@ -5835,7 +5838,7 @@ function gTurn(c, g, gc = gchat, x = {}){
     x.followup && `## Continuare directă\n${x.followup} tocmai ți s-a adresat. Răspunde-i firesc la ultima replică, fără să repeți salutul sau ideile deja spuse.`,
     `Nu presupune prezența fizică împreună dacă scena nu o stabilește. Evită repetarea salutului și a ideilor celorlalte.`,
     x.spect && `## Acum\n${u} doar citește. Vorbiți între voi: răspunde-le celorlalte, pe nume; nu cere răspunsul lui ${u} și nu redirecționa conversația către el. Schimbă subiectul când se epuizează.`,
-    `Scrie acum DOAR replica lui ${c.name}, fără „${c.name}:” în față.`
+    `Scrie acum DOAR replica lui ${c.name}, fără „${c.name}:” în față. ${x.session?"Text simplu, fără JSON, fără explicații sau etichete de vorbitor.":""}`
   ].filter(Boolean).join('\n\n');
 }
 // ce primește un personaj, întreg (pentru teste și depanare)
@@ -5915,7 +5918,8 @@ async function gRespond(text, more, forcePhoto, x = {}){
       catch(e){ if(geStopError(e)){throw e;} if(e.name === 'AbortError') break; if(session){session.failure='eroare furnizor';session.fatal=true;break;} push({id:uid(), role:'ai', cid:c.id, name:c.name, text:'', err:e.message || 'Eroare', ts:Date.now()}); break; }   // 9.57: și eroarea apare la necitite
       const {parts, re} = gParse(out, c, ms, gc, meta, gc.msgs.length);
       if(session) session.pending=null;
-      if(session && !parts.length){session.failure="răspuns gol sau eliminat de parser";session.failedCid=c.id;continue;}
+      if(session){session.stats.response={speaker:c.name,stop:meta.stop||'necunoscut',chars:String(out||'').length,parts:parts.length,reason:!String(out||'').trim()?'răspuns gol':!parts.length?'parser fără text utilizabil':'text acceptat',retry:session.recovery||0};}
+      if(session && !parts.length){session.failure=session.stats.response.reason+' ('+session.stats.response.stop+')';session.failedCid=c.id;break;}
       if(x.spect && geDuplicate(parts.join(" "),gc)){gc.giTrace={...gc.giTrace,duplicate:c.name};if(session){session.failure="replică repetitivă";session.failedCid=c.id;}continue;}
       for(let p = 0; p < parts.length; p++){
         if(ac.signal.aborted || gc.dead) break;
@@ -5954,11 +5958,17 @@ async function gRespond(text, more, forcePhoto, x = {}){
   }
 }
 // 9.82: textul primit → bulele (comun pentru răspuns și pentru „↻ Alt mesaj”)
+function giOwnLabel(tx,c){
+  const names=[c.name,c.name.split(' ')[0]].sort((a,b)=>b.length-a.length);
+  for(const name of names){const prefix=tx.match(/^\s*\*{0,2}([^:\n]+?)\*{0,2}\s*:\s*/);if(prefix&&prefix[1].trim().toLowerCase()===name.toLowerCase())return tx.slice(prefix[0].length).trim();}
+  return tx;
+}
 function gParse(out, c, ms, gc, meta, at){
   let tx = faraLiniute(stripMood(stripReact(String(out || '').replace(RE_ANY, '⟦RE⟧$1⟦/RE⟧'))));
   let re = null; tx = tx.replace(/⟦RE⟧([^⟦]*)⟦\/RE⟧\s*/, (a, f) => { re = gFindQuoted(f, at, gc); return ''; });
   tx = tx.replace(/⟦\/?RE⟧/g, '').replace(/\[[^\]\n]{1,80}\]/g, '').trim();
   const nmRe = new RegExp('^\\*?\\*?(?:' + c.name.split(' ')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')\\*?\\*?\\s*:\\s*', 'i');   // 9.57: numele escapat (un nume cu „(” sau „+” arunca eroare și oprea runda)
+  tx = giOwnLabel(tx,c);
   tx = gNoOthers(tx, c, ms);   // 9.65: dacă AI-ul a început să scrie și replicile altora („Nkechi: …”), ne oprim acolo
   let parts = tx.split(/\n\s*\/\/\s*\n|\n\s*\/\/\s*$|^\s*\/\/\s*\n/).map(x => x.replace(nmRe, '').trim()).filter(Boolean);
   const cutOff = meta.stop && meta.stop !== 'end_turn' && meta.stop !== 'stop_sequence';
@@ -6000,8 +6010,8 @@ function gNoOthers(tx, c, ms){
   const names = ms.filter(o => o.id !== c.id).flatMap(o => [o.name, o.name.split(' ')[0]]).concat([S.userName.trim()].filter(Boolean))
     .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   if(!names.length) return tx;
-  const re = new RegExp('\\n\\s*\\**\\s*(?:' + names.join('|') + ')\\s*\\**\\s*:', 'i'), k = tx.search(re);
-  return k > 0 ? tx.slice(0, k).trim() : tx;
+  const re = new RegExp('(?:^|\\n)\\s*\\**\\s*(?:' + names.join('|') + ')\\s*\\**\\s*:', 'i'), k = tx.search(re);
+  return k >= 0 ? tx.slice(0, k).trim() : tx;
 }
 /* (5) + (6): pozele în grup: selfie de la una din ele sau poză cu mai multe (fețele tuturor ca repere) */
 async function gPhotoShot(g, people, gc = gchat){
@@ -6332,7 +6342,7 @@ async function gSpectLoop(s){
     const before=s.left; renderGroup();
     await gRespond(null, true, false, {spect:true,session:s}).catch(e => {s.failure=String(e?.message||e);s.fatal=true;});
     if(gSpect!==s)return;
-    if(s.left===before){if(s.fatal || (s.recovery||0)>=2)break;s.recovery=(s.recovery||0)+1;await naps(800);continue;}
+    if(s.left===before){if(s.fatal || (s.recovery||0)>=1)break;s.recovery=(s.recovery||0)+1;await naps(800);continue;}
     s.recovery=0;
     if(gSpect !== s) return;
     await naps(S.typeReal === 'off' ? 50 : (1200 + Math.random() * 1600) * gTone(s.g).pace);
