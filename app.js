@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.15.4';
+const APP_VER = '14.15.5';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -497,6 +497,33 @@ function gePause(g,gc,session,e){
   if(session){ gc.giCheckpoint={left:session.left,spent:session.spent,stats:{...session.stats},reason,ts:Date.now(),pending:session.pending||null}; session.reason=reason; gc.economyLast={...session.stats,spent:session.spent,left:session.left,reason,ts:Date.now()}; if(gSpect===session) gSpect=null; }
   gc.msgs.push({id:uid(),role:'sys',text:'⏸ '+reason+'. Conversația este salvată. Repornește Spectator pentru a continua.',ts:Date.now()});
 }
+// 14.15.5 — local, group-scoped emotional state; no extra API calls.
+const EM_BASE={joy:50,energy:65,concern:20,tension:15,warmth:65};
+const EM_LABEL={joy:'Veselie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'};
+function emRead(gc,id,now=Date.now()){
+  const old=gc.emotional?.states?.[id], elapsed=Math.max(0,now-(old?.ts||now)), factor=Math.pow(.5,elapsed/21600000);
+  return Object.fromEntries(Object.entries(EM_BASE).map(([k,b])=>[k,Math.round(b+(Math.max(0,Math.min(100,Number(old?.[k]??b)||0))-b)*factor)]));
+}
+function emSignals(text){const t=pnorm(String(text||''));const d={};
+  if(/\b(bucur|fericit|minunat|ras|haha|vesel|bravo)\w*/.test(t))d.joy=12;
+  if(/\b(obosit|obosita|somn|epuizat)\w*/.test(t))d.energy=-15;
+  if(/\b(grija|ingrijorat|bolnav|trist|necaz|problema)\w*/.test(t))d.concern=14;
+  if(/\b(suparat|cearta|nervos|enervat)\w*/.test(t))d.tension=12;
+  if(/\b(multumesc|drag|iubesc|dor|imbratis)\w*/.test(t))d.warmth=10;
+  return d;
+}
+function emApply(gc,id,d,scale,now){const st=emRead(gc,id,now);for(const [k,v] of Object.entries(d))st[k]=Math.max(0,Math.min(100,Math.round(st[k]+v*scale)));gc.emotional.states[id]={...st,ts:now};}
+function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
+  const e=gc.emotional||(gc.emotional={states:{},memory:[],candidates:[],seen:[]}); if(e.seen.includes(msg.id))return;
+  e.seen.push(msg.id);e.seen=e.seen.slice(-150);const now=msg.ts||Date.now(),d=emSignals(msg.text);
+  const speaker=ms.find(c=>c.id===msg.cid), targets=speaker?gAddressTargets([msg.text],speaker,ms,g):gMentioned(msg.text,ms,true);
+  if(Object.keys(d).length){for(const c of ms){const scale=c===speaker?1:targets.includes(c)?0.65:msg.role==='user'&&!targets.length?.45:.2;emApply(gc,c.id,d,scale,now);}
+    e.memory.push({id:msg.id,ts:now,author:msg.role==='user'?'Tu':msg.name,signals:Object.keys(d)});e.memory=e.memory.slice(-30);}
+  if(/\b(maine|poimaine|luni|marti|miercuri|joi|vineri|sambata|duminica)\b/.test(pnorm(msg.text))&&/\b(vin|merg|trec|plec|ne vedem|intalnim|vizita)\w*/.test(pnorm(msg.text))){e.candidates.push({id:msg.id,ts:now,text:String(msg.text).slice(0,240)});e.candidates=e.candidates.slice(-20);}
+}
+function emContext(gc,ms){return 'Temporary local mood estimates (not facts or personality changes): '+ms.map(c=>c.name+': '+Object.entries(emRead(gc,c.id)).map(([k,v])=>k+' '+v).join(', ')).join('; ')+'. Use only as subtle tone cues and optional speaker relevance; direct addresses, autonomy and current dialogue take priority. Never mention scores.';}
+function emSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const e=gc.emotional||{};openSheet(`<h4>Emotional Inspector</h4><div class="pad"><p>Estimări locale, nu emoții reale. Revenire la bază: timp de înjumătățire 6 ore.</p>${gMembers(g).map(c=>`<p><b>${esc(c.name)}</b><br>${Object.entries(emRead(gc,c.id)).map(([k,v])=>`${EM_LABEL[k]}: ${v}/100`).join(' · ')}</p>`).join('')}<h4>Semnale recente</h4>${(e.memory||[]).slice(-8).reverse().map(m=>`<p>${esc(m.author||'')}: ${esc(m.signals.map(k=>EM_LABEL[k]).join(', '))}</p>`).join('')||'—'}<h4>Planuri detectate (neconfirmate)</h4>${(e.candidates||[]).map((m,i)=>`<p>${esc(m.text)} <button class="btn" data-em-confirm="${i}">Confirmă ca plan</button></p>`).join('')||'—'}<button class="btn" id="emReset">Resetează stările emoționale</button></div>`);document.querySelectorAll('[data-em-confirm]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const i=Number(b.dataset.emConfirm),m=e.candidates[i];if(!m)return;gc.giEvents=[...(gc.giEvents||[]), 'PLAN: '+m.text].slice(-20);e.candidates.splice(i,1);await gSave(g,gc);emSheet();});$('#emReset').onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;if(gc.emotional)gc.emotional.states={};await gSave(g,gc);emSheet();};}
+
 function giPersistent(gc){return {events:(gc.giEvents||[]).slice(-20),locations:gc.giLocations||{}};}
 function giPersistentSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const state=giPersistent(gc);openSheet(`<h4>Memorie persistentă · grup</h4><div class="pad"><p>Evenimente confirmate sau planificate (unul pe rând; prefix FINALIZAT: pentru evenimente încheiate)</p><textarea id="giEvents" rows="6">${esc(state.events.join('\n'))}</textarea><p>Locații confirmate (nume: locație; una pe rând). Necunoscut dacă lipsește.</p><textarea id="giLoc" rows="6">${esc(Object.entries(state.locations).map(([k,v])=>k+': '+v).join('\n'))}</textarea><button class="btn pri" id="giSave">Salvează</button></div>`);$('#giSave').onclick=async()=>{gc.giEvents=$('#giEvents').value.split('\n').map(x=>x.trim().slice(0,300)).filter(Boolean).slice(-20);gc.giLocations=Object.fromEntries($('#giLoc').value.split('\n').filter(x=>x.includes(':')).slice(0,30).map(x=>[x.split(':')[0].trim().slice(0,80),x.slice(x.indexOf(':')+1).trim().slice(0,150)]));await gSave(g,gc);closeSheet();};}
 function giInspector(){const gc=gchat;if(!gc)return;openSheet(`<h4>Group Intelligence Inspector</h4><div class="pad"><p>Ultima selecție: ${esc((gc.giTrace?.selected||[]).join(', ')||'—')}</p><p>Sursă: ${esc(gc.giTrace?.source||'—')}</p><p>Repetiție respinsă: ${esc(gc.giTrace?.duplicate||'—')}</p><p>Checkpoint: ${gc.giCheckpoint?gc.giCheckpoint.left+' intervenții rămase':'—'}</p><p>Evenimente: ${(gc.giEvents||[]).length}</p></div>`);}
@@ -5515,6 +5542,7 @@ function groupMenu(){
     gSpect && gSpect.g === grp ? ['⏹', 'Oprește modul spectator', () => gSpectStop()] : ['👀', 'Mod spectator (te uiți cum vorbesc între ele)', () => gSpectStart(grp)],
     ['💵', 'AI Economy Monitor', () => setTimeout(geSheet,60)],
     ['🧠', 'Memorie și locații grup', () => setTimeout(giPersistentSheet,60)],
+    ['💗', 'Emotional Inspector', () => setTimeout(emSheet,60)],
     ['🔎', 'Group Intelligence Inspector', () => setTimeout(giInspector,60)],
     ['🧹', 'Curăță erorile vechi de credit', () => setTimeout(giCleanErrors,60)],
     ['▶', 'Reia sesiunea întreruptă', () => gSpectStart(grp,true)],
@@ -5635,7 +5663,7 @@ async function gDirector(g, ms, more, mentioned, photoAsk, toAll, gc = gchat, x 
     const out = await stream('You direct a realistic group chat between a user and several characters. Answer with JSON only.', [{role:'user', text:
 `Group "${g.name}"${g.topic ? ' (' + g.topic + ')' : ''}. Characters: ${ms.map(c => c.name + (c.tag ? ' (' + c.tag + ')' : '')).join('; ')}.
 ${gc.dyn ? 'Group dynamic (Romanian): ' + gc.dyn + '\n' : ''}${rels ? 'Relationships between them (Romanian): ' + rels + '\n' : ''}Toward ${u}: ${gMeLines(gc, ms)}. Characters who care more answer ${u} more often and more warmly; when ${u} asks for help or has a problem, the ones with high "helps" reply first with concrete help, low ones may only react or stay silent.
-Group tone: ${T.dir}.\n${giPrompt(g)}\n${gPresenceContext(gc)}
+Group tone: ${T.dir}.\n${giPrompt(g)}\n${gPresenceContext(gc)}\n${emContext(gc,ms)}
 ${(gc.rules || []).length ? 'Group rules set by ' + u + ' (Romanian), everyone follows them: ' + gc.rules.map(r => r.t).join('; ') + '\n' : ''}${lead ? `${u} LEADS this group. If ${u}'s last message asks the group or someone to DO something now (a task, a game, a round where each answers, a question for everyone, "each of you…", "Ana, sing…"), set "task" (Romanian, short and concrete: what exactly to do) and "who" ("all" or the names asked); everyone in "who" replies and does it, no refusing or dodging. If ${u} sets a standing rule for the group from now on ("from now on…", "no more…", "everyone always…"), set "rule" (Romanian, short). If ${u} cancels a rule, set "unrule" with that rule. Otherwise leave them null.\n` : ''}${gc.subj ? 'New topic set for the group (Romanian), they get into it naturally: ' + gc.subj + '\n' : ''}Recent messages:
 ${recent}
 ${x.spect ? 'The user is only watching silently now: the characters talk among themselves (answer each other, not the user); 1-' + T.max + ' replies.' : more ? 'The user wants the characters to keep talking among themselves now.' : 'The last message is from ' + u + '.'}${x.bomb ? ' The user just dropped big news: almost everyone reacts, most of them with text.' : ''}${mentioned.length ? ' The user addressed: ' + mentioned.map(c => c.name).join(', ') + ' (they reply first).' : ''}${toAll ? ' The user addressed everyone: most of them react (reply or emoji), but not necessarily all with text.' : ''}${photoAsk ? ' The user asked for a photo: decide who sends it ("photo": the names of who must be IN the photo, and "by": who sends it; a photo of several of them together is fine).' : ''}
@@ -5721,6 +5749,7 @@ function gTurn(c, g, gc = gchat, x = {}){
   return [
     `--- Acum e rândul tău. Ești ${c.name}.`,
     gPresenceContext(gc),
+    emContext(gc,[c]),
     `## Tu și celelalte, acum\n${rels || '-'}`,
     `## Ce simți pentru ${u}, aici\n${gCareWord(m.care)} (${m.care}/100).${m.why ? ' De ce: ' + m.why + '.' : ''}\nCât îl ajuți: ${gHelpWord(m.help)} (${m.help}/100). Când ${u} cere ajutor sau are o problemă, asta decide cât de repede și cât de concret sari (sau nu). Arată asta prin fapte și ton, nu spunând cifrele.`,
     pn && (pn.mood || pn.carry || (pn.others || []).length || (pn.secrets || []).length) && `## Din discuțiile tale private cu ${u} (doar tu știi asta)\n${pn.mood ? 'Cum ești acum cu el: ' + pn.mood + '\n' : ''}${(pn.others || []).length ? 'Ce i-ai zis în privat despre celelalte: ' + pn.others.map(o => o.name + ': ' + o.t).join('; ') + '\n' : ''}${pn.carry ? 'Poți face aluzie firesc, fără să explici: ' + pn.carry + '\n' : ''}${(pn.secrets || []).length ? 'NU spui în grup și nu lași să se înțeleagă: ' + pn.secrets.join('; ') + '\n' : ''}Se simte în ton și în cum îi răspunzi (mai caldă, mai rece, complice), nu povestești conversația privată.`,
@@ -5757,7 +5786,7 @@ async function gSend(bomb){
   $('#gInp').value = ''; $('#gInp').style.height = '';
   const m = {id:uid(), role:'user', text:t, ts:Date.now()}; if(gReply){ m.re = gReply; gReply = null; $('#gReplyBar').hidden = true; }
   if(bomb) m.bomb = true;
-  gchat.msgs.push(m); await gSave(); renderGroup(true);
+  gchat.msgs.push(m); emObserve(gchat,m,gMembers(grp),grp); await gSave(); renderGroup(true);
   // 9.48: dacă încă scriu, mesajul tău intră la coadă și primește răspuns imediat după (înainte se pierdea)
   if(gbusy){ const prev=gbusy.again; gbusy.again = {text:prev && prev.g===grp ? prev.text+'\n'+t : t, bomb:!!bomb || !!prev?.bomb, g:grp, gc:gchat}; return; }
   await gRespond(t, false, false, {bomb:!!bomb});
@@ -5817,7 +5846,7 @@ async function gRespond(text, more, forcePhoto, x = {}){
         await gWait(waitMs, ac, g);
         if(gc.dead || ac.signal.aborted || (session && gSpect!==session)) break;
         const msg = {id:uid(), role:'ai', cid:c.id, name:c.name, text:parts[p], ts:Date.now()}; if(p === 0 && re) msg.re = re; if(p === 0 && x.task) msg.task = x.task; if(p === 0 && x.spect) msg.spect = true; if(eco) msg.eco = true;
-        push(msg); await gSave(g, gc); if(grp === g) renderGroup();
+        push(msg); emObserve(gc,msg,ms,g); await gSave(g, gc); if(grp === g) renderGroup();
         if(!x.spect && gDmPromise(g, c, parts[p])) ac.dmDone = true;   // 9.58: „îți scriu în privat” → chiar îți scrie
         if(navigator.vibrate && !document.hidden) try{ navigator.vibrate(8); }catch(e){}
       }
