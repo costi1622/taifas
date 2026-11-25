@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.15.8.1';
+const APP_VER = '14.15.8.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -534,21 +534,23 @@ function giMemory(gc){
  return {locations:all.locations,events:ranked.sort((a,b)=>b.score-a.score||b.i-a.i).slice(0,8).sort((a,b)=>a.i-b.i).map(x=>x.text)};
 }
 function giSpeaker(ms,gc,targets=[]){
- const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-10), last=recent.at(-1)?.cid;
+ const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-18), last=recent.at(-1)?.cid;
  return ms.filter(c=>c.id!==last).map(c=>({c,score:(targets.some(t=>t.id===c.id)?5:0)-recent.filter(m=>m.cid===c.id).length*2})).sort((a,b)=>b.score-a.score)[0]?.c||ms[0];
 }
-function giLength(session){return session.recovery?2400:[1200,1400,1200,1400][Math.max(0,12-session.left)%4];}
+function giLength(session){return session.recovery?2400:[1400,1600,1800,1600][Math.max(0,12-session.left)%4];}
 function giCompleteParts(parts){
  return parts.map(t=>{const m=[...t.matchAll(/(?:[!?]|(?<!\.)\.(?!\.))[”"»)]*(?=\s|$)/g)];return m.length?t.slice(0,m.at(-1).index+m.at(-1)[0].length).trim():'';}).filter(Boolean);
 }
-function giThinking(payload){delete payload.thinking;} // provider default; no unverified optional parameters
+function giThinking(payload){delete payload.thinking;} // retain provider compatibility
+function giRecordResponse(session){const r=session.stats.response;if(r)session.stats.responseHistory=[...(session.stats.responseHistory||[]),{...r,ts:Date.now()}].slice(-40);}
+function giBubbleParts(text){return String(text).split(/(?<![:/])\/\/(?![/])/).map(x=>x.trim()).filter(Boolean);}
 function giProviderKind(e){const n=e?.http;return geCredit(e)||n===402?'credit':n===401||n===403?'autentificare':n===400||n===404||n===422?'compatibilitate / cerere invalidă':n===429?'limită furnizor':n>=500?'server furnizor':'transport / flux';}
-function giProviderDiag(session,e,c,meta={}){const reason=giProviderKind(e);session.stats.response={speaker:c?.name||'Regizor',model:meta.model||session.stats.next?.model,max:meta.max||session.stats.next?.max,stop:'provider_error',chars:0,parts:0,reason,retry:session.recovery||0,http:e.http||null,detail:String(e.message||e).replace(/(?:sk-ant-|Bearer\s+)[\w.-]+/gi,'[redactat]').slice(0,600)};return reason;}
+function giProviderDiag(session,e,c,meta={}){const reason=giProviderKind(e);session.stats.response={speaker:c?.name||'Regizor',model:meta.model||session.stats.next?.model,max:meta.max||session.stats.next?.max,stop:'provider_error',chars:0,parts:0,reason,retry:session.recovery||0,http:e.http||null,detail:String(e.message||e).replace(/(?:sk-ant-|Bearer\s+)[\w.-]+/gi,'[redactat]').slice(0,600)};giRecordResponse(session);return reason;}
 
 function giSnapshot(gc,s){gc.economyLast={...s.stats,spent:s.spent,left:s.left,sessionId:s.id,reason:s.reason||'',ts:Date.now()};}
 function giAccount(s,usage,model,reservation,cid,ended,full){const a=s.stats;const complete=ended&&Number.isFinite(usage?.output_tokens)&&Number.isFinite(usage?.input_tokens);const cost=complete?geCost(usage,model):Math.max(reservation,usage?geCost(usage,model):0);s.spent+=cost;const key=cid?'personaj:'+cid:'regizor';a.breakdown={...a.breakdown};const row=a.breakdown[key]||{cost:0,calls:0};a.breakdown[key]={cost:row.cost+cost,calls:row.calls+1};a.calls++;if(!String(full||'').trim())a.empty=(a.empty||0)+1;if(!complete)a.uncertain=(a.uncertain||0)+1;for(const [k,v] of Object.entries({inp:usage?.input_tokens,out:usage?.output_tokens,cw:usage?.cache_creation_input_tokens,cr:usage?.cache_read_input_tokens}))a[k]=(a[k]||0)+(v||0);}
 
-function giResponseSheet(){const r=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)?.response;openSheet(`<h4>Response Inspector</h4><div class="pad">${r?`<p>Personaj: ${esc(r.speaker)}</p><p>Stop: ${esc(r.stop)} · caractere: ${r.chars} · bule: ${r.parts}</p><p>Model: ${esc(r.model||"—")} · limită: ${r.max||"—"} · ieșire: ${r.output??"—"}</p><p>Blocuri: ${esc((r.blocks||[]).join(", ")||"—")}</p><p>${esc(r.reason)} · recuperare: ${r.retry}/1</p>${r.detail?`<p>HTTP: ${r.http||'—'}</p><p>${esc(r.detail)}</p>`:''}`:'<p>Nicio replică diagnosticată încă.</p>'}</div>`);}
+function giResponseSheet(){const stats=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)||{},r=stats.response;openSheet(`<h4>Response Inspector</h4><div class="pad">${r?`<p>Personaj: ${esc(r.speaker)}</p><p>Stop: ${esc(r.stop)} · caractere: ${r.chars} · bule: ${r.parts}</p><p>Model: ${esc(r.model||"—")} · limită: ${r.max||"—"} · ieșire: ${r.output??"—"}</p><p>Blocuri: ${esc((r.blocks||[]).join(", ")||"—")}</p><p>${esc(r.reason)} · recuperare: ${r.retry}/1</p>${r.detail?`<p>HTTP: ${r.http||'—'}</p><p>${esc(r.detail)}</p>`:''}`:'<p>Nicio replică diagnosticată încă.</p>'}<h4>Istoric diagnostic (maximum 40)</h4>${(stats.responseHistory||[]).slice().reverse().map(v=>`<p>${esc(v.speaker)} · ${esc(v.stop)} · ${esc(v.reason)}<br>${esc(v.model||'—')} · ${v.output??'—'}/${v.max??'—'} · ${v.chars||0} caractere · recuperare ${v.retry||0}<br>${esc((v.blocks||[]).join(', '))}</p>`).join('')||'—'}</div>`);}
 function giContextSheet(){const t=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)||{},c=t.context;openSheet(`<h4>Context Inspector</h4><div class="pad">${c?`<p>Ultima cerere: ${esc(c.model)} · maximum ${c.max} tokeni ieșire</p><p>Prefix sistem: ${c.system} octeți · context dinamic: ${c.history} octeți</p><p>Blocuri statice: ${esc((c.blocks||[]).join(" / "))} octeți</p>`:'<p>Nu există încă o cerere de personaj în această sesiune.</p>'}<p>Cache citit: ${t.cr||0} · scris: ${t.cw||0}</p><p>Promptul master activ este păstrat integral; istoricul dinamic nu este marcat pentru cache în Spectator.</p></div>`);}
 // 14.15.5 — local, group-scoped emotional state; no extra API calls.
 const EM_BASE={joy:50,energy:65,concern:20,tension:15,warmth:65};
@@ -608,7 +610,7 @@ function life8Context(gc,now=Date.now()){
  const topics=Object.entries(a.topics).filter(([w,v])=>v.n>=4&&now-v.ts<86400000).sort((x,y)=>y[1].n-x[1].n).slice(0,5).map(([w])=>w);
  return 'Group-only recalled statements (not verified facts): '+JSON.stringify(episodes)+'. Plans: '+JSON.stringify(plans)+'. Proposed plans are not commitments; never assume attendance or completion. Repeated words, avoid only if topic exhausted: '+topics.join(', ')+'.';
 }
-function life8Sheet(){const g=grp,gc=gchat;if(!g||!gc)return;const a=life8State(gc);openSheet(`<h4>Memorie pe termen lung</h4><div class="pad"><p>Amintiri din grup, nu din conversații private. Planurile sunt propuneri până la confirmare. Categorii locale, fără cereri API.</p><h4>Planuri</h4>${a.plans.slice(-20).reverse().map(p=>`<p><b>${esc(p.author||'')}</b> · ${esc(p.status)}<br>${esc(p.text)}<br>${p.due?esc(new Date(p.due).toLocaleDateString('ro-RO')):''}<br>${['confirmat','finalizat','anulat'].map(v=>`<button class="btn" data-life8-id="${esc(p.id)}" data-life8-status="${v}">${v}</button>`).join(' ')}</p>`).join('')||'—'}<h4>Amintiri recente (${a.episodes.length})</h4>${a.episodes.slice(-15).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.author||'')}<br>${esc(e.text)}</p>`).join('')||'—'}</div>`);document.querySelectorAll('[data-life8-id]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const p=a.plans.find(x=>x.id===b.dataset.life8Id);if(p){p.status=b.dataset.life8Status;await gSave(g,gc);life8Sheet();}});}
+function life8Sheet(){const g=grp,gc=gchat;if(!g||!gc)return;const a=life8State(gc);openSheet(`<h4>Memorie pe termen lung</h4><div class="pad"><p>Amintiri din grup, nu din conversații private. Planurile sunt propuneri până la confirmare. Categorii locale, fără cereri API.</p><h4>Planuri</h4>${a.plans.slice(-20).reverse().map(p=>`<p><b>${esc(p.author||'')}</b> · ${esc(p.status)}<br>${esc(p.text)}<br>${p.due?esc(new Date(p.due).toLocaleDateString('ro-RO')):''}<br>${['confirmat','finalizat','anulat'].map(v=>`<button class="btn" data-life8-id="${esc(p.id)}" data-life8-status="${v}">${v}</button>`).join(' ')}</p>`).join('')||'—'}<h4>Amintiri recente (${a.episodes.length})</h4><label>Personaj <select id="life82Author"><option value="">Toți</option>${[...new Set(a.episodes.map(e=>e.author||''))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><label>Categorie <select id="life82Category"><option value="">Toate</option>${[...new Set(a.episodes.map(e=>life81Category(e.text)))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><div id="life82Rows"></div></div>`);const draw=()=>{const author=$('#life82Author').value,cat=$('#life82Category').value;$('#life82Rows').innerHTML=a.episodes.filter(e=>(!author||e.author===author)&&(!cat||life81Category(e.text)===cat)).slice(-50).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.author||'')} · ${esc(life81Category(e.text))} · importanță ${life81Importance(e.text)}<br>${esc(e.text)}</p>`).join('')||'—';};$('#life82Author').onchange=draw;$('#life82Category').onchange=draw;draw();document.querySelectorAll('[data-life8-id]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const p=a.plans.find(x=>x.id===b.dataset.life8Id);if(p){p.status=b.dataset.life8Status;await gSave(g,gc);life8Sheet();}});}
 
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
@@ -5966,7 +5968,7 @@ async function gRespond(text, more, forcePhoto, x = {}){
       let {parts, re} = gParse(out, c, ms, gc, meta, gc.msgs.length);
       if(session && meta.stop && !["end_turn","stop_sequence"].includes(meta.stop)) parts=giCompleteParts(parts);
       if(session) session.pending=null;
-      if(session){session.stats.response={speaker:c.name,model:meta.model,max:meta.max,blocks:meta.blocks,output:meta.output,stop:meta.stop||'necunoscut',chars:String(out||'').length,parts:parts.length,reason:!String(out||'').trim()?'răspuns gol':!parts.length?'parser fără text utilizabil':'text acceptat',retry:session.recovery||0};}
+      if(session){session.stats.response={speaker:c.name,model:meta.model,max:meta.max,blocks:meta.blocks,output:meta.output,stop:meta.stop||'necunoscut',chars:String(out||'').length,parts:parts.length,reason:!String(out||'').trim()?'răspuns gol':!parts.length?'parser fără text utilizabil':'text acceptat',retry:session.recovery||0};giRecordResponse(session);}
       if(session && !parts.length){session.failure=session.stats.response.reason+' ('+session.stats.response.stop+')';session.failedCid=c.id;break;}
       if(x.spect && geDuplicate(parts.join(" "),gc)){gc.giTrace={...gc.giTrace,duplicate:c.name};if(session){session.failure="replică repetitivă";session.failedCid=c.id;}continue;}
       for(let p = 0; p < parts.length; p++){
@@ -6018,7 +6020,7 @@ function gParse(out, c, ms, gc, meta, at){
   const nmRe = new RegExp('^\\*?\\*?(?:' + c.name.split(' ')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')\\*?\\*?\\s*:\\s*', 'i');   // 9.57: numele escapat (un nume cu „(” sau „+” arunca eroare și oprea runda)
   tx = giOwnLabel(tx,c);
   tx = gNoOthers(tx, c, ms);   // 9.65: dacă AI-ul a început să scrie și replicile altora („Nkechi: …”), ne oprim acolo
-  let parts = tx.split(/\n\s*\/\/\s*\n|\n\s*\/\/\s*$|^\s*\/\/\s*\n/).map(x => x.replace(nmRe, '').trim()).filter(Boolean);
+  let parts = giBubbleParts(tx).map(x => x.replace(nmRe, '').trim()).filter(Boolean);
   const cutOff = meta.stop && meta.stop !== 'end_turn' && meta.stop !== 'stop_sequence';
   if(parts.length > 3) parts = parts.slice(0, 3);
   if(cutOff) parts = gTrimCut(parts);   // 9.65: oprit la limită / conexiune căzută: fără propoziții tăiate
