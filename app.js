@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.15.6.1';
+const APP_VER = '14.15.7';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -512,6 +512,33 @@ function gePause(g,gc,session,e){
   if(session){ gc.giCheckpoint={left:session.left,spent:session.spent,stats:{...session.stats},reason,ts:Date.now(),pending:session.pending||null}; session.reason=reason; gc.economyLast={...session.stats,spent:session.spent,left:session.left,reason,ts:Date.now()}; if(gSpect===session) gSpect=null; }
   geNotice(gc,'⏸ '+reason+'. Conversația este salvată. '+(geCredit(e)?'Alimentează creditul și reia sesiunea.':'Verifică estimarea în AI Economy Monitor sau pornește o sesiune nouă.'));
 }
+// 14.15.7: conservative budget fitting; no extra network calls.
+function giStaticBlocks(sys,cache){
+ const cut=sys.indexOf('\n\n## '), cc=cache?{cache_control:{type:'ephemeral'}}:{};
+ if(cut<0)return [{type:'text',text:sys,...cc}];
+ return [{type:'text',text:sys.slice(0,cut),...cc},{type:'text',text:sys.slice(cut),...cc}];
+}
+function giBytes(v){return new TextEncoder().encode(JSON.stringify(v)).length;}
+function giFitRequest(session,payload,model,max,cache,cid){
+ const remaining=session.limit-session.spent;
+ const candidates=[model]; const small=modelFor(true);
+ if(S.aux!=='off'&&!auxBroken&&small!==model&&(!cid||mixLvl(charById(cid))!=='off'))candidates.push(small);
+ for(const m of candidates)for(const n of [...new Set([max,Math.min(max,240),Math.min(max,120)])]){
+   if(geEstimate(payload.system,payload.messages,n,m,cache).estimate<=remaining)return {model:m,max:n};
+ }
+ return {model,max}; // reserve rejects without sending
+}
+function giMemory(gc){
+ const all=giPersistent(gc), recent=gc.msgs.filter(m=>!m.err&&m.role!=='sys').slice(-8).map(m=>m.text).join(' '), words=geWords(recent);
+ const ranked=all.events.map((text,i)=>({text,i,score:[...geWords(text)].filter(w=>words.has(w)).length}));
+ return {locations:all.locations,events:ranked.sort((a,b)=>b.score-a.score||b.i-a.i).slice(0,8).sort((a,b)=>a.i-b.i).map(x=>x.text)};
+}
+function giSpeaker(ms,gc,targets=[]){
+ const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-10), last=recent.at(-1)?.cid;
+ return ms.filter(c=>c.id!==last).map(c=>({c,score:(targets.some(t=>t.id===c.id)?5:0)-recent.filter(m=>m.cid===c.id).length*2})).sort((a,b)=>b.score-a.score)[0]?.c||ms[0];
+}
+function giLength(session){return [220,340,160,280][Math.max(0,12-session.left)%4];}
+function giContextSheet(){const t=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)||{},c=t.context;openSheet(`<h4>Context Inspector</h4><div class="pad">${c?`<p>Ultima cerere: ${esc(c.model)} · maximum ${c.max} tokeni ieșire</p><p>Prefix sistem: ${c.system} octeți · context dinamic: ${c.history} octeți</p><p>Blocuri statice: ${esc((c.blocks||[]).join(" / "))} octeți</p>`:'<p>Nu există încă o cerere de personaj în această sesiune.</p>'}<p>Cache citit: ${t.cr||0} · scris: ${t.cw||0}</p><p>Promptul master activ este păstrat integral; istoricul dinamic nu este marcat pentru cache în Spectator.</p></div>`);}
 // 14.15.5 — local, group-scoped emotional state; no extra API calls.
 const EM_BASE={joy:50,energy:65,concern:20,tension:15,warmth:65};
 const EM_LABEL={joy:'Veselie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'};
@@ -524,7 +551,7 @@ const LW_ROUTINES={stela:['Cafea și găini','Pregătește mâncarea','Îngrije�
 function lwSnapshot(gc,ms,now=Date.now()){
  const d=new Date(now),day=[d.getFullYear(),d.getMonth()+1,d.getDate()].join('-'),h=d.getHours(),slot=Math.floor(h/2),season=d.getMonth()===11||d.getMonth()<2?'iarnă':d.getMonth()<5?'primăvară':d.getMonth()<8?'vară':'toamnă';
  const rows=ms.map(c=>{const k=lwKey(c),n=lwHash(day+c.id+slot),home=k==='roxana'?'Gospodăria Floricăi':'Acasă', routine=LW_ROUTINES[k]||['Treburi în casă','Cumpărături','Timp personal','Relaxare'];let activity=h<6||h>=23?'Odihnă':h>=12&&h<14?'Prânz și pauză':routine[(Math.floor(h/3)+n%3)%4];if(season==='iarnă'&&activity==='Îngrijește grădina')activity='Aranjează proviziile';return {id:c.id,name:c.name,activity,location:gc.giLocations?.[c.name]||home,confirmed:!!gc.giLocations?.[c.name],availability:h<6||h>=23?15:Math.min(95,40+n%46),seed:n};});
- const events=[];if(h>=14&&h<18&&lwHash(day+slot)%3===0){const a=rows.find(r=>lwKey(r)==='lacramioara'),b=rows.find(r=>lwKey(r)==='roxana');if(a&&b&&!a.confirmed&&!b.confirmed){a.location='Gospodăria Floricăi';a.activity='Vizită simulată la Roxana';events.push(a.name+' o vizitează pe '+b.name+' (simulare)');}}return {day,slot,season,rows,events};}
+ const events=[];if(h>=8&&h<21&&lwHash(day+slot+'event')%3===0){const r=rows[lwHash(day+slot+'actor')%Math.max(1,rows.length)];if(r)events.push(r.name+': '+['se gândește să împrumute o carte','își amintește de o rețetă veche','are de ales o mică treabă pentru mâine'][lwHash(day+slot+'kind')%3]+' (idee simulată, neconfirmată)');}if(h>=14&&h<18&&lwHash(day+slot)%3===0){const a=rows.find(r=>lwKey(r)==='lacramioara'),b=rows.find(r=>lwKey(r)==='roxana');if(a&&b&&!a.confirmed&&!b.confirmed){a.location='Gospodăria Floricăi';a.activity='Vizită simulată la Roxana';events.push(a.name+' o vizitează pe '+b.name+' (simulare)');}}return {day,slot,season,rows,events};}
 function lwTimeline(gc,ms,now=Date.now()){if(!gc.world?.enabled)return [];const w=gc.world, end=Math.floor(now/7200000)*7200000,start=Math.max(end-11*7200000,Number(w.lastSlot)||end);const log=w.timeline||[];for(let t=start;t<=end;t+=7200000){if(log.some(e=>e.ts===t))continue;const a=lwSnapshot(gc,ms,t);log.push({ts:t,text:a.rows.map(r=>r.name+': '+r.activity).concat(a.events).join(' · ')});}w.lastSlot=end;w.timeline=log.slice(-24);return w.timeline;}
 function lwTopics(gc){const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-8),counts={};for(const m of recent)for(const w of geWords(m.text))if(!/^(care|ceva|asta|acum|mine|tine|drag|spune|numa|oleaca|faca|facut|toate|dupa|mai|pentru)/.test(w))counts[w]=(counts[w]||0)+1;return Object.keys(counts).filter(w=>counts[w]>=3).sort((a,b)=>counts[b]-counts[a]).slice(0,8);}
 function lwContext(gc,ms){if(!gc.world?.enabled)return '';const w=lwSnapshot(gc,ms);lwTimeline(gc,ms);return 'Fictional local simulation, subordinate to explicit dialogue and confirmed locations; never assume user location or physical presence. '+w.rows.map(r=>r.name+': '+r.activity+', '+r.location).join('; ')+'. '+w.events.join('; ')+'; use sparingly, not as mandatory topic.';}
@@ -563,9 +590,9 @@ async function giCleanErrors(){const g=grp,gc=gchat;if(!gc||gbusy||gSpect)return
 function geWords(t){return new Set(pnorm(String(t||'')).split(/\s+/).filter(w=>w.length>3));}
 function geSimilarity(a,b){const x=geWords(a),y=geWords(b);return [...x].filter(w=>y.has(w)).length/Math.max(1,new Set([...x,...y]).size);}
 function geDuplicate(t,gc){return geWords(t).size>=8 && gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-8).some(m=>geSimilarity(t,m.text)>=.68);}
-function geSheet(){const gc=gchat, a=gc?.economyLast||{}, live=gSpect?.g===grp?gSpect:null, t=live?.stats||a; openSheet(`<h4>AI Economy · Spectator</h4><div class="pad"><p>Buget estimat: $0.25 / sesiune</p><p>Cost raportat estimat: $${Number(live?.spent??a.spent??0).toFixed(4)}</p><p>Intrare: ${t.inp||0} · Ieșire: ${t.out||0}<br>Cache citit: ${t.cr||0} · Cache scris: ${t.cw||0}<br>Cereri procesate: ${t.calls||0} · încercate: ${t.attempted||0} · respinse HTTP: ${t.rejected||0}</p><h4>Cost pe rol</h4>${Object.entries(t.breakdown||{}).map(([k,v])=>`<p>${esc(k.startsWith("personaj:")?(charById(k.slice(8))?.name||k):k)}: $${v.cost.toFixed(4)} · ${v.calls} cereri</p>`).join('')||'—'}<p>Ultima estimare: ${t.next? '$'+Number(t.next.estimate).toFixed(4)+' · '+esc(t.next.model)+' · '+t.next.tokens+' tokeni intrare · disponibil înainte: $'+Number(t.next.remaining).toFixed(4):'—'}</p><p>${esc(live?.reason||a.reason||'Tarifele sunt cele configurate în aplicație.')}</p><p>Cache solicitat la replici; regizor fără cache. Confirmare prin contoarele furnizorului. Context recent comprimat · protecție credit activă.</p></div>`);}
+function geSheet(){const gc=gchat, a=gc?.economyLast||{}, live=gSpect?.g===grp?gSpect:null, t=live?.stats||a; openSheet(`<h4>AI Economy · Spectator</h4><div class="pad"><p>Buget estimat: $0.25 / sesiune</p><p>Cost raportat estimat: $${Number(live?.spent??a.spent??0).toFixed(4)}</p><p>Intrare: ${t.inp||0} · Ieșire: ${t.out||0}<br>Cache citit: ${t.cr||0} · Cache scris: ${t.cw||0}<br>Cereri procesate: ${t.calls||0} · încercate: ${t.attempted||0} · respinse HTTP: ${t.rejected||0}</p><h4>Cost pe rol</h4>${Object.entries(t.breakdown||{}).map(([k,v])=>`<p>${esc(k.startsWith("personaj:")?(charById(k.slice(8))?.name||k):k)}: $${v.cost.toFixed(4)} · ${v.calls} cereri</p>`).join('')||'—'}<p>Ultima estimare: ${t.next? '$'+Number(t.next.estimate).toFixed(4)+' · '+esc(t.next.model)+' · '+t.next.tokens+' tokeni intrare · disponibil înainte: $'+Number(t.next.remaining).toFixed(4):'—'}</p><p>${esc(live?.reason||a.reason||'Tarifele sunt cele configurate în aplicație.')}</p><p>Cache prefix static la replici Spectator; regizor fără cache. Confirmare prin contoarele furnizorului. Context recent comprimat · protecție credit activă.</p></div>`);}
 async function streamOnce(sys, msgs, {max = 700, signal, onText, cid, aux, meta, tag, cold, conv, eco, hist, uc, groupSession} = {}){
-  const model = eco ? modelFor(true) : modelFor(aux);   // 9.49: eco = mesaj simplu → modelul mic, cu tot contextul personajului
+  let model = eco ? modelFor(true) : modelFor(aux);   // 9.49: eco = mesaj simplu → modelul mic, cu tot contextul personajului
   // 8.17: conversația rămâne în cache 1 oră (nu 5 minute): la pauze mai lungi istoricul se recitește la 5-10% din preț
   // 8.19: primul mesaj după o pauză (cache-ul a expirat oricum) scrie la 1,25× (5 min); de la al doilea trece pe 1 oră
   // 9.0: cache doar pentru conversații (conv); pașaportul, jurnalul, planificarea pozelor etc. se trimit o singură dată,
@@ -574,6 +601,12 @@ async function streamOnce(sys, msgs, {max = 700, signal, onText, cid, aux, meta,
   const httl = ttl && hist === '5m' ? '' : ttl;   // 9.49: cache inteligent: istoricul pe 5 min cât vorbiți repede (fișa rămâne pe 1 oră)
   if(!hasKey('anthropic')) throw new Error(vaultOn() ? 'Seiful (Worker-ul) nu are cheia Anthropic.' : 'Lipsește cheia Anthropic. Deschide Setări.');
   const payload={model,max_tokens:max,stream:true,system:[{type:'text',text:sys,...(conv?{cache_control:ttl?{type:'ephemeral',ttl:'1h'}:{type:'ephemeral'}}:{})}],messages:provMsgs(conv?msgs:msgs.map(x=>x._cache||x._cacheAt!=null?{...x,_cache:false,_cacheAt:null}:x),httl)};
+  if(groupSession && cid){
+    payload.system=giStaticBlocks(sys,!!conv);
+    const fit=giFitRequest(groupSession,payload,model,max,!!conv,cid);
+    model=payload.model=fit.model; max=payload.max_tokens=fit.max;
+    groupSession.stats.context={system:giBytes(payload.system),history:giBytes(payload.messages),blocks:payload.system.map(b=>giBytes(b.text)),model,max,cache:!!conv};
+  }
   const reservation=groupSession?geReserve(groupSession,payload.system,payload.messages,max,model,!!conv):0;
   if(groupSession) groupSession.stats.attempted=(groupSession.stats.attempted||0)+1;
   const res = await fetch(apiUrl('anthropic', '/v1/messages'), {method:'POST', signal, headers:apiHeaders('anthropic', {
@@ -5573,6 +5606,7 @@ function groupMenu(){
     ['🎚️', 'Tonul grupului: ' + gTone(grp).e + ' ' + gTone(grp).n, () => setTimeout(() => groupEditSheet(grp), 60)],
     gSpect && gSpect.g === grp ? ['⏹', 'Oprește modul spectator', () => gSpectStop()] : ['👀', 'Mod spectator (te uiți cum vorbesc între ele)', () => gSpectStart(grp)],
     ['💵', 'AI Economy Monitor', () => setTimeout(geSheet,60)],
+    ['🔎', 'Context Inspector', () => setTimeout(giContextSheet,60)],
     ['🧠', 'Memorie și locații grup', () => setTimeout(giPersistentSheet,60)],
     ['💗', 'Emotional Inspector', () => setTimeout(emSheet,60)],
     ['🎚️', 'Profiluri emoționale individuale', () => setTimeout(lwProfileSheet,60)],
@@ -5784,7 +5818,8 @@ function gTurn(c, g, gc = gchat, x = {}){
   return [
     `--- Acum e rândul tău. Ești ${c.name}.`,
     
-    gPresenceContext(gc),
+    gPresenceContext(gc,!!x.session),
+    x.session && `Use ${giLength(x.session)<=220?"one concise natural message":"one or two natural messages"}. If the last exchange has resolved its question, introduce a different relevant topic from your own routine; do not force a topic change during an open question.`,
     x.spect && `Avoid exhausted topics and repeated wording: ${lwTopics(gc).join(", ")}. ${x.session?.recovery?"Choose a genuinely new angle or topic; do not paraphrase previous messages.":""}` ,
     emContext(gc,[c]),
     lwContext(gc,gMembers(g)),
@@ -5807,6 +5842,7 @@ function gTurn(c, g, gc = gchat, x = {}){
 function groupSystem(c, g, gc = gchat, x = {}){ return gSharedSys(g, gc) + '\n\n' + gTurn(c, g, gc, x); }
 function gContext(c, gc = gchat, x = {}, g = grp){
   const parts = gTranscript(gc,!!x.session);
+  if(x.session) return [{role:"user",parts:[...parts,gTurn(c,g,gc,x)]}];
   return [{role:'user', parts:[...parts, gTurn(c, g, gc, x)], _cacheAt:parts.length - 1}];
 }
 // (3) [re: …] → mesajul din grup citat
@@ -5845,10 +5881,10 @@ async function gRespond(text, more, forcePhoto, x = {}){
     const named = text ? gMentioned(text, ms, true) : [];   // 9.57: numele pomenite au prioritate față de „toți”
     const toAll = !!text && ((!named.length && G_ALL.test(text)) || !!x.bomb), mentioned = toAll ? [] : named;   // „fetelor”: pentru toate, dar nu e obligatoriu să răspundă toate
     const pending=session?.pending && ms.find(c=>c.id===session.pending);
-    const localPlan = session && !pending && !photoAsk && session.left % 3 !== 0 ? lwLocalDirector(g,gc,ms) : null;
+    const localPlan = session && !pending && !photoAsk && session.left % 4 !== 0 ? {acts:[{c:giSpeaker(ms,gc,(lwLocalDirector(g,gc,ms)?.acts||[]).map(a=>a.c)),do:'reply'}],local:true} : null;
     const recovery=session?.recovery && !pending ? ms.filter(c=>c.id!==session.failedCid).sort((a,b)=>gc.msgs.slice(-12).filter(m=>m.cid===a.id).length-gc.msgs.slice(-12).filter(m=>m.cid===b.id).length)[0]:null;
     const plan = recovery ? {acts:[{c:recovery,do:"reply"}]} : pending ? {acts:[{c:pending,do:"reply"}]} : localPlan || await gDirector(g, ms, more, mentioned, photoAsk, toAll, gc, x);
-    gc.giTrace={ts:Date.now(),selected:plan.acts.filter(a=>a.do==="reply").map(a=>a.c.name),source:pending?"checkpoint":localPlan?"local-address":"director"};
+    gc.giTrace={ts:Date.now(),selected:plan.acts.filter(a=>a.do==="reply").map(a=>a.c.name),source:pending?"checkpoint":localPlan?"local-diversity":"director"};
     if(plan.task) x = {...x, task:plan.task};   // 9.67: ce a cerut liderul ajunge în rândul fiecăreia care o face
     if(gc.msgs.length && gc.msgs[gc.msgs.length - 1].role === 'sys' && /^📌/.test(gc.msgs[gc.msgs.length - 1].text)){ await gSave(g, gc); if(grp === g) renderGroup(); }   // regulă nouă / scoasă
     if(lastU && !more) lastU.seen = ms.map(c => c.id);   // (2) „văzut de …”
@@ -5873,9 +5909,9 @@ async function gRespond(text, more, forcePhoto, x = {}){
       if(ac.signal.aborted || gc.dead) break;
       ac.typing = [c]; if(grp === g) renderGroup();
       const t0 = Date.now(); let out = '';
-      const eco = gEco(k, c, text, more, x, mentioned, photo, gc);   // 9.60: amestecul și în grup
+      const eco = gEco(k, c, text, more, x, mentioned, photo, gc) || (!!session && !photoAsk && !x.task && !x.bomb && session.left%4!==0 && mixLvl(c)!=="off" && S.aux!=="off" && !auxBroken);   // 9.60: amestecul și în grup
       const meta = {};   // 9.65: aflăm dacă răspunsul s-a oprit la limită (înainte: mesajul tăiat intra în grup așa, chiar la jumătatea unui cuvânt)
-      try{ out = await stream(gSharedSys(g, gc, session?c:null), gContext(c, gc, {...x, followup:followups.get(k)}, g), {max:800, signal:ac.signal, cid:c.id, tag:'grup', conv:true, cold:true, eco, meta, groupSession:session}); }   // 9.61: prompt și transcriere comune, cache comun   // 9.51: cache pe 5 min (fișa + istoricul grupului), citit la 5% din preț
+      try{ out = await stream(gSharedSys(g, gc, session?c:null), gContext(c, gc, {...x, followup:followups.get(k)}, g), {max:session?giLength(session):800, signal:ac.signal, cid:c.id, tag:'grup', conv:true, cold:true, eco, meta, groupSession:session}); }   // 9.61: prompt și transcriere comune, cache comun   // 9.51: cache pe 5 min (fișa + istoricul grupului), citit la 5% din preț
       catch(e){ if(geStopError(e)){throw e;} if(e.name === 'AbortError') break; if(session){session.failure='eroare furnizor';session.fatal=true;break;} push({id:uid(), role:'ai', cid:c.id, name:c.name, text:'', err:e.message || 'Eroare', ts:Date.now()}); break; }   // 9.57: și eroarea apare la necitite
       const {parts, re} = gParse(out, c, ms, gc, meta, gc.msgs.length);
       if(session) session.pending=null;
@@ -5886,13 +5922,14 @@ async function gRespond(text, more, forcePhoto, x = {}){
         const waitMs = p ? Math.min(2600, 500 + parts[p].length * 45) : Math.max(0, typeMs({text:parts[p]}) - (Date.now() - t0));
         await gWait(waitMs, ac, g);
         if(gc.dead || ac.signal.aborted || (session && gSpect!==session)) break;
-        const msg = {id:uid(), role:'ai', cid:c.id, name:c.name, text:parts[p], ts:Date.now()}; if(p === 0 && re) msg.re = re; if(p === 0 && x.task) msg.task = x.task; if(p === 0 && x.spect) msg.spect = true; if(eco) msg.eco = true;
+        const msg = {id:uid(), role:'ai', cid:c.id, name:c.name, text:parts[p], ts:Date.now()}; if(p === 0 && re) msg.re = re; if(p === 0 && x.task) msg.task = x.task; if(p === 0 && x.spect) msg.spect = true; if(session ? /haiku/i.test(session.stats.context?.model||'') : eco) msg.eco = true;
         if(session && p===0){session.left--;session.failure=null;} push(msg); emObserve(gc,msg,ms,g); await gSave(g, gc); if(grp === g) renderGroup();
         if(!x.spect && gDmPromise(g, c, parts[p])) ac.dmDone = true;   // 9.58: „îți scriu în privat” → chiar îți scrie
         if(navigator.vibrate && !document.hidden) try{ navigator.vibrate(8); }catch(e){}
       }
       if(!ac.signal.aborted && !gc.dead && !x.task && !photoAsk && giSettings(g).interaction >= 50){
         const targets=gAddressTargets(parts,c,ms,g);
+        if(session && targets.length>1){const next=giSpeaker(ms.filter(o=>o.id!==c.id),gc,targets);if(next&&targets.includes(next))targets.sort((a,b)=>Number(b.id===next.id)-Number(a.id===next.id));}
         const limit=Math.min(6,Math.ceil(giSettings(g).initiative*6/100));
         const added=gFollowup(repl,k,targets,extraReplies,limit);
         if(added) extraReplies++;
@@ -6263,11 +6300,11 @@ function gMeEdit(g, gc, c){
 /* 9.48 (14): modul spectator: te uiți cum vorbesc între ele; dai un subiect sau o „bombă” și urmărești reacțiile */
 const G_SPECT_ROUNDS = 12;
 function gListenOnly(t){return /(?:doar|numai)\s+(?:vă|va|te)?\s*(?:ascult|citesc|privesc)|povestiți între voi|vorbiți între voi/i.test(t || '');}
-function gPresenceContext(gc){
+function gPresenceContext(gc,compact=false){
   const now=new Date(), month=now.getMonth(), season=month===11||month<2?'iarnă':month<5?'primăvară':month<8?'vară':'toamnă';
   const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-12);
   const counts={}; for(const m of recent) counts[m.name]=(counts[m.name]||0)+1;
-  return `Persistent user-approved context: ${JSON.stringify(giPersistent(gc))}. Treat event entries as plans unless marked completed. Local device time: ${now.toLocaleString('ro-RO')}; season: ${season}. Do not infer actual weather. Latest explicit user context: ${JSON.stringify(gc.msgs.filter(m=>m.role==='user'&&!m.err).slice(-4).map(m=>String(m.text||'').slice(0,400)))}. Treat locations as unknown unless explicitly established; remote chat is not a physical meeting. Never turn a tentative plan into a confirmed event. Recent message counts: ${JSON.stringify(counts)}. Prefer relevant less-heard speakers, not forced rotation. Avoid repeating recent details; if topic is exhausted, introduce a fresh relevant topic or finish. Plans are tentative unless confirmed in dialogue.`;
+  return `Persistent user-approved context: ${JSON.stringify(compact?giMemory(gc):giPersistent(gc))}. Treat event entries as plans unless marked completed. Local device time: ${now.toLocaleString('ro-RO')}; season: ${season}. Do not infer actual weather. Latest explicit user context: ${JSON.stringify(gc.msgs.filter(m=>m.role==='user'&&!m.err).slice(-4).map(m=>String(m.text||'').slice(0,400)))}. Treat locations as unknown unless explicitly established; remote chat is not a physical meeting. Never turn a tentative plan into a confirmed event. Recent message counts: ${JSON.stringify(counts)}. Prefer relevant less-heard speakers, not forced rotation. Avoid repeating recent details; if topic is exhausted, introduce a fresh relevant topic or finish. Plans are tentative unless confirmed in dialogue.`;
 }
 function gSpectStart(g,resume=false){
   if(!g || !aiReady() || gSpect) return;
