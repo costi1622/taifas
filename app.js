@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.16';
+const APP_VER = '14.16.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -566,23 +566,33 @@ const LIFE16_SLEEP={stela:[5,22],florica:[6,23],marioara:[6,22],roxana:[7,23],la
 function life16State(gc,c,now=Date.now()){
  const d=new Date(now),day=[d.getFullYear(),d.getMonth()+1,d.getDate()].join('-'),k=lwKey(c),h=d.getHours(),[wake,bed]=LIFE16_SLEEP[k]||[7,23];
  const recent=(gc.msgs||[]).filter(m=>m.role==='ai'&&!m.err&&m.cid===c.id&&m.ts<=now&&now-m.ts<8*3600000).slice().reverse();
- const signal=recent.find(m=>/\b(ma duc la culcare|ma bag la somn|merg la culcare|m am trezit|m am sculat)\b/.test(pnorm(m.text)));
- const asleep=signal?/\b(ma duc la culcare|ma bag la somn|merg la culcare)\b/.test(pnorm(signal.text)):h<wake||h>=bed;
+ const sleep=/^(?:io |eu |acu |acum )?(?:ma duc la culcare|ma bag la somn|merg la culcare|ma culc)\b/, awake=/^(?:io |eu |acu |acum )?(?:m am trezit|m am sculat)\b/;
+ const signal=recent.find(m=>sleep.test(pnorm(m.text))||awake.test(pnorm(m.text)));
+ const night=h<wake||h>=bed, age=signal?now-signal.ts:Infinity;
+ const override=signal&&(sleep.test(pnorm(signal.text))?(night||age<90*60000):age<30*60000);
+ const asleep=override?sleep.test(pnorm(signal.text)):night;
+ const home=k==='roxana'?'Gospodăria Floricăi':'Acasă';
  const routines=LW_ROUTINES[k]||['Treburi în casă','Cumpărături','Timp personal','Relaxare'];
- const block=Math.max(0,Math.floor((h-wake)/3)),activity=asleep?'Somn / odihnă':h>=12&&h<14?'Prânz și pauză':routines[(block+lwHash(day+c.id)%routines.length)%routines.length];
- return {asleep,activity,wake,bed,progress:asleep?null:Math.round(((h%3)*60+d.getMinutes())/180*100),source:signal?'declarație recentă':'simulare',day};
+ const cold=d.getMonth()>=10||d.getMonth()<2, daylight=h>=8&&h<(cold?16:20);
+ const allowed=routines.filter(x=>(!/(magazin|cumparaturi)/.test(pnorm(x))||h>=8&&h<19)&&(!/(curte|gradina|plante|gainile)/.test(pnorm(x))||daylight)&&(!cold||!/gradina/.test(pnorm(x))));
+ const pool=allowed.length?allowed:['Treburi în casă','Relaxare'];
+ const start=Math.max(wake,Math.floor(h/2)*2), block=Math.floor(h/2);
+ let activity=asleep?'Somn / odihnă':h>=12&&h<14?'Prânz și pauză':h>=20||h<wake?'Relaxare în casă':pool[(block+lwHash(day+c.id)%pool.length)%pool.length];
+ const location=/magazin|cumparaturi/.test(pnorm(activity))?'Magazin (simulat)':/curte|gradina|gainile/.test(pnorm(activity))?'Curte (simulată)':home;
+ return {asleep,activity,location,wake,bed,progress:asleep?null:Math.min(99,Math.max(0,Math.floor(((h-start)*60+d.getMinutes())/120*100))),source:override?'declarație recentă':'simulare',day};
 }
-function life16History(gc,c,now=Date.now()){
- const out=[];for(let i=6;i>=0;i--){const t=now-i*3600000;const r=life16State(gc,c,t);out.push({ts:t,activity:r.activity,source:r.source});}return out;
+function life161Eligible(gc,ms,now=Date.now()){return !gc.world?.enabled?ms:ms.filter(c=>!life16State(gc,c,now).asleep);}
+function life16History(gc,c,now=Date.now(),ms=[c]){
+ const out=[];for(let i=6;i>=0;i--){const t=now-i*3600000;const r=lwSnapshot(gc,ms,t).rows.find(v=>v.id===c.id);out.push({ts:t,activity:r.activity,source:r.personal.source});}return out;
 }
 function lwSnapshot(gc,ms,now=Date.now()){
  const d=new Date(now),day=[d.getFullYear(),d.getMonth()+1,d.getDate()].join('-'),h=d.getHours(),slot=Math.floor(h/2),season=d.getMonth()===11||d.getMonth()<2?'iarnă':d.getMonth()<5?'primăvară':d.getMonth()<8?'vară':'toamnă';
- const rows=ms.map(c=>{const k=lwKey(c),n=lwHash(day+c.id+slot),home=k==='roxana'?'Gospodăria Floricăi':'Acasă', routine=LW_ROUTINES[k]||['Treburi în casă','Cumpărături','Timp personal','Relaxare'];const personal=life16State(gc,c,now);let activity=personal.activity;if(season==='iarnă'&&activity==='Îngrijește grădina')activity='Aranjează proviziile';return {id:c.id,name:c.name,activity,location:gc.giLocations?.[c.name]||home,confirmed:!!gc.giLocations?.[c.name],availability:personal.asleep?15:Math.min(95,40+n%46),seed:n,personal};});
- const events=[];if(h>=8&&h<21&&lwHash(day+slot+'event')%3===0){const r=rows[lwHash(day+slot+'actor')%Math.max(1,rows.length)];if(r)events.push(r.name+': '+['se gândește să împrumute o carte','își amintește de o rețetă veche','are de ales o mică treabă pentru mâine'][lwHash(day+slot+'kind')%3]+' (idee simulată, neconfirmată)');}if(h>=14&&h<18&&lwHash(day+slot)%3===0){const a=rows.find(r=>lwKey(r)==='lacramioara'),b=rows.find(r=>lwKey(r)==='roxana');if(a&&b&&!a.confirmed&&!b.confirmed&&!a.personal.asleep&&!b.personal.asleep){a.location='Gospodăria Floricăi';a.activity='Vizită simulată la Roxana';events.push(a.name+' o vizitează pe '+b.name+' (simulare)');}}return {day,slot,season,rows,events};}
+ const rows=ms.map(c=>{const k=lwKey(c),n=lwHash(day+c.id+slot),home=k==='roxana'?'Gospodăria Floricăi':'Acasă', routine=LW_ROUTINES[k]||['Treburi în casă','Cumpărături','Timp personal','Relaxare'];const personal=life16State(gc,c,now);let activity=personal.activity;if(season==='iarnă'&&activity==='Îngrijește grădina')activity='Aranjează proviziile';return {id:c.id,name:c.name,activity,location:personal.location,confirmed:!!gc.giLocations?.[c.name],confirmedLocation:gc.giLocations?.[c.name]||null,availability:personal.asleep?15:Math.min(95,40+n%46),seed:n,personal};});
+ const events=[];if(h>=8&&h<21&&lwHash(day+slot+'event')%3===0){const r=rows[lwHash(day+slot+'actor')%Math.max(1,rows.length)];if(r&&!r.personal.asleep)events.push(r.name+': '+['se gândește să împrumute o carte','își amintește de o rețetă veche','are de ales o mică treabă pentru mâine'][lwHash(day+slot+'kind')%3]+' (idee simulată, neconfirmată)');}if(h>=14&&h<18&&lwHash(day+slot)%3===0){const a=rows.find(r=>lwKey(r)==='lacramioara'),b=rows.find(r=>lwKey(r)==='roxana');if(a&&b&&!a.confirmed&&!b.confirmed&&!a.personal.asleep&&!b.personal.asleep){a.location='Gospodăria Floricăi';a.activity='Vizită simulată la Roxana';a.personal={...a.personal,activity:a.activity,location:a.location};events.push(a.name+' o vizitează pe '+b.name+' (simulare)');}}return {day,slot,season,rows,events};}
 function lwTimeline(gc,ms,now=Date.now()){if(!gc.world?.enabled)return [];const w=gc.world, end=Math.floor(now/7200000)*7200000,start=Math.max(end-83*7200000,Number(w.lastSlot)||end);const log=w.timeline||[];for(let t=start;t<=end;t+=7200000){if(log.some(e=>e.ts===t))continue;const a=lwSnapshot(gc,ms,t);log.push({ts:t,text:a.rows.map(r=>r.name+': '+r.activity).concat(a.events).join(' · ')});}w.lastSlot=end;w.timeline=log.slice(-84);return w.timeline;}
 function lwTopics(gc){const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-8),counts={};for(const m of recent)for(const w of geWords(m.text))if(!/^(care|ceva|asta|acum|mine|tine|drag|spune|numa|oleaca|faca|facut|toate|dupa|mai|pentru)/.test(w))counts[w]=(counts[w]||0)+1;return Object.keys(counts).filter(w=>counts[w]>=3).sort((a,b)=>counts[b]-counts[a]).slice(0,8);}
-function lwContext(gc,ms){if(!gc.world?.enabled)return '';const w=lwSnapshot(gc,ms);lwTimeline(gc,ms);return 'Fictional local simulation, subordinate to explicit dialogue and confirmed locations; never assume user location or physical presence. '+w.rows.map(r=>r.name+': '+r.activity+', '+r.location+' ('+r.personal.source+')').join('; ')+'. '+w.events.join('; ')+'; sleeping or departing characters should not spontaneously resume without a plausible reason; allow natural farewells. Simulated progress is not proof of completed plans. Use sparingly, not as mandatory topic.';}
-function lwSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const ms=gMembers(g),w=lwSnapshot(gc,ms);openSheet(`<h4>Living World Inspector</h4><div class="pad"><p>${esc(w.day)} · ${esc(w.season)} · simulare fictivă locală</p><label><input type="checkbox" id="lwOn" ${gc.world?.enabled?'checked':''}> Activează lumea simulată</label>${w.rows.map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · ${esc(r.location)} (${r.confirmed?'confirmată':'simulată'})<br>Disponibilitate orientativă: ${r.availability}/100<div style="height:6px;background:#7773;border-radius:5px"><div style="height:6px;width:${r.availability}%;background:#b78ad5;border-radius:5px"></div></div></p>`).join('')}<p>${esc(w.events.join(' · ')||'Nicio vizită simulată acum.')}</p><h4>Cronologie personală (ultimele 6 ore, simulare)</h4>${ms.map(c=>`<details><summary>${esc(c.name)}</summary>${life16History(gc,c).map(e=>`<p>${esc(new Date(e.ts).toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'}))} · ${esc(e.activity)} · ${esc(e.source)}</p>`).join('')}</details>`).join('')}<h4>Jurnal simulat</h4>${lwTimeline(gc,ms).slice(-6).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString("ro-RO"))}<br>${esc(e.text)}<br><small>${esc(life81Category(e.text))} · importanță ${life81Importance(e.text)}</small></p>`).join('')||'—'}<button class="btn pri" id="lwSave">Salvează</button></div>`);$('#lwSave').onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;gc.world={...gc.world,enabled:$('#lwOn').checked};await gSave(g,gc);lwSheet();};}
+function lwContext(gc,ms){if(!gc.world?.enabled)return '';const w=lwSnapshot(gc,ms);lwTimeline(gc,ms);return 'Fictional local simulation, subordinate to explicit dialogue and confirmed locations; never assume user location or physical presence. '+w.rows.map(r=>r.name+': '+r.activity+', '+r.location+' ('+r.personal.source+')'+(r.confirmedLocation?', separately recorded location: '+r.confirmedLocation:'')).join('; ')+'. '+w.events.join('; ')+'; sleeping or departing characters should not spontaneously resume without a plausible reason; allow natural farewells. Simulated progress is not proof of completed plans. Use sparingly, not as mandatory topic.';}
+function lwSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const ms=gMembers(g),w=lwSnapshot(gc,ms);openSheet(`<h4>Living World Inspector</h4><div class="pad"><p>${esc(w.day)} · ${esc(w.season)} · simulare fictivă locală</p><label><input type="checkbox" id="lwOn" ${gc.world?.enabled?'checked':''}> Activează lumea simulată</label>${w.rows.map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · ${esc(r.location)} (simulată)${r.confirmedLocation?'<br>Locație memorată separat: '+esc(r.confirmedLocation):''}<br>Disponibilitate orientativă: ${r.availability}/100<div style="height:6px;background:#7773;border-radius:5px"><div style="height:6px;width:${r.availability}%;background:#b78ad5;border-radius:5px"></div></div></p>`).join('')}<p>${esc(w.events.join(' · ')||'Nicio vizită simulată acum.')}</p><h4>Cronologie personală (ultimele 6 ore, simulare)</h4>${ms.map(c=>`<details><summary>${esc(c.name)}</summary>${life16History(gc,c,Date.now(),ms).map(e=>`<p>${esc(new Date(e.ts).toLocaleTimeString('ro-RO',{hour:'2-digit',minute:'2-digit'}))} · ${esc(e.activity)} · ${esc(e.source)}</p>`).join('')}</details>`).join('')}<h4>Jurnal simulat</h4>${lwTimeline(gc,ms).slice(-6).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString("ro-RO"))}<br>${esc(e.text)}<br><small>${esc(life81Category(e.text))} · importanță ${life81Importance(e.text)}</small></p>`).join('')||'—'}<button class="btn pri" id="lwSave">Salvează</button></div>`);$('#lwSave').onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;gc.world={...gc.world,enabled:$('#lwOn').checked};await gSave(g,gc);lwSheet();};}
 function lwProfileSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const ms=gMembers(g);openSheet(`<h4>Profiluri emoționale individuale</h4><div class="pad">${ms.map((c,i)=>`<h4 style="padding-top:12px;border-top:1px solid #7774">${esc(c.name)}</h4>${Object.entries(lwBase(gc,c.id)).map(([k,v])=>`<p>${EM_LABEL[k]} <input type="range" min="0" max="100" id="lw-${i}-${k}" value="${v}" style="width:55%;accent-color:#b78ad5" oninput="this.nextElementSibling.textContent=this.value"><output>${v}</output></p>`).join('')}`).join('')}<button class="btn pri" id="lwProfilesSave">Salvează profilurile</button></div>`);$('#lwProfilesSave').onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const profiles={};for(const [i,c] of ms.entries()){profiles[c.id]={};for(const k of Object.keys(EM_BASE)){const v=$(`#lw-${i}-${k}`).valueAsNumber;if(!Number.isFinite(v)||v<0||v>100){toast('Valori între 0 și 100.');return;}profiles[c.id][k]=Math.round(v);}}gc.world={...gc.world,profiles};await gSave(g,gc);emSheet();};}
 function lwLocalDirector(g,gc,ms){const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-8),last=recent.at(-1),speaker=ms.find(c=>c.id===last?.cid);if(!speaker)return null;const targets=gAddressTargets([last.text],speaker,ms,g).filter(c=>c.id!==speaker.id);if(targets.length!==1)return null;return {acts:[{c:targets[0],do:'reply'}],local:true};}
 function emRead(gc,id,now=Date.now()){
@@ -5966,10 +5976,12 @@ async function gRespond(text, more, forcePhoto, x = {}){
   try{
     const named = text ? gMentioned(text, ms, true) : [];   // 9.57: numele pomenite au prioritate față de „toți”
     const toAll = !!text && ((!named.length && G_ALL.test(text)) || !!x.bomb), mentioned = toAll ? [] : named;   // „fetelor”: pentru toate, dar nu e obligatoriu să răspundă toate
-    const pending=session?.pending && ms.find(c=>c.id===session.pending);
-    const localPlan = session && !pending && !photoAsk && session.left % 4 !== 0 ? {acts:[{c:giSpeaker(ms,gc,(lwLocalDirector(g,gc,ms)?.acts||[]).map(a=>a.c)),do:'reply'}],local:true} : null;
-    const recovery=session?.recovery && !pending ? ms.filter(c=>c.id!==session.failedCid).sort((a,b)=>gc.msgs.slice(-12).filter(m=>m.cid===a.id).length-gc.msgs.slice(-12).filter(m=>m.cid===b.id).length)[0]:null;
-    const plan = recovery ? {acts:[{c:recovery,do:"reply"}]} : pending ? {acts:[{c:pending,do:"reply"}]} : localPlan || await gDirector(g, ms, more, mentioned, photoAsk, toAll, gc, x);
+    const eligible=session&&!photoAsk?life161Eligible(gc,ms):ms;
+    if(session&&!eligible.length){session.failure='toate personajele se odihnesc';session.fatal=true;session.pending=null;return;}
+    const pending=session?.pending && eligible.find(c=>c.id===session.pending);
+    const localPlan = session && !pending && !photoAsk && session.left % 4 !== 0 ? {acts:[{c:giSpeaker(eligible,gc,(lwLocalDirector(g,gc,eligible)?.acts||[]).map(a=>a.c)),do:'reply'}],local:true} : null;
+    const recovery=session?.recovery && !pending ? eligible.filter(c=>c.id!==session.failedCid).sort((a,b)=>gc.msgs.slice(-12).filter(m=>m.cid===a.id).length-gc.msgs.slice(-12).filter(m=>m.cid===b.id).length)[0]:null;
+    const plan = recovery ? {acts:[{c:recovery,do:"reply"}]} : pending ? {acts:[{c:pending,do:"reply"}]} : localPlan || await gDirector(g, eligible, more, mentioned, photoAsk, toAll, gc, x);
     gc.giTrace={ts:Date.now(),selected:plan.acts.filter(a=>a.do==="reply").map(a=>a.c.name),source:pending?"checkpoint":localPlan?"local-diversity":"director"};
     if(plan.task) x = {...x, task:plan.task};   // 9.67: ce a cerut liderul ajunge în rândul fiecăreia care o face
     if(gc.msgs.length && gc.msgs[gc.msgs.length - 1].role === 'sys' && /^📌/.test(gc.msgs[gc.msgs.length - 1].text)){ await gSave(g, gc); if(grp === g) renderGroup(); }   // regulă nouă / scoasă
@@ -5981,7 +5993,7 @@ async function gRespond(text, more, forcePhoto, x = {}){
       if(tgt){ tgt.reacts = tgt.reacts || {}; tgt.reacts[a.c.id] = a.emoji; }
     }
     if(plan.acts.some(x => x.do === 'react')){ await gSave(g, gc); if(grp === g) renderGroup(); await gWait(500, ac, g); }
-    const repl = plan.acts.filter(x => x.do === 'reply').map(x => x.c);
+    const repl = plan.acts.filter(x => x.do === 'reply' && eligible.some(c=>c.id===x.c.id)).map(x => x.c);
     let photo = photoAsk ? (plan.photo && (plan.photo.names.length || plan.photo.by) ? plan.photo : null) : null;
     if(photoAsk && !photo){ const who = G_ALL.test(text || '') || forcePhoto ? ms.slice(0, 4) : (mentioned.length ? mentioned.slice(0, 1) : repl.slice(0, 1)); photo = {names:who, by:who[0]}; }
     if(photo && !photo.by) photo.by = photo.names[0] || repl[0] || ms[0];
@@ -5990,6 +6002,7 @@ async function gRespond(text, more, forcePhoto, x = {}){
     let extraReplies=0; const followups=new Map();
     for(let k = 0; k < repl.length && k < budget; k++){
       const c = repl[k];
+      if(session&&!photoAsk&&!life161Eligible(gc,[c]).length)continue;
       if(session && (gSpect!==session || session.left<=0 || document.hidden)) break;
       if(session){ session.pending=c.id; }
       if(ac.signal.aborted || gc.dead) break;
@@ -6016,7 +6029,7 @@ async function gRespond(text, more, forcePhoto, x = {}){
         if(navigator.vibrate && !document.hidden) try{ navigator.vibrate(8); }catch(e){}
       }
       if(!ac.signal.aborted && !gc.dead && !x.task && !photoAsk && giSettings(g).interaction >= 50){
-        const targets=gAddressTargets(parts,c,ms,g);
+        const targets=gAddressTargets(parts,c,ms,g).filter(o=>!session||photoAsk||life161Eligible(gc,[o]).length);
         if(session && targets.length>1){const next=giSpeaker(ms.filter(o=>o.id!==c.id),gc,targets);if(next&&targets.includes(next))targets.sort((a,b)=>Number(b.id===next.id)-Number(a.id===next.id));}
         const limit=Math.min(6,Math.ceil(giSettings(g).initiative*6/100));
         const added=gFollowup(repl,k,targets,extraReplies,limit);
