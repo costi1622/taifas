@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.16.2';
+const APP_VER = '14.16.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -564,17 +564,29 @@ const LW_ROUTINES={stela:['Cafea și găini','Pregătește mâncarea','Îngrije�
 // 14.16: deterministic personal schedules; dialogue evidence takes precedence.
 const LIFE16_SLEEP={stela:[5,22],florica:[6,23],marioara:[6,22],roxana:[7,23],lacramioara:[7,23]};
 // 14.16.2: local execution projection, never confirmation of real events.
+const LIFE163_ACT={ 'pâine':[9,120,'Pregătește pâine'], 'tricotat':[15,60,'Tricotează'], 'murături':[10,120,'Pregătește murături'], 'gătit':[10,90,'Gătește'], 'rufe':[9,90,'Spală rufe'], 'cumpărături':[10,60,'Face cumpărături'], 'curățenie':[9,60,'Face curățenie'] };
+function life163Reason(p,c){
+ if(p.status!=='confirmat')return 'Planul nu este confirmat';
+ if(!c||p.author!==c.name)return 'Autorul nu este un personaj eligibil';
+ if(!Number.isFinite(p.due)||!Number.isFinite(p.ts))return 'Lipsește data exactă';
+ const cat=life81Category(p.text),t=pnorm(p.text),spec=LIFE163_ACT[cat];
+ if(!spec)return 'Activitate încă nerecunoscută';
+ if(/\b(daca|poate|nu|aman\w*|eventual)\b/.test(t))return 'Plan condițional sau negativ';
+ const d=new Date(p.due);d.setHours(spec[0],0,0,0);
+ if(p.ts>d.getTime()||(p.statusAt||0)>d.getTime())return 'Confirmare după ora implicită de început';
+ return '';
+}
 function life162Window(p,c){
- if(p.status!=='confirmat'||!Number.isFinite(p.due)||p.author!==c.name||!Number.isFinite(p.ts))return null;
- const cat=life81Category(p.text), t=pnorm(p.text);
- if(!['pâine','tricotat'].includes(cat)||/\b(daca|poate|nu|aman|eventual)\b/.test(t))return null;
- const d=new Date(p.due);d.setHours(cat==='pâine'?9:15,0,0,0);const start=d.getTime(),end=start+(cat==='pâine'?2:1)*3600000;
- if(p.ts>start||(p.statusAt||0)>start)return null;
- return {id:p.id,category:cat,start,end,author:c.name};
+ if(life163Reason(p,c))return null;
+ const cat=life81Category(p.text),spec=LIFE163_ACT[cat],d=new Date(p.due);d.setHours(spec[0],0,0,0);const start=d.getTime();
+ return {id:p.id,category:cat,start,end:start+spec[1]*60000,author:c.name};
+}
+function life163Filter(rows,q='',author='',status='',day=''){
+ const needle=pnorm(q);return rows.filter(p=>(!needle||pnorm((p.author||'')+' '+p.text).includes(needle))&&(!author||p.author===author)&&(!status||p.status===status)&&(!day||(Number.isFinite(p.due)&&[new Date(p.due).getFullYear(),String(new Date(p.due).getMonth()+1).padStart(2,'0'),String(new Date(p.due).getDate()).padStart(2,'0')].join('-')===day)));
 }
 function life162Projection(gc,c,now){
  if(!gc.world?.enabled)return [];
- return (gc.life8?.plans||[]).map(p=>life162Window(p,c)).filter(Boolean).sort((a,b)=>a.start-b.start||String(a.id).localeCompare(String(b.id))).filter((v,i,all)=>all.findIndex(x=>x.start===v.start)===i).map(v=>({...v,state:now<v.start?'programat':now<v.end?'în desfășurare':'finalizat simulat',progress:Math.max(0,Math.min(100,Math.floor((now-v.start)/(v.end-v.start)*100)))}));
+ return (gc.life8?.plans||[]).map(p=>life162Window(p,c)).filter(Boolean).sort((a,b)=>a.start-b.start||String(a.id).localeCompare(String(b.id))).filter((v,i,all)=>!all.slice(0,i).some(x=>x.end>v.start)).map(v=>({...v,state:now<v.start?'programat':now<v.end?'în desfășurare':'finalizat simulat',progress:Math.max(0,Math.min(100,Math.floor((now-v.start)/(v.end-v.start)*100)))}));
 }
 function life162Journal(gc,ms,now=Date.now()){
  if(!gc.world?.enabled)return [];
@@ -598,7 +610,7 @@ function life16State(gc,c,now=Date.now()){
  const start=Math.max(wake,Math.floor(h/2)*2), block=Math.floor(h/2);
  let activity=asleep?'Somn / odihnă':h>=12&&h<14?'Prânz și pauză':h>=20||h<wake?'Relaxare în casă':pool[(block+lwHash(day+c.id)%pool.length)%pool.length];
  const execution=!asleep?life162Projection(gc,c,now).find(x=>x.state==='în desfășurare'):null;
- if(execution)activity=execution.category==='pâine'?'Pregătește pâine':'Tricotează';
+ if(execution)activity=LIFE163_ACT[execution.category][2];
  const location=/magazin|cumparaturi/.test(pnorm(activity))?'Magazin (simulat)':/curte|gradina|gainile/.test(pnorm(activity))?'Curte (simulată)':home;
  return {asleep,activity,location,wake,bed,execution,progress:execution?execution.progress:asleep?null:Math.min(99,Math.max(0,Math.floor(((h-start)*60+d.getMinutes())/120*100))),source:override?'declarație recentă':'simulare',day};
 }
@@ -644,7 +656,7 @@ function life8Observe(gc,msg){
  a.topics=Object.fromEntries(Object.entries(a.topics).sort((x,y)=>y[1].ts-x[1].ts).slice(0,500));
 }
 // Local semantic categories; source statements remain unchanged.
-function life81Category(text){const t=pnorm(text);return /\b(pain\w*|framant\w*|aluat\w*)\b/.test(t)?'pâine':/\b(tricot\w*|fular\w*|ochiuri)\b/.test(t)?'tricotat':/\b(vizit\w*|ne vedem|trec pe la)\b/.test(t)?'vizită':/\b(grij\w*|bolnav\w*|sanatat\w*)\b/.test(t)?'grijă':'general';}
+function life81Category(text){const t=pnorm(text);return /\b(pain\w*|framant\w*|aluat\w*)\b/.test(t)?'pâine':/\b(tricot\w*|fular\w*|ochiuri)\b/.test(t)?'tricotat':/\b(muratur\w*|mur[ae]z\w*)\b/.test(t)?'murături':/\b(rufe\w*|spalat\w*)\b/.test(t)?'rufe':/\b(cumpar\w*|magazin\w*)\b/.test(t)?'cumpărături':/\b(gat[ei]\w*|mancar\w*|ciorb\w*)\b/.test(t)?'gătit':/\b(curaten\w*|matur\w*)\b/.test(t)?'curățenie':/\b(vizit\w*|ne vedem|trec pe la)\b/.test(t)?'vizită':/\b(grij\w*|bolnav\w*|sanatat\w*)\b/.test(t)?'grijă':'general';}
 function life81Importance(text){return (life81Category(text)!=='general'?2:0)+(/\b(maine|poimaine|promit|am terminat|am hotarat)\b/.test(pnorm(text))?2:0);}
 function life81Unique(rows){const seen=new Set();return rows.filter(e=>{const k=(e.author||'')+'|'+pnorm(e.text).replace(/[^\p{L}\p{N}]+/gu,' ').trim();if(seen.has(k))return false;seen.add(k);return true;});}
 // 14.15.9: derived shared event candidates, source evidence retained.
@@ -672,7 +684,7 @@ function life8Context(gc,now=Date.now()){
  const shared=life9Events(a).filter(e=>e.due>=now-86400000).slice(0,3).map(e=>({...e,statements:e.statements.slice(-3)}));
  return 'Related group plan candidates (same topic and date, not necessarily same event or confirmed participants): '+JSON.stringify(shared)+'. Group-only recalled statements (not verified facts): '+JSON.stringify(episodes)+'. Plans: '+JSON.stringify(plans)+'. Proposed plans are not commitments; never assume attendance or completion. Repeated words, avoid only if topic exhausted: '+topics.join(', ')+'.';
 }
-function life8Sheet(){const g=grp,gc=gchat;if(!g||!gc)return;const a=life8State(gc);openSheet(`<h4>Memorie pe termen lung</h4><div class="pad"><p>Amintiri din grup, nu din conversații private. Planurile sunt propuneri până la confirmare. Categorii locale, fără cereri API.</p><h4>Agendă azi (intenții, nu fapte)</h4>${life9Agenda(a).map(p=>`<p>${esc(p.author)} · ${esc(p.status)} · ${esc(p.text)}</p>`).join('')||'—'}<h4>Planuri asociate după temă și dată</h4>${life9Events(a).slice(0,10).map(e=>`<p><b>${esc(e.category)}</b> · ${esc(new Date(e.due).toLocaleDateString('ro-RO'))}<br>${e.statements.map(p=>esc(p.author+': '+p.text+' ('+p.status+')')).join('<br>')}</p>`).join('')||'—'}<h4>Planuri</h4>${a.plans.slice(-20).reverse().map(p=>`<p><b>${esc(p.author||'')}</b> · ${esc(p.status)}<br>${esc(p.text)}<br>${p.due?esc(new Date(p.due).toLocaleDateString('ro-RO')):''}<br>${['confirmat','finalizat','anulat'].map(v=>`<button class="btn" data-life8-id="${esc(p.id)}" data-life8-status="${v}">${v}</button>`).join(' ')}</p>`).join('')||'—'}<h4>Amintiri recente (${a.episodes.length})</h4><label>Personaj <select id="life82Author"><option value="">Toți</option>${[...new Set(a.episodes.map(e=>e.author||''))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><label>Categorie <select id="life82Category"><option value="">Toate</option>${[...new Set(a.episodes.map(e=>life81Category(e.text)))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><div id="life82Rows"></div></div>`);const draw=()=>{const author=$('#life82Author').value,cat=$('#life82Category').value;$('#life82Rows').innerHTML=a.episodes.filter(e=>(!author||e.author===author)&&(!cat||life81Category(e.text)===cat)).slice(-50).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.author||'')} · ${esc(life81Category(e.text))} · importanță ${life81Importance(e.text)}<br>${esc(e.text)}</p>`).join('')||'—';};$('#life82Author').onchange=draw;$('#life82Category').onchange=draw;draw();document.querySelectorAll('[data-life8-id]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const p=a.plans.find(x=>x.id===b.dataset.life8Id);if(p){p.status=b.dataset.life8Status;p.statusAt=Date.now();await gSave(g,gc);life8Sheet();}});}
+function life8Sheet(){const g=grp,gc=gchat;if(!g||!gc)return;const a=life8State(gc);openSheet(`<h4>Memorie pe termen lung</h4><div class="pad"><p>Amintiri din grup, nu din conversații private. Planurile sunt propuneri până la confirmare. Categorii locale, fără cereri API.</p><h4>Agendă azi (intenții, nu fapte)</h4>${life9Agenda(a).map(p=>`<p>${esc(p.author)} · ${esc(p.status)} · ${esc(p.text)}</p>`).join('')||'—'}<h4>Planuri asociate după temă și dată</h4>${life9Events(a).slice(0,10).map(e=>`<p><b>${esc(e.category)}</b> · ${esc(new Date(e.due).toLocaleDateString('ro-RO'))}<br>${e.statements.map(p=>esc(p.author+': '+p.text+' ('+p.status+')')).join('<br>')}</p>`).join('')||'—'}<h4>Planuri (${a.plans.length})</h4><input id="life163Q" placeholder="Caută: murături, tricotat…"><label>Personaj <select id="life163Author"><option value="">Toți</option>${[...new Set(a.plans.map(p=>p.author||''))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><label>Statut <select id="life163Status"><option value="">Toate</option>${['propus','confirmat','finalizat','anulat'].map(v=>`<option>${v}</option>`).join('')}</select></label><label>Data planului <input type="date" id="life163Day"></label><div id="life163Rows"></div><h4>Amintiri recente (${a.episodes.length})</h4><label>Personaj <select id="life82Author"><option value="">Toți</option>${[...new Set(a.episodes.map(e=>e.author||''))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><label>Categorie <select id="life82Category"><option value="">Toate</option>${[...new Set(a.episodes.map(e=>life81Category(e.text)))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><div id="life82Rows"></div></div>`);const draw=()=>{const author=$('#life82Author').value,cat=$('#life82Category').value;$('#life82Rows').innerHTML=a.episodes.filter(e=>(!author||e.author===author)&&(!cat||life81Category(e.text)===cat)).slice(-50).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.author||'')} · ${esc(life81Category(e.text))} · importanță ${life81Importance(e.text)}<br>${esc(e.text)}</p>`).join('')||'—';};$('#life82Author').onchange=draw;$('#life82Category').onchange=draw;draw();const drawPlans=()=>{const rows=life163Filter(a.plans,$('#life163Q').value,$('#life163Author').value,$('#life163Status').value,$('#life163Day').value).slice().reverse();$('#life163Rows').innerHTML=rows.map(p=>{const c=gMembers(g).find(c=>c.name===p.author),reason=life163Reason(p,c),w=life162Window(p,c);return `<p><b>${esc(p.author||'')}</b> · ${esc(p.status)}<br>${esc(p.text)}<br>${p.due?esc(new Date(p.due).toLocaleDateString('ro-RO')):'Fără dată'}<br><small>${esc(reason||('Eligibil · '+new Date(w.start).toLocaleString('ro-RO')))}</small><br>${['confirmat','finalizat','anulat'].map(v=>`<button class="btn" data-life8-id="${esc(p.id)}" data-life8-status="${v}">${v}</button>`).join(' ')} ${w?`<button class="btn" data-life163-test="${esc(p.id)}">Test local</button>`:''}</p>`;}).join('')||'Niciun rezultat.';document.querySelectorAll('[data-life8-id]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const p=a.plans.find(x=>x.id===b.dataset.life8Id);if(p){p.status=b.dataset.life8Status;p.statusAt=Date.now();await gSave(g,gc);drawPlans();}});document.querySelectorAll('[data-life163-test]').forEach(b=>b.onclick=()=>{const p=a.plans.find(x=>x.id===b.dataset.life163Test),c=gMembers(g).find(c=>c.name===p?.author),w=p&&life162Window(p,c);if(w)alert('Test fără salvare: '+w.category+' · '+new Date(w.start).toLocaleString('ro-RO')+' → '+new Date(w.end).toLocaleTimeString('ro-RO')+' · progres la mijloc: 50%');});};for(const id of ['life163Q','life163Author','life163Status','life163Day'])$('#'+id).oninput=drawPlans;drawPlans();}
 
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
