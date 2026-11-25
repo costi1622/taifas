@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.15.7.2';
+const APP_VER = '14.15.7.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -514,7 +514,7 @@ function gePause(g,gc,session,e){
 }
 // 14.15.7: conservative budget fitting; no extra network calls.
 function giStaticBlocks(sys,cache){
- const cut=sys.indexOf('\n\n## '), cc=cache?{cache_control:{type:'ephemeral'}}:{};
+ const marker=sys.indexOf('\n\n## Profil activ:'), cut=marker>=0?marker:sys.indexOf('\n\n## '), cc=cache?{cache_control:{type:'ephemeral'}}:{};
  if(cut<0)return [{type:'text',text:sys,...cc}];
  return [{type:'text',text:sys.slice(0,cut),...cc},{type:'text',text:sys.slice(cut),...cc}];
 }
@@ -538,11 +538,14 @@ function giSpeaker(ms,gc,targets=[]){
  return ms.filter(c=>c.id!==last).map(c=>({c,score:(targets.some(t=>t.id===c.id)?5:0)-recent.filter(m=>m.cid===c.id).length*2})).sort((a,b)=>b.score-a.score)[0]?.c||ms[0];
 }
 function giLength(session){return session.recovery?1200:[800,900,700,850][Math.max(0,12-session.left)%4];}
-function giThinking(payload){payload.thinking={type:'disabled'};}
+function giThinking(payload){delete payload.thinking;} // provider default; no unverified optional parameters
+function giProviderKind(e){const n=e?.http;return geCredit(e)||n===402?'credit':n===401||n===403?'autentificare':n===400||n===404||n===422?'compatibilitate / cerere invalidă':n===429?'limită furnizor':n>=500?'server furnizor':'transport / flux';}
+function giProviderDiag(session,e,c,meta={}){const reason=giProviderKind(e);session.stats.response={speaker:c?.name||'Regizor',model:meta.model||session.stats.next?.model,max:meta.max||session.stats.next?.max,stop:'provider_error',chars:0,parts:0,reason,retry:session.recovery||0,http:e.http||null,detail:String(e.message||e).replace(/(?:sk-ant-|Bearer\s+)[\w.-]+/gi,'[redactat]').slice(0,600)};return reason;}
+
 function giSnapshot(gc,s){gc.economyLast={...s.stats,spent:s.spent,left:s.left,sessionId:s.id,reason:s.reason||'',ts:Date.now()};}
 function giAccount(s,usage,model,reservation,cid,ended,full){const a=s.stats;const complete=ended&&Number.isFinite(usage?.output_tokens)&&Number.isFinite(usage?.input_tokens);const cost=complete?geCost(usage,model):Math.max(reservation,usage?geCost(usage,model):0);s.spent+=cost;const key=cid?'personaj:'+cid:'regizor';a.breakdown={...a.breakdown};const row=a.breakdown[key]||{cost:0,calls:0};a.breakdown[key]={cost:row.cost+cost,calls:row.calls+1};a.calls++;if(!full)a.empty=(a.empty||0)+1;if(!complete)a.uncertain=(a.uncertain||0)+1;for(const [k,v] of Object.entries({inp:usage?.input_tokens,out:usage?.output_tokens,cw:usage?.cache_creation_input_tokens,cr:usage?.cache_read_input_tokens}))a[k]=(a[k]||0)+(v||0);}
 
-function giResponseSheet(){const r=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)?.response;openSheet(`<h4>Response Inspector</h4><div class="pad">${r?`<p>Personaj: ${esc(r.speaker)}</p><p>Stop: ${esc(r.stop)} · caractere: ${r.chars} · bule: ${r.parts}</p><p>Model: ${esc(r.model||"—")} · limită: ${r.max||"—"} · ieșire: ${r.output??"—"}</p><p>Blocuri: ${esc((r.blocks||[]).join(", ")||"—")}</p><p>${esc(r.reason)} · recuperare: ${r.retry}/1</p>`:'<p>Nicio replică diagnosticată încă.</p>'}</div>`);}
+function giResponseSheet(){const r=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)?.response;openSheet(`<h4>Response Inspector</h4><div class="pad">${r?`<p>Personaj: ${esc(r.speaker)}</p><p>Stop: ${esc(r.stop)} · caractere: ${r.chars} · bule: ${r.parts}</p><p>Model: ${esc(r.model||"—")} · limită: ${r.max||"—"} · ieșire: ${r.output??"—"}</p><p>Blocuri: ${esc((r.blocks||[]).join(", ")||"—")}</p><p>${esc(r.reason)} · recuperare: ${r.retry}/1</p>${r.detail?`<p>HTTP: ${r.http||'—'}</p><p>${esc(r.detail)}</p>`:''}`:'<p>Nicio replică diagnosticată încă.</p>'}</div>`);}
 function giContextSheet(){const t=(gSpect?.g===grp?gSpect.stats:gchat?.economyLast)||{},c=t.context;openSheet(`<h4>Context Inspector</h4><div class="pad">${c?`<p>Ultima cerere: ${esc(c.model)} · maximum ${c.max} tokeni ieșire</p><p>Prefix sistem: ${c.system} octeți · context dinamic: ${c.history} octeți</p><p>Blocuri statice: ${esc((c.blocks||[]).join(" / "))} octeți</p>`:'<p>Nu există încă o cerere de personaj în această sesiune.</p>'}<p>Cache citit: ${t.cr||0} · scris: ${t.cw||0}</p><p>Promptul master activ este păstrat integral; istoricul dinamic nu este marcat pentru cache în Spectator.</p></div>`);}
 // 14.15.5 — local, group-scoped emotional state; no extra API calls.
 const EM_BASE={joy:50,energy:65,concern:20,tension:15,warmth:65};
@@ -595,7 +598,7 @@ async function giCleanErrors(){const g=grp,gc=gchat;if(!gc||gbusy||gSpect)return
 function geWords(t){return new Set(pnorm(String(t||'')).split(/\s+/).filter(w=>w.length>3));}
 function geSimilarity(a,b){const x=geWords(a),y=geWords(b);return [...x].filter(w=>y.has(w)).length/Math.max(1,new Set([...x,...y]).size);}
 function geDuplicate(t,gc){return geWords(t).size>=8 && gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-8).some(m=>geSimilarity(t,m.text)>=.68);}
-function geSheet(){const gc=gchat, a=gc?.economyLast||{}, live=gSpect?.g===grp?gSpect:null, t=live?.stats||a; openSheet(`<h4>AI Economy · Spectator</h4><div class="pad"><p>Buget estimat: $0.25 / sesiune</p><p>Cost raportat estimat: $${Number(live?.spent??a.spent??0).toFixed(4)}</p><p>Intrare: ${t.inp||0} · Ieșire: ${t.out||0}<br>Cache citit: ${t.cr||0} · Cache scris: ${t.cw||0}<br>Cereri procesate: ${t.calls||0} · încercate: ${t.attempted||0} · respinse HTTP: ${t.rejected||0}</p><p>Sesiune: ${esc(live?.id||a.sessionId||"anterioară")} · ${live?"activă":"salvată"}<br>Răspunsuri fără text: ${t.empty||0} · cost rezervat (usage incomplet): ${t.uncertain||0}</p><h4>Cost pe rol</h4>${Object.entries(t.breakdown||{}).map(([k,v])=>`<p>${esc(k.startsWith("personaj:")?(charById(k.slice(8))?.name||k):k)}: $${v.cost.toFixed(4)} · ${v.calls} cereri</p>`).join('')||'—'}<p>Ultima estimare: ${t.next? '$'+Number(t.next.estimate).toFixed(4)+' · '+esc(t.next.model)+' · '+t.next.tokens+' tokeni intrare · disponibil înainte: $'+Number(t.next.remaining).toFixed(4):'—'}</p><p>${esc(live?.reason||a.reason||'Tarifele sunt cele configurate în aplicație.')}</p><p>Cache prefix static la replici Spectator; regizor fără cache. Confirmare prin contoarele furnizorului. Context recent comprimat · protecție credit activă.</p></div>`);}
+function geSheet(){const gc=gchat, a=gc?.economyLast||{}, live=gSpect?.g===grp?gSpect:null, t=live?.stats||a; openSheet(`<h4>AI Economy · Spectator</h4><div class="pad"><p>Buget estimat: $0.25 / sesiune</p><p>Cost raportat estimat: $${Number(live?.spent??a.spent??0).toFixed(4)}</p><p>Intrare: ${t.inp||0} · Ieșire: ${t.out||0}<br>Cache citit: ${t.cr||0} · Cache scris: ${t.cw||0}<br>Cereri procesate: ${t.calls||0} · încercate: ${t.attempted||0} · respinse HTTP: ${t.rejected||0}</p><p>Sesiune: ${esc(live?.id||a.sessionId||"anterioară")} · ${live?"activă":"salvată"}<br>Răspunsuri fără text: ${t.empty||0} · cost rezervat (usage incomplet): ${t.uncertain||0}</p><h4>Cost pe rol</h4>${Object.entries(t.breakdown||{}).map(([k,v])=>`<p>${esc(k.startsWith("personaj:")?(charById(k.slice('personaj:'.length))?.name||k):k)}: $${v.cost.toFixed(4)} · ${v.calls} cereri</p>`).join('')||'—'}<p>Ultima estimare: ${t.next? '$'+Number(t.next.estimate).toFixed(4)+' · '+esc(t.next.model)+' · '+t.next.tokens+' tokeni intrare · disponibil înainte: $'+Number(t.next.remaining).toFixed(4):'—'}</p><p>${esc(live?.reason||a.reason||'Tarifele sunt cele configurate în aplicație.')}</p><p>Cache prefix static la replici Spectator; regizor fără cache. Confirmare prin contoarele furnizorului. Context recent comprimat · protecție credit activă.</p></div>`);}
 async function streamOnce(sys, msgs, {max = 700, signal, onText, cid, aux, meta, tag, cold, conv, eco, hist, uc, groupSession} = {}){
   let model = eco ? modelFor(true) : modelFor(aux);   // 9.49: eco = mesaj simplu → modelul mic, cu tot contextul personajului
   // 8.17: conversația rămâne în cache 1 oră (nu 5 minute): la pauze mai lungi istoricul se recitește la 5-10% din preț
@@ -618,7 +621,7 @@ async function streamOnce(sys, msgs, {max = 700, signal, onText, cid, aux, meta,
   let res; try{ res = await fetch(apiUrl('anthropic', '/v1/messages'), {method:'POST', signal, headers:apiHeaders('anthropic', {
         'content-type':'application/json', 'anthropic-version':'2023-06-01'}),
         body: safeJSON(payload)}); }catch(e){if(groupSession) giAccount(groupSession,null,model,reservation,cid,false,'');throw e;}
-  if(!res.ok){ if(groupSession) groupSession.stats.rejected=(groupSession.stats.rejected||0)+1; throw new Error(await errText(res)); }
+  if(!res.ok){ if(groupSession) groupSession.stats.rejected=(groupSession.stats.rejected||0)+1; const e=new Error(await errText(res));e.http=res.status;if(meta){meta.model=model;meta.max=max;}if(groupSession)giProviderDiag(groupSession,e,cid?charById(cid):null,meta);throw e; }
   const rd = res.body.getReader(), dec = new TextDecoder();
   let buf = '', full = '', usage = null, stop = null, ended = false; const blocks=new Set();
   try{
@@ -5760,7 +5763,7 @@ JSON: {"actions":[{"name":"","do":"reply|react|seen","emoji":"","to":"author nam
     if(lead) gRuleApply(gc, j.rule, j.unrule);
     const ph = j.photo && typeof j.photo === 'object' ? {names:(Array.isArray(j.photo.names) ? j.photo.names : []).map(find).filter(Boolean).slice(0, 4), by:find(j.photo.by)} : null;
     if(acts.some(a => a.do === 'reply') || ph) return {acts, photo:ph, dm:find(j.dm), task, doers};
-  }catch(e){if(geStopError(e)) throw e;}
+  }catch(e){if(geStopError(e)||e.http) throw e;}
   const pick = mentioned.length ? mentioned : toAll ? ms.slice(0, 3) : ms.slice().sort(() => Math.random() - .5).slice(0, Math.random() < .5 ? 1 : 2);
   return {acts:pick.map(c => ({c, do:'reply'})).concat(ms.filter(c => !pick.includes(c)).map(c => ({c, do:'seen'}))), photo:null, dm:null};
 }
@@ -5797,7 +5800,7 @@ function gSharedSys(g, gc = gchat, speaker = null){
     `Scrii replici într-o conversație de grup pe telefon între ${u} și personajele: ${ms.map(c => c.name).join(', ')}. La fiecare cerere afli ce personaj ești acum; scrii DOAR replica acelui personaj, în stilul lui, și rămâi mereu în personaj. Nu spui că ești un AI.`,
     giPrompt(g),
     ...ms.map(c => { const facts = ''; 
-      return [`## ${c.name}${c.tag ? ' (' + c.tag + ')' : ''}${c.city ? ', din ' + c.city : ''}`, (!speaker || speaker.id===c.id) && c.persona && `Cine e: ${c.persona}`, (!speaker || speaker.id===c.id) && c.speech && `Cum vorbește: ${c.speech}`, (!speaker || speaker.id===c.id) && c.aspect && `Cum arată: ${String(c.aspect).slice(0, 700)}`,
+      return [`## ${c.name}${c.tag ? ' (' + c.tag + ')' : ''}${c.city ? ', din ' + c.city : ''}`, !speaker && c.persona && `Cine e: ${c.persona}`, !speaker && c.speech && `Cum vorbește: ${c.speech}`, !speaker && c.aspect && `Cum arată: ${String(c.aspect).slice(0, 700)}`,
         `Relația cu ${u}: ${relOf(c).name}. ${relOf(c).how}.`, facts && `Ce știe ${c.name} despre ${u} (din conversațiile lor):\n${facts}`].filter(Boolean).join('\n'); }),
     `## Grupul „${g.name}”${g.topic ? ' (' + g.topic + ')' : ''}: cum se cunosc între ele\n${pairs.join('\n') || '-'}\nSe vorbesc ca oameni care se știu: pe nume (sau cum se alintă), știu cum e fiecare, fac aluzie la ce au trăit împreună; nu vă prezentați și nu vă întrebați lucruri pe care le-ați ști deja.`,
     T.sys && `## Tonul grupului\n${T.sys}`,
@@ -5810,7 +5813,7 @@ function gSharedSys(g, gc = gchat, speaker = null){
 - Acțiuni foarte rar și scurt între *asteriscuri*. Fără liniuțe lungi, fără formule de asistent.
 - Ce a aflat un personaj doar din discuțiile private cu ${u} rămâne între ei: nu spune asta în grup și nu lasă să se înțeleagă; celelalte nu știu ce vorbește ${u} cu fiecare între patru ochi.
 - Dacă ${u} îți cere o poză sau chiar se potrivește (rar), poți spune că trimiți una; aplicația o face.`
-  ].filter(Boolean).join('\n\n');
+   ,speaker && `## Profil activ: ${speaker.name}\n${speaker.persona||''}\nCum vorbește: ${speaker.speech||''}\nCum arată: ${String(speaker.aspect||'').slice(0,700)}`].filter(Boolean).join('\n\n');
 }
 const gLineT = m => `${gName(m)}${m.bomb ? ' (veste mare)' : ''}: ${m.re ? '(răspunde la ' + m.re.name + ': „' + m.re.text.slice(0, 80) + '”) ' : ''}${m.img ? '[poză] ' : ''}${m.text || ''}`;
 // conversația grupului, la fel pentru toate personajele: câte un bloc pe mesaj; fereastra se mută din 20 în 20 (9.51)
@@ -5922,7 +5925,7 @@ async function gRespond(text, more, forcePhoto, x = {}){
       const eco = gEco(k, c, text, more, x, mentioned, photo, gc) || (!!session && !photoAsk && !x.task && !x.bomb && session.left%4!==0 && mixLvl(c)!=="off" && S.aux!=="off" && !auxBroken);   // 9.60: amestecul și în grup
       const meta = {};   // 9.65: aflăm dacă răspunsul s-a oprit la limită (înainte: mesajul tăiat intra în grup așa, chiar la jumătatea unui cuvânt)
       try{ out = await stream(gSharedSys(g, gc, session?c:null), gContext(c, gc, {...x, followup:followups.get(k)}, g), {max:session?giLength(session):800, signal:ac.signal, cid:c.id, tag:'grup', conv:true, cold:true, eco, meta, groupSession:session}); }   // 9.61: prompt și transcriere comune, cache comun   // 9.51: cache pe 5 min (fișa + istoricul grupului), citit la 5% din preț
-      catch(e){ if(geStopError(e)){throw e;} if(e.name === 'AbortError') break; if(session){session.failure='eroare furnizor';session.fatal=true;break;} push({id:uid(), role:'ai', cid:c.id, name:c.name, text:'', err:e.message || 'Eroare', ts:Date.now()}); break; }   // 9.57: și eroarea apare la necitite
+      catch(e){ if(geStopError(e)){throw e;} if(e.name === 'AbortError') break; if(session){session.failure=giProviderDiag(session,e,c,meta);session.fatal=true;break;} push({id:uid(), role:'ai', cid:c.id, name:c.name, text:'', err:e.message || 'Eroare', ts:Date.now()}); break; }   // 9.57: și eroarea apare la necitite
       const {parts, re} = gParse(out, c, ms, gc, meta, gc.msgs.length);
       if(session) session.pending=null;
       if(session){session.stats.response={speaker:c.name,model:meta.model,max:meta.max,blocks:meta.blocks,output:meta.output,stop:meta.stop||'necunoscut',chars:String(out||'').length,parts:parts.length,reason:!String(out||'').trim()?'răspuns gol':!parts.length?'parser fără text utilizabil':'text acceptat',retry:session.recovery||0};}
