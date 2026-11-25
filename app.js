@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.15.5.1';
+const APP_VER = '14.15.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -515,12 +515,29 @@ function gePause(g,gc,session,e){
 // 14.15.5 — local, group-scoped emotional state; no extra API calls.
 const EM_BASE={joy:50,energy:65,concern:20,tension:15,warmth:65};
 const EM_LABEL={joy:'Veselie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'};
+// 14.15.6 — opt-in fictional world, deterministic local clock; no background requests.
+const LW_PROFILES={stela:[65,60,45,10,95],florica:[80,80,30,15,85],marioara:[85,90,20,25,75],roxana:[60,65,35,25,90],lacramioara:[90,80,35,10,98]};
+function lwKey(c){return pnorm(c?.name||'').split(/\s+/)[0];}
+function lwBase(gc,id){const c=charById(id), a=LW_PROFILES[lwKey(c)], custom=gc.world?.profiles?.[id];return Object.fromEntries(Object.keys(EM_BASE).map((k,i)=>[k,Math.max(0,Math.min(100,Number(custom?.[k]??a?.[i]??EM_BASE[k]))||0)]));}
+function lwHash(s){let h=2166136261;for(const c of String(s))h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0;}
+function lwSnapshot(gc,ms,now=Date.now()){
+ const d=new Date(now),day=[d.getFullYear(),d.getMonth()+1,d.getDate()].join('-'),h=d.getHours(), slot=Math.floor(h/2), season=d.getMonth()===11||d.getMonth()<2?'iarnă':d.getMonth()<5?'primăvară':d.getMonth()<8?'vară':'toamnă';
+ const rows=ms.map(c=>{const k=lwKey(c),n=lwHash(day+c.id+slot),home=k==='roxana'?'Gospodăria Floricăi':'Acasă';let activity=h<6||h>=23?'Odihnă':h<9?'Cafea și treburi de dimineață':h<12?(season==='iarnă'?'Treburi în casă':season==='toamnă'?'Treburi de sezon în gospodărie':'Treburi în gospodărie'):h<14?'Prânz și pauză':h<18?'Treburi personale':h<21?'Cină și timp liber':'Relaxare';
+ if(h>=9&&h<12&&k==='stela')activity='Pregătește mâncarea';if(h>=14&&h<18&&k==='marioara')activity='Treburi prin gospodărie';
+ return {id:c.id,name:c.name,activity,location:gc.giLocations?.[c.name]||home,confirmed:!!gc.giLocations?.[c.name],availability:h<6||h>=23?15:h<12?55:h<18?65:90,seed:n};});
+ const events=[];if(h>=14&&h<18&&rows.length>1&&lwHash(day+slot)%3===0){const a=rows.find(r=>lwKey(r)==='lacramioara'),b=rows.find(r=>lwKey(r)==='roxana');if(a&&b&&!a.confirmed&&!b.confirmed){a.location='Gospodăria Floricăi';a.activity='Vizită simulată la Roxana';events.push(a.name+' o vizitează pe '+b.name+' (simulare)');}}
+ return {day,slot,season,rows,events};}
+function lwContext(gc,ms){if(!gc.world?.enabled)return '';const w=lwSnapshot(gc,ms);return 'Fictional local simulation, subordinate to explicit dialogue and confirmed locations; never assume user location or physical presence. '+w.rows.map(r=>r.name+': '+r.activity+', '+r.location).join('; ')+'. '+w.events.join('; ')+'; use sparingly, not as mandatory topic.';}
+function lwSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const ms=gMembers(g),w=lwSnapshot(gc,ms);openSheet(`<h4>Living World Inspector</h4><div class="pad"><p>${esc(w.day)} · ${esc(w.season)} · simulare fictivă locală</p><label><input type="checkbox" id="lwOn" ${gc.world?.enabled?'checked':''}> Activează lumea simulată</label>${w.rows.map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · ${esc(r.location)} (${r.confirmed?'confirmată':'simulată'})<br>Disponibilitate orientativă: ${r.availability}/100</p>`).join('')}<p>${esc(w.events.join(' · ')||'Nicio vizită simulată acum.')}</p><button class="btn pri" id="lwSave">Salvează</button></div>`);$('#lwSave').onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;gc.world={...gc.world,enabled:$('#lwOn').checked};await gSave(g,gc);lwSheet();};}
+function lwProfileSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const ms=gMembers(g);openSheet(`<h4>Profiluri emoționale individuale</h4><div class="pad">${ms.map((c,i)=>`<h4>${esc(c.name)}</h4>${Object.entries(lwBase(gc,c.id)).map(([k,v])=>`<p>${EM_LABEL[k]} <input type="number" min="0" max="100" id="lw-${i}-${k}" value="${v}"></p>`).join('')}`).join('')}<button class="btn pri" id="lwProfilesSave">Salvează profilurile</button></div>`);$('#lwProfilesSave').onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const profiles={};for(const [i,c] of ms.entries()){profiles[c.id]={};for(const k of Object.keys(EM_BASE)){const v=$(`#lw-${i}-${k}`).valueAsNumber;if(!Number.isFinite(v)||v<0||v>100){toast('Valori între 0 și 100.');return;}profiles[c.id][k]=Math.round(v);}}gc.world={...gc.world,profiles};await gSave(g,gc);emSheet();};}
+function lwLocalDirector(g,gc,ms){const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-8),last=recent.at(-1),speaker=ms.find(c=>c.id===last?.cid);if(!speaker)return null;const targets=gAddressTargets([last.text],speaker,ms,g).filter(c=>c.id!==speaker.id);if(targets.length!==1)return null;return {acts:[{c:targets[0],do:'reply'}],local:true};}
 function emRead(gc,id,now=Date.now()){
   const old=gc.emotional?.states?.[id], elapsed=Math.max(0,now-(old?.ts||now)), factor=Math.pow(.5,elapsed/21600000);
-  return Object.fromEntries(Object.entries(EM_BASE).map(([k,b])=>[k,Math.round(b+(Math.max(0,Math.min(100,Number(old?.[k]??b)||0))-b)*factor)]));
+  return Object.fromEntries(Object.entries(lwBase(gc,id)).map(([k,b])=>[k,Math.round(b+(Math.max(0,Math.min(100,Number(old?.[k]??b)||0))-b)*factor)]));
 }
 function emSignals(text){const t=pnorm(String(text||''));const d={};
-  if(/\b(bucur|fericit|minunat|ras|haha|vesel|bravo)\w*/.test(t))d.joy=12;
+  if(/\b(bucur|fericit|minunat|ras|rad|razi|haha|vesel|bravo|haz|glum)\w*/.test(t))d.joy=12;
+  if(/\b(energie|odihnit|spor|chef)\w*/.test(t))d.energy=8;
   if(/\b(obosit|obosita|somn|epuizat)\w*/.test(t))d.energy=-15;
   if(/\b(grija|ingrijorat|bolnav|trist|necaz|problema)\w*/.test(t))d.concern=14;
   if(/\b(suparat|cearta|nervos|enervat)\w*/.test(t))d.tension=12;
@@ -537,7 +554,7 @@ function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.ro
   if(/\b(maine|poimaine|luni|marti|miercuri|joi|vineri|sambata|duminica)\b/.test(pnorm(msg.text))&&/\b(vin|merg|trec|plec|ne vedem|intalnim|vizita)\w*/.test(pnorm(msg.text))){e.candidates.push({id:msg.id,ts:now,text:String(msg.text).slice(0,240)});e.candidates=e.candidates.slice(-20);}
 }
 function emContext(gc,ms){return 'Temporary local mood estimates (not facts or personality changes): '+ms.map(c=>c.name+': '+Object.entries(emRead(gc,c.id)).map(([k,v])=>k+' '+v).join(', ')).join('; ')+'. Use only as subtle tone cues and optional speaker relevance; direct addresses, autonomy and current dialogue take priority. Never mention scores.';}
-function emSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const e=gc.emotional||{};openSheet(`<h4>Emotional Inspector</h4><div class="pad"><p>Estimări locale, nu emoții reale. Revenire la bază: timp de înjumătățire 6 ore.</p>${gMembers(g).map(c=>`<p><b>${esc(c.name)}</b><br>${Object.entries(emRead(gc,c.id)).map(([k,v])=>`${EM_LABEL[k]}: ${v}/100`).join(' · ')}</p>`).join('')}<h4>Semnale recente</h4>${(e.memory||[]).slice(-8).reverse().map(m=>`<p>${esc(m.author||'')}: ${esc(m.signals.map(k=>EM_LABEL[k]).join(', '))}</p>`).join('')||'—'}<h4>Planuri detectate (neconfirmate)</h4>${(e.candidates||[]).map((m,i)=>`<p>${esc(m.text)} <button class="btn" data-em-confirm="${i}">Confirmă ca plan</button></p>`).join('')||'—'}<button class="btn" id="emReset">Resetează stările emoționale</button></div>`);document.querySelectorAll('[data-em-confirm]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const i=Number(b.dataset.emConfirm),m=e.candidates[i];if(!m)return;gc.giEvents=[...(gc.giEvents||[]), 'PLAN: '+m.text].slice(-20);e.candidates.splice(i,1);await gSave(g,gc);emSheet();});$('#emReset').onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;if(gc.emotional)gc.emotional.states={};await gSave(g,gc);emSheet();};}
+function emSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const e=gc.emotional||{};openSheet(`<h4>Emotional Inspector</h4><div class="pad"><p>Estimări locale, nu emoții reale. Revenire la bază: timp de înjumătățire 6 ore.</p>${gMembers(g).map(c=>`<p><b>${esc(c.name)}</b><br>${Object.entries(emRead(gc,c.id)).map(([k,v])=>`<span>${EM_LABEL[k]}: ${v}/100</span><div style="height:5px;background:#7773;border-radius:5px;margin:4px 0"><div style="height:5px;width:${v}%;background:#b78ad5;border-radius:5px"></div></div>`).join(' · ')}</p>`).join('')}<h4>Semnale recente</h4>${(e.memory||[]).slice(-8).reverse().map(m=>`<p>${esc(m.author||'')}: ${esc(m.signals.map(k=>EM_LABEL[k]).join(', '))}</p>`).join('')||'—'}<h4>Planuri detectate (neconfirmate)</h4>${(e.candidates||[]).map((m,i)=>`<p>${esc(m.text)} <button class="btn" data-em-confirm="${i}">Confirmă ca plan</button></p>`).join('')||'—'}<button class="btn" id="emReset">Resetează stările emoționale</button></div>`);document.querySelectorAll('[data-em-confirm]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const i=Number(b.dataset.emConfirm),m=e.candidates[i];if(!m)return;gc.giEvents=[...(gc.giEvents||[]), 'PLAN: '+m.text].slice(-20);e.candidates.splice(i,1);await gSave(g,gc);emSheet();});$('#emReset').onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;if(gc.emotional)gc.emotional.states={};await gSave(g,gc);emSheet();};}
 
 function giPersistent(gc){return {events:(gc.giEvents||[]).slice(-20),locations:gc.giLocations||{}};}
 function giPersistentSheet(){const g=grp,gc=gchat;if(!g||!gc)return;const state=giPersistent(gc);openSheet(`<h4>Memorie persistentă · grup</h4><div class="pad"><p>Evenimente confirmate sau planificate (unul pe rând; prefix FINALIZAT: pentru evenimente încheiate)</p><textarea id="giEvents" rows="6">${esc(state.events.join('\n'))}</textarea><p>Locații confirmate (nume: locație; una pe rând). Necunoscut dacă lipsește.</p><textarea id="giLoc" rows="6">${esc(Object.entries(state.locations).map(([k,v])=>k+': '+v).join('\n'))}</textarea><button class="btn pri" id="giSave">Salvează</button></div>`);$('#giSave').onclick=async()=>{gc.giEvents=$('#giEvents').value.split('\n').map(x=>x.trim().slice(0,300)).filter(Boolean).slice(-20);gc.giLocations=Object.fromEntries($('#giLoc').value.split('\n').filter(x=>x.includes(':')).slice(0,30).map(x=>[x.split(':')[0].trim().slice(0,80),x.slice(x.indexOf(':')+1).trim().slice(0,150)]));await gSave(g,gc);closeSheet();};}
@@ -5558,6 +5575,8 @@ function groupMenu(){
     ['💵', 'AI Economy Monitor', () => setTimeout(geSheet,60)],
     ['🧠', 'Memorie și locații grup', () => setTimeout(giPersistentSheet,60)],
     ['💗', 'Emotional Inspector', () => setTimeout(emSheet,60)],
+    ['🎚️', 'Profiluri emoționale individuale', () => setTimeout(lwProfileSheet,60)],
+    ['🌍', 'Living World Inspector', () => setTimeout(lwSheet,60)],
     ['🔎', 'Group Intelligence Inspector', () => setTimeout(giInspector,60)],
     ['🧹', 'Curăță erorile vechi de credit', () => setTimeout(giCleanErrors,60)],
     ['▶', 'Reia sesiunea întreruptă', () => gSpectStart(grp,true)],
@@ -5751,9 +5770,9 @@ function gSharedSys(g, gc = gchat, speaker = null){
 }
 const gLineT = m => `${gName(m)}${m.bomb ? ' (veste mare)' : ''}: ${m.re ? '(răspunde la ' + m.re.name + ': „' + m.re.text.slice(0, 80) + '”) ' : ''}${m.img ? '[poză] ' : ''}${m.text || ''}`;
 // conversația grupului, la fel pentru toate personajele: câte un bloc pe mesaj; fereastra se mută din 20 în 20 (9.51)
-function gTranscript(gc = gchat){
+function gTranscript(gc = gchat, compact=false){
   const valid=gc.msgs.filter(m=>!m.err&&m.role!=="sys"&&(m.text||m.img));
-  const n=valid.length, from=Math.floor(Math.max(0,n-20)/10)*10;
+  const n=valid.length, from=Math.floor(Math.max(0,n-(compact?14:20))/10)*10;
   const lines=valid.slice(from).map(gLineT);
   return ['Conversația din grup până acum (cele mai noi la final):', ...(lines.length ? lines : ['(grupul abia începe, încă nu a scris nimeni)'])];
 }
@@ -5767,6 +5786,7 @@ function gTurn(c, g, gc = gchat, x = {}){
     x.session && `## Profilul tău complet\n${c.persona||""}\nCum vorbești: ${c.speech||""}\nAspect: ${String(c.aspect||"").slice(0,700)}`,
     gPresenceContext(gc),
     emContext(gc,[c]),
+    lwContext(gc,gMembers(g)),
     `## Tu și celelalte, acum\n${rels || '-'}`,
     `## Ce simți pentru ${u}, aici\n${gCareWord(m.care)} (${m.care}/100).${m.why ? ' De ce: ' + m.why + '.' : ''}\nCât îl ajuți: ${gHelpWord(m.help)} (${m.help}/100). Când ${u} cere ajutor sau are o problemă, asta decide cât de repede și cât de concret sari (sau nu). Arată asta prin fapte și ton, nu spunând cifrele.`,
     pn && (pn.mood || pn.carry || (pn.others || []).length || (pn.secrets || []).length) && `## Din discuțiile tale private cu ${u} (doar tu știi asta)\n${pn.mood ? 'Cum ești acum cu el: ' + pn.mood + '\n' : ''}${(pn.others || []).length ? 'Ce i-ai zis în privat despre celelalte: ' + pn.others.map(o => o.name + ': ' + o.t).join('; ') + '\n' : ''}${pn.carry ? 'Poți face aluzie firesc, fără să explici: ' + pn.carry + '\n' : ''}${(pn.secrets || []).length ? 'NU spui în grup și nu lași să se înțeleagă: ' + pn.secrets.join('; ') + '\n' : ''}Se simte în ton și în cum îi răspunzi (mai caldă, mai rece, complice), nu povestești conversația privată.`,
@@ -5785,7 +5805,7 @@ function gTurn(c, g, gc = gchat, x = {}){
 // ce primește un personaj, întreg (pentru teste și depanare)
 function groupSystem(c, g, gc = gchat, x = {}){ return gSharedSys(g, gc) + '\n\n' + gTurn(c, g, gc, x); }
 function gContext(c, gc = gchat, x = {}, g = grp){
-  const parts = gTranscript(gc);
+  const parts = gTranscript(gc,!!x.session);
   return [{role:'user', parts:[...parts, gTurn(c, g, gc, x)], _cacheAt:parts.length - 1}];
 }
 // (3) [re: …] → mesajul din grup citat
@@ -5824,8 +5844,9 @@ async function gRespond(text, more, forcePhoto, x = {}){
     const named = text ? gMentioned(text, ms, true) : [];   // 9.57: numele pomenite au prioritate față de „toți”
     const toAll = !!text && ((!named.length && G_ALL.test(text)) || !!x.bomb), mentioned = toAll ? [] : named;   // „fetelor”: pentru toate, dar nu e obligatoriu să răspundă toate
     const pending=session?.pending && ms.find(c=>c.id===session.pending);
-    const plan = pending ? {acts:[{c:pending,do:"reply"}]} : await gDirector(g, ms, more, mentioned, photoAsk, toAll, gc, x);
-    gc.giTrace={ts:Date.now(),selected:plan.acts.filter(a=>a.do==="reply").map(a=>a.c.name),source:pending?"checkpoint":"director"};
+    const localPlan = session && !pending && !photoAsk && session.left % 3 !== 0 ? lwLocalDirector(g,gc,ms) : null;
+    const plan = pending ? {acts:[{c:pending,do:"reply"}]} : localPlan || await gDirector(g, ms, more, mentioned, photoAsk, toAll, gc, x);
+    gc.giTrace={ts:Date.now(),selected:plan.acts.filter(a=>a.do==="reply").map(a=>a.c.name),source:pending?"checkpoint":localPlan?"local-address":"director"};
     if(plan.task) x = {...x, task:plan.task};   // 9.67: ce a cerut liderul ajunge în rândul fiecăreia care o face
     if(gc.msgs.length && gc.msgs[gc.msgs.length - 1].role === 'sys' && /^📌/.test(gc.msgs[gc.msgs.length - 1].text)){ await gSave(g, gc); if(grp === g) renderGroup(); }   // regulă nouă / scoasă
     if(lastU && !more) lastU.seen = ms.map(c => c.id);   // (2) „văzut de …”
