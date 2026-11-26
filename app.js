@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.3';
+const APP_VER = '16.0.4';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -906,7 +906,7 @@ function unpState(gc,ms,now=Date.now()){
  return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),commitments:unpCommitments(gc,c,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===(p.from===c.id?p.to:p.from))?.name||'—',category:p.category,check:unpConflict(gc,ms,p,now)}))};});
 }
 function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Recent elapsed simulated social slots (not proof of attendance): '+(gc.living15?.journal||[]).filter(e=>e.from===c.id||e.to===c.id).slice(-2).map(e=>e.category+' '+new Date(e.ts).toLocaleDateString('ro-RO')).join('; ')+'. Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
-function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.3</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
+function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.4</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
 // 15.1: derived, bounded group-only behavioral tendencies; no mutation of canon.
 function deep151Profile(gc,c,now=Date.now()){
  const rows=(gc.social17?.events||[]).filter(e=>e.from===c.id&&Number.isFinite(e.ts)&&e.ts<=now&&now-e.ts<=30*86400000);
@@ -1384,7 +1384,8 @@ async function idRefs(c, shot = ''){
   // 8.5: pozele de referință în plus (alte unghiuri) merg ca repere 3 și 4: fața decupată din fiecare
   const extra = await extraRefs(c, shot);   // 9.83 (2): ale tale, apoi fișa de identitate (unghiurile potrivite scenei)
   let body = null, bodyFrom = 'profil';
-  if(c.photoFull){ const fb = await DB.get(c.photoFull).catch(() => null); if(fb) try{ body = await fullBodyRef(fb, c.fullBox); bodyFrom = 'intreaga'; }catch(e){} }   // 9.32
+  if(c.photoFull){ const fb = await DB.get(c.photoFull).catch(() => null); if(fb) try{ body = await fullBodyRef(fb, c.fullBox); bodyFrom = 'intreaga'; }catch(e){} }
+  if(!body){ const r=c.visualIdentity?.refs?.find(r=>r.approved && r.role==='body'); if(r){const b=await DB.get(r.key).catch(()=>null);if(b)try{body=await fullBodyRef(b,null);bodyFrom='intreaga';}catch(e){}} }   // 9.32
   if(!body) body = await bodySquare(full, bx);
   return {full, id, face: await cropFace(full, bx), body, bodyFrom, extra};
 }
@@ -1413,7 +1414,7 @@ function genDiagHTML(m){
 }
 // expresia: cea obișnuită (din poza de profil), în afară de cazul în care ai cerut tu alta în conversație
 // 8.24: trăsăturile definitorii (corp, ten, păr) chiar la începutul promptului, unde generatorul le dă cea mai mare greutate
-const subjLine = (c, id) => { const s0 = id && id.subj && ['portret', ''].includes(bodySrc(c, id).src) ? id.subj : (id && id.subj ? String(id.subj).replace(BODY_WORDS, '').split(',')[0] : ''); const u = c && c.physEn ? c.physEn.split(/\s+/).slice(0, 30).join(' ') : ''; return s0 || u ? ' The person: ' + [s0, u].filter(Boolean).join('; ') + '.' : ''; };
+const subjLine = (c, id) => { const s0 = id && id.subj && ['portret', ''].includes(bodySrc(c, id).src) ? id.subj : (id && id.subj ? String(id.subj).replace(BODY_WORDS, '').split(',')[0] : ''); const u = c && c.physEn ? c.physEn.split(/\s+/).slice(0, 30).join(' ') : ''; return (s0 || u ? ' The person: ' + [s0, u].filter(Boolean).join('; ') + '.' : '') + viNote(c); };
 const NO_BEAUTY = 'Do NOT beautify or idealize: same age, same weight and body shape, same skin texture, spots and under-eye shadows, same face width; no slimming, no smoothing, no younger look.';
 // 9.1: modelul pentru o poză: în chat = „Fidelitatea feței”; stories și statusuri pot avea setarea lor (Eco, mai ieftin)
 const isAuto = opt => !!opt && (opt.tag === 'stories' || opt.tag === 'statusuri');
@@ -2615,9 +2616,33 @@ function sheetPick(c, shot, n = 2){
   return v.slice().sort((a, b) => (sc[b.ang] || 0) - (sc[a.ang] || 0)).slice(0, n).map(x => ({...x, sc:sc[x.ang] || 0}));   // 10.6 (B): cât se potrivește scenei
 }
 // reperele 3 și 4 (fețe decupate): ale tale întâi, apoi fișa (după scenă), apoi unghiurile automate
+// 16.0.4 — explicit visual reference approval; legacy references remain compatible.
+const VI_ROLES = {front:'Frontal',three:'Trei sferturi',side:'Profil lateral',body:'Corp întreg',other:'Alt unghi'};
+function viProfile(c){ return c.visualIdentity ||= {v:1, locked:false, refs:[], permanent:'', variable:''}; }
+function viApproved(c, shot){
+  const p = c.visualIdentity; if(!p) return [];
+  const side = /side|profile|lateral/i.test(shot || '');
+  const order = side ? ['side','three','front','other','body'] : ['front','three','side','other','body'];
+  return (p.refs || []).filter(r => r.approved && r.key && r.key !== c.photo && r.role !== 'body').sort((a,b)=>order.indexOf(a.role)-order.indexOf(b.role));
+}
+function viProtected(c,key){ return !!key && !!c.visualIdentity?.locked && (key === c.visualIdentity.portrait || key === c.visualIdentity.body || (c.visualIdentity.refs || []).some(r=>r.approved && r.key===key)); }
+function viLock(c,on){ const p=viProfile(c); if(on && !c.photo) return false; p.locked=!!on; if(on){p.portrait=c.photo;p.body=c.photoFull || null;} return true; }
+function viAdd(c,key,role){ const p=viProfile(c); if(!key || !Object.hasOwn(VI_ROLES,role) || p.refs.length>=12 || p.refs.some(r=>r.key===key)) return false; p.refs.push({key,role,approved:false}); return true; }
+function viNote(c){ return c.visualIdentity?.permanent ? ' Permanent identity traits: '+c.visualIdentity.permanent+'.' : ''; }
+function drawVisualIdentity(c,box){
+  const p=viProfile(c);
+  box.insertAdjacentHTML('beforeend', `<div class="refbox" id="viCore"><b>🔒 Visual Identity Studio</b><small>Protejează reperele aprobate. Nu garantează reproducerea identică de către model.</small><label><input id="viLock" type="checkbox" ${p.locked?'checked':''}> Protejează portretul și corpul actual</label><div class="refgrid">${p.refs.map((r,i)=>`<figure><img data-k="${esc(r.key)}" alt=""><figcaption>${esc(VI_ROLES[r.role]||r.role)} · ${r.approved?'Aprobat':'În așteptare'}</figcaption><button class="btn sm" data-viapprove="${i}">${r.approved?'Retrage':'Aprobă'}</button><button class="btn sm" data-viremove="${i}" ${p.locked&&r.approved?'disabled':''}>Șterge</button></figure>`).join('')}</div><select id="viRole">${Object.entries(VI_ROLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="viFile" type="file" accept="image/*"><small>Maximum 12 repere; generatorul folosește până la două repere faciale suplimentare.</small><label>Trăsături permanente (preferabil engleză)<textarea id="viPermanent" maxlength="700">${esc(p.permanent)}</textarea></label><label>Elemente variabile / notițe de scenă<textarea id="viVariable" maxlength="700">${esc(p.variable)}</textarea></label><button class="btn pri" id="viSave">Salvează profilul vizual</button></div>`);
+  const root=box.querySelector('#viCore'); hydrate(root);
+  root.querySelector('#viLock').onchange=async e=>{if(!viLock(c,e.target.checked)){e.target.checked=false;toast('Adaugă întâi un portret.');return;} await saveChars();drawPics(c);};
+  root.querySelector('#viSave').onclick=async()=>{p.permanent=root.querySelector('#viPermanent').value.trim();p.variable=root.querySelector('#viVariable').value.trim();await saveChars();toast('Profil vizual salvat');};
+  root.querySelector('#viFile').onchange=async e=>{const f=e.target.files[0];if(!f||p.refs.length>=12)return;try{const k=await saveImg(await toJpeg(f,2048,.94));if(!viAdd(c,k,root.querySelector('#viRole').value)){await delImg(k);return;}await saveChars();drawPics(c);}catch(err){toast('Nu pot importa reperul.');}};
+  root.querySelectorAll('[data-viapprove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viapprove];if(!r)return;if(p.locked&&r.approved){toast('Deblochează întâi identitatea.');return;}r.approved=!r.approved;await saveChars();drawPics(c);});
+  root.querySelectorAll('[data-viremove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viremove];if(!r||viProtected(c,r.key))return;p.refs.splice(+b.dataset.viremove,1);await saveChars();await delImg(r.key);drawPics(c);});
+}
 async function extraRefs(c, shot, noBox){
-  const user = (c.refs || []).length && !c.refsAuto ? c.refs.slice(0, 2) : [], list = user.map(k => ({k, box:(c.refBoxes || {})[k]}));
-  for(const s of sheetPick(c, shot, 2 - list.length)) list.push({k:s.k, box:s.box, ang:s.ang});
+  const user = (c.refs || []).length && !c.refsAuto ? c.refs.slice(0, 2) : [], list = viApproved(c, shot).slice(0,2).map(r=>({k:r.key,box:(c.refBoxes || {})[r.key],ang:r.role}));
+  for(const k of user) if(list.length<2 && !list.some(x=>x.k===k)) list.push({k,box:(c.refBoxes || {})[k]});
+  for(const s of (list.length < 2 ? sheetPick(c, shot, 2 - list.length) : [])) if(!list.some(x=>x.k===s.k)) list.push({k:s.k, box:s.box, ang:s.ang});
   for(const k of c.refs || []) if(list.length < 2 && !list.some(x => x.k === k)) list.push({k, box:(c.refBoxes || {})[k]});
   const out = [];
   for(const x of list.slice(0, 2)){
@@ -4970,6 +4995,7 @@ async function fullVariants(c, base, signal, draw = () => {}, n = 2, o = {}){   
   return vars;
 }
 async function saveFull(c, v){
+  if(viProtected(c,c.photoFull)){toast('Deblochează identitatea pentru a schimba corpul.');return;}
   const old = c.photoFull;
   c.photoFull = await saveImg(v.blob); c.fullBox = v.chk && v.chk.box || null; delete c.bodyFull; delete c.bodySig; delete c.fullOwn;
   if(old && old !== c.photoFull){
@@ -8605,6 +8631,7 @@ function drawFidCard(c, box){
     ${sec('ref', '📷 Reperele', 'pfFidRef')}${sec('desc', '✍️ Descrierea', 'pfFidDesc')}${c.photo && photo ? sec('rez', '📊 Rezultatele', 'pfFidRez') : ''}</div>`);
   const R = $('#pfFidRef'), D = $('#pfFidDesc'), Z = $('#pfFidRez');
   if(c.photo && S.imgProv === 'worker'){ drawFaceRef(c, R); drawCloseRef(c, R); drawDetail(c, R); drawCons(c, R); }   // 10.5
+  drawVisualIdentity(c, R);
   drawRefs(c, R);          // + pachetul de identitate și fișa (drawSheet)
   drawBodyNote(c, D);
   if(c.photo && photo){ drawAudit(c, D); drawStats(c, Z); drawIdTest(c, Z); }   // 13.7: 🧪 testul de identitate   // 12.2: setul-etalon e scos   // 11.3 (E1): setul verifică fișa, deci stă lângă ea
@@ -12483,6 +12510,7 @@ function msgSheet(i){
   if(m.img && canShareFiles()) opts.push(['↗️', 'Trimite poza în altă aplicație', () => shareImage(m.img)]);
   if(m.img && !me) opts.push(['🖼️', 'Fă-o poză de profil', async () => {
     const c = cur, b = await DB.get(m.img); if(!b) return;
+    if(viProtected(c,c.photo)){toast('Deblochează identitatea înainte de schimbarea portretului.');return;}
     const old = c.photo; c.photo = await saveImg(b); await saveChars(); await delPhotoIfUnused(c, old);   // copie proprie: poza din chat rămâne
     toast('Poză de profil schimbată'); openChat(c.id, false); }]);
   if(!busy) opts.push(['🗑️', 'Șterge mesajul', async () => { const c = cur; chat.msgs.splice(i, 1); cutAt(chat, i); await purgeMsg(m, c); await saveChat(); renderMsgs(); }, 'dan']);
@@ -17250,6 +17278,7 @@ async function lookApply(c, ch, B0){
   }catch(e){ if(e.name !== 'AbortError') setMsg('⚠️ ' + esc(e.message || 'N-a mers.')); }
 }
 async function lookKeep(c, por, full, ch, ro, en, bodyEn){
+  if(c.visualIdentity?.locked) throw new Error('Deblochează identitatea înainte de schimbarea aspectului.');
   // aspectul de acum rămâne 30 de zile pentru „Revino”; un aspect și mai vechi se șterge
   const old = c.lookPrev; if(old){ for(const k of [old.photo, old.photoFull]) if(k && k !== c.photo && k !== c.photoFull) delImg(k).catch(() => {}); }
   c.lookPrev = {at:Date.now(), photo:c.photo, photoFull:c.photoFull || null, fullBox:c.fullBox || null, physUser:c.physUser || '', physEn:c.physEn || '', appZones:c.appZones ? JSON.parse(JSON.stringify(c.appZones)) : null, fullOwn:!!c.fullOwn};
@@ -17268,6 +17297,7 @@ async function lookKeep(c, por, full, ch, ro, en, bodyEn){
   setTimeout(() => kitBuild(c, {gen:true, toast:true}).catch(() => {}), 1500);
 }
 async function lookRevert(c){
+  if(c.visualIdentity?.locked){toast('Deblochează identitatea înainte de restaurarea aspectului.');return;}
   const p = c.lookPrev; if(!p || !p.photo) return;
   confirmSheet(`Revii la aspectul de dinainte al lui ${c.name}? Reperele se refac pentru el, în fundal.`, '↩ Revino', async () => {
     const cur = {at:Date.now(), photo:c.photo, photoFull:c.photoFull || null, fullBox:c.fullBox || null, physUser:c.physUser || '', physEn:c.physEn || '', appZones:c.appZones ? JSON.parse(JSON.stringify(c.appZones)) : null, fullOwn:!!c.fullOwn};
@@ -17637,6 +17667,7 @@ async function saveEditorNow(){
   const P = isNew && !duo && ed.photoBlob && preKit && !preKit.dead && preKit.blob === ed.photoBlob ? preKit : null;   // 11.6 (F1): ciorna cu reperele începute devine personajul
   if(isNew && !P && preKit) preKitDrop();
   if(isNew){ if(P){ preKit = null; clearTimeout(preKitT); c = P.c; c.created = Date.now(); try{ localStorage.removeItem('taifas-prekit'); }catch(e){} } else c = {id:uid(), created:Date.now()}; chars.push(c); }
+  if((ed.photoBlob && viProtected(c,c.photo)) || (ed.fullTouched && viProtected(c,c.photoFull))){toast('Deblochează identitatea înainte de schimbarea portretului.');return;}
   ed.adopt = P;
   if(ed.photoBlob && P) c.aiPortrait = !!ed.aiPortrait;
   else if(ed.photoBlob){ const old = c.photo; c.photo = await saveImg(ed.photoBlob); if(old) keepStudioReference(c, 'portrait', old); c.aiPortrait = !!ed.aiPortrait;
