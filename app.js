@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.17.0';
+const APP_VER = '14.17.0.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -710,23 +710,40 @@ function life8Sheet(){const g=grp,gc=gchat;if(!g||!gc)return;const a=life8State(
 // 14.17.0: group-only directional social observations; never changes canon or locked relationships.
 function social17Observe(gc,msg,ms,targets){
   if(msg.role!=='ai'||msg.err||!msg.id||!msg.text||!ms.some(c=>c.id===msg.cid))return;
-  const ids=[...new Set(targets.map(c=>c.id))].filter(id=>id!==msg.cid&&ms.some(c=>c.id===id));
-  if(ids.length!==1)return;
-  const t=pnorm(msg.text), signals=[];
-  if(/\b(multumesc|mersi)\b/.test(t))signals.push('multumire');
-  if(/\b(te ajut|iti dau o mana|pot sa te ajut)\b/.test(t)&&!/\b(nu|daca)\b/.test(t))signals.push('oferta de ajutor');
-  if(/\b(imi pare rau|ai grija de tine)\b/.test(t))signals.push('grija');
-  if(!signals.length)return;
-  const s=gc.social17||(gc.social17={events:[]});
-  if(s.events.some(e=>e.id===msg.id))return;
-  s.events.push({id:msg.id,from:msg.cid,to:ids[0],ts:msg.ts||Date.now(),signals});
-  s.events=s.events.slice(-200);
+  const state=gc.social17||(gc.social17={events:[]});
+  const diag=state.diagnostics||(state.diagnostics=[]);
+  if(diag.some(d=>d.id===msg.id)||state.events.some(e=>e.id===msg.id))return;
+  const others=ms.filter(c=>c.id!==msg.cid), aliases=c=>{
+    const n=pnorm(c.name).split(' ')[0];
+    return [...new Set([n,n.endsWith('a')?n.slice(0,-1)+'o':n,...({roxana:['roxanico','roxi'],lacramioara:['lacri','lacramioaro'],marioara:['marioaro'],florica:['florico'],stela:['stelo']}[n]||[])])].filter(Boolean);
+  };
+  const found=new Map(); let current=null, ambiguous=false;
+  const clauses=String(msg.text).split(/[.!?;\n]+/).filter(Boolean);
+  for(const clause of clauses){
+    let t=pnorm(clause); if(!t)continue;
+    const addressed=others.filter(c=>aliases(c).some(n=>new RegExp('(?:^|,\\s*)(?:(?:mai|fa|tanti)\\s+)?'+n+'\\s*,','i').test(String(clause).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim())));
+    if(addressed.length===1)current=addressed[0];
+    else if(addressed.length>1){current=null;ambiguous=true;continue;}
+    const fallback=[...new Set((targets||[]).map(c=>c.id))];
+    const dest=current||(!ambiguous&&fallback.length===1?others.find(c=>c.id===fallback[0]):null);
+    if(!dest)continue;
+    const signals=[];
+    if(/\b(multumesc|mersi|iti multumesc)\b/.test(t)&&!/\bnu (?:iti )?multumesc\b/.test(t))signals.push('multumire');
+    if(/\b(te ajut|iti dau|ti dau|iti aduc|ti aduc|iti fac|iti tin|iti dau o mana|pot sa te ajut)\b/.test(t)&&!/\bnu (?:te ajut|iti dau|ti dau|iti aduc|ti aduc|pot sa te ajut)\b/.test(t))signals.push(/\b(daca|poate|as putea)\b/.test(t)?'oferta conditionata':'oferta de ajutor');
+    if(/\b(imi pare rau|ai grija|sa nu ti|sa nu te)\b/.test(t))signals.push('grija');
+    if(/\b(vino|hai pe la mine|te astept|treci pe la mine)\b/.test(t)&&!/\bnu (?:vino|te astept)\b/.test(t))signals.push('invitatie');
+    if(signals.length)found.set(dest.id,[...new Set([...(found.get(dest.id)||[]),...signals])]);
+  }
+  for(const [to,signals] of found)state.events.push({id:msg.id,from:msg.cid,to,ts:msg.ts||Date.now(),signals});
+  state.events=state.events.slice(-200);
+  diag.push({id:msg.id,from:msg.cid,ts:msg.ts||Date.now(),result:found.size?'semnale: '+found.size: 'fara semnal atribuibil',clauses:clauses.length});
+  state.diagnostics=diag.slice(-100);
 }
 function social17Edges(gc,ms){
   const events=gc.social17?.events||[];
   return ms.flatMap(a=>ms.filter(b=>b.id!==a.id).map(b=>{
     const ev=events.filter(e=>e.from===a.id&&e.to===b.id);
-    return {from:a.id,to:b.id,count:ev.length,support:Math.min(100,50+ev.slice(-20).reduce((n,e)=>n+e.signals.length,0)),last:ev.at(-1)};
+    return {from:a.id,to:b.id,count:ev.length,support:Math.min(100,50+ev.slice(-20).reduce((n,e)=>n+e.signals.filter(x=>x!=='oferta conditionata').length,0)),last:ev.at(-1)};
   }));
 }
 function social17Context(gc,c,ms){
@@ -736,7 +753,7 @@ function social17Context(gc,c,ms){
 function social17Sheet(){
   if(!grp||!gchat)return;
   const ms=gMembers(grp), edges=social17Edges(gchat,ms), name=id=>ms.find(c=>c.id===id)?.name||'—';
-  openSheet(`<h4>Social Inspector</h4><div class="pad"><p>Semnale publice observate local; scor orientativ, nu schimbă relațiile fixate. 50 = fără semnale.</p>${edges.map(e=>`<p><b>${esc(name(e.from))} → ${esc(name(e.to))}</b><br>Sprijin: ${e.support}/100 · ${e.count} observații</p>`).join('')}<h4>Evenimente sociale recente</h4>${(gchat.social17?.events||[]).filter(e=>ms.some(c=>c.id===e.from)&&ms.some(c=>c.id===e.to)).slice(-20).reverse().map(e=>`<p>${esc(name(e.from))} → ${esc(name(e.to))}: ${esc(e.signals.join(', '))}</p>`).join('')||'Nicio observație încă.'}</div>`);
+  openSheet(`<h4>Social Inspector</h4><div class="pad"><p>Semnale publice observate local; scor orientativ, nu schimbă relațiile fixate. 50 = fără semnale.</p>${edges.map(e=>`<p><b>${esc(name(e.from))} → ${esc(name(e.to))}</b><br>Sprijin: ${e.support}/100 · ${e.count} observații</p>`).join('')}<h4>Evenimente sociale recente</h4>${(gchat.social17?.events||[]).filter(e=>ms.some(c=>c.id===e.from)&&ms.some(c=>c.id===e.to)).slice(-20).reverse().map(e=>`<p>${esc(name(e.from))} → ${esc(name(e.to))}: ${esc(e.signals.join(', '))}</p>`).join('')||'Nicio observație încă.'}<h4>Diagnostic local (ultimele 100)</h4><p>Mesaje analizate: ${(gchat.social17?.diagnostics||[]).length}</p>${(gchat.social17?.diagnostics||[]).slice(-12).reverse().map(d=>`<p>${esc(name(d.from))}: ${esc(d.result)} · ${d.clauses} fragmente</p>`).join('')}</div>`);
 }
 
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
