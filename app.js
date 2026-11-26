@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.17.2';
+const APP_VER = '14.18.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -769,6 +769,7 @@ function social171Observe(gc,msg,ms,targets){
   const t=pnorm(raw);if(!t)continue;
   const addressed=others.filter(c=>aliases(c).some(n=>new RegExp('(?:^|,\\s*)(?:(?:mai|fa|tanti)\\s+)?'+n+'\\s*,','i').test(raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim())));
   if(addressed.length)current=addressed.map(c=>c.id);
+  else if(/^(si tu|tu),?\s+(nepoata|nepoate|verisoara|puiule)\b/.test(t))current=[];
   const collective=/\b(fetelor|pe la voi|la voi toate|haideti|veniti)\b/.test(t);
   const explicit=addressed.length===1&&!/\b(fetelor|veniti|haideti|la voi toate)\b/.test(t);
   const groupTarget=collective&&!explicit;
@@ -778,7 +779,7 @@ function social171Observe(gc,msg,ms,targets){
   if(pending.length===1&&!conditional){const p=pending[0];
    if(/\b(nu pot veni|nu vin|nu pot sa vin|nu ajung|refuz)\b/.test(t)){record(p,'refuzat');hits++;}
    else if(/\b(amanam|reprogramam|alta zi|mai bine poimaine)\b/.test(t)){record(p,'de reprogramat');hits++;}
-   else if(!p.conditional&&/\b(accept invitatia|vin sigur|da vin|vin cu drag|sigur ca vin|vin negresit|vin la tine|trec pe la tine)\b/.test(t)&&!/\bnu\b/.test(t)){record(p,'acceptat');hits++;continue;}
+   else if(!p.conditional&&/\b(accept invitatia|vin sigur|da vin|vin cu drag|sigur ca vin|vin negresit|vin la tine|trec pe la tine|vin maine|vin pe la pranz|ajung maine)\b/.test(t)&&!/\bnu\b/.test(t)){const check=typeof unpConflict==='function'?unpConflict(gc,ms,p,now):null;if(check?.state==='conflict'){record(p,'de reprogramat');reasons.push('conflict de agendă');}else record(p,'acceptat');hits++;continue;}
   }
   let kind=null;
   if(/\b(vino|veniti|hai pe la mine|treci pe la mine|te invit|hai sa facem impreuna|haideti sa)\b/.test(t))kind='invitație';
@@ -812,6 +813,23 @@ function social171Context(gc,c,ms){
  return (pending.length?'Unanswered invitations addressed to you: '+pending.slice(-3).map(p=>name(p.from)+' / '+p.category+' / '+(p.due!=null?new Date(p.due).toLocaleDateString('ro-RO'):'date unspecified')).join('; ')+'. If relevant, explicitly name the inviter and answer in your own words; do not accept if unavailable. ': '')+(topic?'Repeated recent topic: '+topic+'. When naturally resolved, shift to a different relevant topic; do not abruptly interrupt. ':'')+'Social initiative: when natural, offer a visit or shared task based on public memory and current availability. Check your own current activity and existing plans before offering or accepting; if busy, suggest another time. If a topic is exhausted, introduce a relevant different everyday topic. Do not force invitations or speak for others. Explicitly accept, decline or suggest another day if addressed; an agreement is not execution. '+rows.map(p=>`${name(p.from)} → ${p.group?'group':name(p.to)}: ${p.kind||'invitation'} / ${p.category}, ${p.status}${p.conditional?' (conditional proposal)':''}${p.due!==null?' '+new Date(p.due).toLocaleDateString('ro-RO'):''}`).join('; ');
 }
 function social171Sheet(){if(!grp||!gchat)return;const ms=gMembers(grp),name=id=>ms.find(c=>c.id===id)?.name||'—',s=gchat.social171||{},now=Date.now();openSheet(`<h4>Viață socială · invitații</h4><div class="pad"><p>Propuneri publice, nu vizite efectuate. Acordul nu rezervă automat un interval.</p>${(s.items||[]).filter(p=>ms.some(c=>c.id===p.from)&&(p.group||ms.some(c=>c.id===p.to))).slice().reverse().map(p=>`<p><b>${esc(name(p.from))} → ${esc(p.group?"Grup (destinatar neprecizat)":name(p.to))}</b><br>${esc(p.kind||"invitație")} · ${esc(p.category)} · ${esc(p.status==='propus'&&now-p.ts>=172800000?'expirat':p.status)}${p.conditional?' · condiționat':''}<br>${esc(p.text)}<br>${p.due!==null?esc(new Date(p.due).toLocaleDateString('ro-RO')):'Fără dată'}</p>`).join('')||'Nicio invitație încă.'}<h4>Jurnal social</h4>${(s.journal||[]).slice(-20).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.status)}</p>`).join('')||'—'}<h4>Diagnostic inițiative</h4>${(s.diagnostics||[]).slice(-20).reverse().map(d=>`<p>${esc(d.author)} · ${d.hits} semnale · ${esc(d.reason)}</p>`).join('')||'—'}</div>`);}
+
+function unpConflict(gc,ms,p,now=Date.now()){
+ if(!gc.world?.enabled||!Number.isFinite(p.due))return {state:'unknown',reason:'fără interval verificabil'};
+ const t=pnorm(p.text||'');let hour=/\b(dupa amiaza)\b/.test(t)?15:/\b(dimineata)\b/.test(t)?9:/\b(pranz|amiaza)\b/.test(t)?12:/\b(seara)\b/.test(t)?18:null;
+ if(hour===null)return {state:'unknown',reason:'oră neprecizată'};
+ const d=new Date(p.due);d.setHours(hour,0,0,0);const start=d.getTime(),end=start+3600000;
+ if(start<now)return {state:'unknown',reason:'interval trecut'};
+ const people=ms.filter(c=>c.id===p.from||c.id===p.to);if(people.length!==2)return {state:'unknown',reason:'destinatar neprecizat'};
+ for(const c of people){if(life16State(gc,c,start).asleep||life162Projection(gc,c,now).some(x=>x.start<end&&x.end>start))return {state:'conflict',reason:c.name+' · interval ocupat',start,end};}
+ return {state:'clear',reason:'fără conflict detectat în interval orientativ',start,end};
+}
+function unpState(gc,ms,now=Date.now()){
+ const world=gc.world?.enabled?lwSnapshot(gc,ms,now):null;
+ return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===p.from).name,category:p.category,check:unpConflict(gc,ms,p,now)}))};});
+}
+function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return 'Unified presence (local estimates, not facts): '+row.pending.slice(-3).map(p=>p.from+' / '+p.category+' / '+p.check.state).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Answer one relevant pending invitation naturally before reopening exhausted topics; never invent agreement or physical presence.';}
+function unpSheet(){if(!grp||!gchat)return;const ms=gMembers(grp),gc=gchat;openSheet(`<h4>Unified Inspector · 14.18</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${unpState(gc,ms).map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>k+': '+v).join(' · '))}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`);}
 
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
@@ -5861,6 +5879,7 @@ function groupMenu(){
     ['🔎', 'Response Inspector', () => setTimeout(giResponseSheet,60)],
     ['🔎', 'Context Inspector', () => setTimeout(giContextSheet,60)],
     ['🧠', 'Memorie și locații grup', () => setTimeout(giPersistentSheet,60)],
+    ['🧭', 'Unified Inspector', () => setTimeout(unpSheet,60)],
     ['🤝', 'Viață socială', () => setTimeout(social171Sheet,60)],
     ['🕸️', 'Social Inspector', () => setTimeout(social17Sheet,60)],
     ['💗', 'Emotional Inspector', () => setTimeout(emSheet,60)],
@@ -6085,6 +6104,7 @@ function gTurn(c, g, gc = gchat, x = {}){
     emContext(gc,[c]),
     social17Context(gc,c,gMembers(g)),
     social171Context(gc,c,gMembers(g)),
+    unpContext(gc,c,gMembers(g)),
     lwContext(gc,gMembers(g)),
     `## Tu și celelalte, acum\n${rels || '-'}`,
     `## Ce simți pentru ${u}, aici\n${gCareWord(m.care)} (${m.care}/100).${m.why ? ' De ce: ' + m.why + '.' : ''}\nCât îl ajuți: ${gHelpWord(m.help)} (${m.help}/100). Când ${u} cere ajutor sau are o problemă, asta decide cât de repede și cât de concret sari (sau nu). Arată asta prin fapte și ton, nu spunând cifrele.`,
