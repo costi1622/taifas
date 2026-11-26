@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '15.0.1';
+const APP_VER = '15.1.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -722,10 +722,10 @@ function life9Agenda(a,now=Date.now()){
  const d=new Date(now);d.setHours(0,0,0,0);const start=d.getTime();d.setDate(d.getDate()+1);const end=d.getTime();
  return (a.plans||[]).filter(p=>p.due>=start&&p.due<end&&!['anulat','finalizat'].includes(p.status));
 }
-function life8Context(gc,now=Date.now()){
+function life8Context(gc,now=Date.now(),speaker=null){
  const a=life8State(gc),recent=gc.msgs.filter(m=>!m.err&&m.role!=='sys').slice(-10),ids=new Set(recent.map(m=>m.id)),words=geWords(recent.map(m=>m.text).join(' '));
  const categories=new Set(recent.map(m=>life81Category(m.text)).filter(k=>k!=="general"));
- const episodes=life81Unique(a.episodes.filter(e=>!ids.has(e.id)).slice().reverse()).map(e=>({...e,score:[...geWords(e.text)].filter(w=>words.has(w)).length+(categories.has(life81Category(e.text))?3:0)+life81Importance(e.text)*.25})).filter(e=>e.score>=2).sort((x,y)=>y.score-x.score||y.ts-x.ts).slice(0,3).map(({author,text})=>({author,text}));
+ const episodes=speaker?deep151Recall(gc,speaker,now).map(({author,text})=>({author,text})):life81Unique(a.episodes.filter(e=>!ids.has(e.id)).slice().reverse()).map(e=>({...e,score:[...geWords(e.text)].filter(w=>words.has(w)).length+(categories.has(life81Category(e.text))?3:0)+life81Importance(e.text)*.25})).filter(e=>e.score>=2).sort((x,y)=>y.score-x.score||y.ts-x.ts).slice(0,3).map(({author,text})=>({author,text}));
  const plans=life81Unique(a.plans.filter(p=>!['finalizat','anulat'].includes(p.status))).sort((x,y)=>Number(y.due!==null&&y.due<=now)-Number(x.due!==null&&x.due<=now)||y.ts-x.ts).slice(0,4).map(p=>({author:p.author,text:p.text,status:p.status,due:p.due===null?null:new Date(p.due).toLocaleDateString('ro-RO')}));
  const topics=Object.entries(a.topics).filter(([w,v])=>v.n>=4&&now-v.ts<86400000).sort((x,y)=>y[1].n-x[1].n).slice(0,5).map(([w])=>w);
  const shared=life9Events(a).filter(e=>e.due>=now-86400000).slice(0,3).map(e=>({...e,statements:e.statements.slice(-3)}));
@@ -857,8 +857,25 @@ function unpState(gc,ms,now=Date.now()){
  return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),commitments:unpCommitments(gc,c,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===p.from).name,category:p.category,check:unpConflict(gc,ms,p,now)}))};});
 }
 function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Recent elapsed simulated social slots (not proof of attendance): '+(gc.living15?.journal||[]).filter(e=>e.from===c.id||e.to===c.id).slice(-2).map(e=>e.category+' '+new Date(e.ts).toLocaleDateString('ro-RO')).join('; ')+'. Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
-function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 15.0.1</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
-function unpSheet(){if(!grp||!gchat)return;openSheet(living15InspectorHtml(gchat,gMembers(grp)));}
+function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 15.1.0</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
+// 15.1: derived, bounded group-only behavioral tendencies; no mutation of canon.
+function deep151Profile(gc,c,now=Date.now()){
+ const rows=(gc.social17?.events||[]).filter(e=>e.from===c.id&&Number.isFinite(e.ts)&&e.ts<=now&&now-e.ts<=30*86400000);
+ const unique=[...new Map(rows.map(e=>[JSON.stringify([e.id,e.to]),e])).values()];
+ const count=k=>unique.filter(e=>(e.signals||[]).includes(k)).length;
+ const weight=k=>unique.reduce((n,e)=>n+((e.signals||[]).includes(k)?Math.pow(.5,(now-e.ts)/(14*86400000)):0),0);
+ const bounded=k=>Math.min(8,Math.round(weight(k)));
+ return {evidence:unique.length,gratitude:bounded('multumire'),support:bounded('oferta de ajutor'),care:bounded('grija'),initiative:bounded('invitatie'),conditional:count('oferta conditionata')};
+}
+function deep151Recall(gc,c,now=Date.now()){
+ const recent=(gc.msgs||[]).filter(m=>!m.err&&m.role!=='sys').slice(-8),ids=new Set(recent.map(m=>m.id));
+ const words=new Set([...geWords(recent.map(m=>m.text||'').join(' '))].filter(w=>w.length>=5));
+ const categories=new Set(recent.map(m=>life81Category(m.text||'')).filter(k=>k!=='general'));
+ return life81Unique((gc.life8?.episodes||[]).filter(e=>e.id&&!ids.has(e.id)&&e.ts<=now).slice().reverse()).map(e=>{const overlap=[...new Set(geWords(e.text))].filter(w=>words.has(w)).length,semantic=categories.has(life81Category(e.text))?2:0;return {...e, relevance:overlap+semantic,score:overlap+semantic+(e.author===c.name?.5:0)+Math.min(1,Object.keys(emSignals(e.text)).length*.25)};}).filter(e=>e.relevance>=2).sort((a,b)=>b.score-a.score||b.ts-a.ts).slice(0,3);
+}
+function deep151Context(gc,c){const p=deep151Profile(gc,c);return 'Public behavioral evidence, not fixed traits: '+(p.evidence>=3?`gratitude ${p.gratitude}, help ${p.support}, care ${p.care}, initiative ${p.initiative}. Use only subtle cues when supported by current dialogue.`:'insufficient evidence; preserve baseline.')+' Never override canon, boundaries or independent choices. If appropriate, follow up on a relevant unresolved public plan; do not assume completion.';}
+function deep151Html(gc,ms){return '<h4>Evoluție personală · semnale publice</h4><p>Indicii locale, nu modificări ale personalității de bază. Fereastră 30 zile.</p>'+ms.map(c=>{const p=deep151Profile(gc,c);return `<p><b>${esc(c.name)}</b> · ${p.evidence} observații${p.evidence<3?' · dovezi insuficiente':''}<br>Mulțumire ${p.gratitude}/8 · Ajutor ${p.support}/8 · Grijă ${p.care}/8 · Inițiativă ${p.initiative}/8</p>`;}).join('');}
+function unpSheet(){if(!grp||!gchat)return;const ms=gMembers(grp);openSheet(living15InspectorHtml(gchat,ms).replace(/<\/div>$/,deep151Html(gchat,ms)+"</div>"));}
 
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
@@ -6129,7 +6146,8 @@ function gTurn(c, g, gc = gchat, x = {}){
     gPresenceContext(gc,!!x.session),
     x.session && `Use ${giLength(x.session)<=320?"one concise natural message":"one or two natural messages"}. If the last exchange has resolved its question, introduce a different relevant topic from your own routine; do not force a topic change during an open question.`,
     x.spect && `Avoid exhausted topics and repeated wording: ${lwTopics(gc).join(", ")}. ${x.session?.recovery?"Choose a genuinely new angle or topic; do not paraphrase previous messages.":""}` ,
-    life8Context(gc),
+    life8Context(gc,Date.now(),c),
+    deep151Context(gc,c),
     emContext(gc,[c]),
     social17Context(gc,c,gMembers(g)),
     unpContext(gc,c,gMembers(g)),
