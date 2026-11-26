@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.2';
+const APP_VER = '16.0.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -906,7 +906,7 @@ function unpState(gc,ms,now=Date.now()){
  return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),commitments:unpCommitments(gc,c,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===(p.from===c.id?p.to:p.from))?.name||'—',category:p.category,check:unpConflict(gc,ms,p,now)}))};});
 }
 function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Recent elapsed simulated social slots (not proof of attendance): '+(gc.living15?.journal||[]).filter(e=>e.from===c.id||e.to===c.id).slice(-2).map(e=>e.category+' '+new Date(e.ts).toLocaleDateString('ro-RO')).join('; ')+'. Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
-function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.2</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
+function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.3</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
 // 15.1: derived, bounded group-only behavioral tendencies; no mutation of canon.
 function deep151Profile(gc,c,now=Date.now()){
  const rows=(gc.social17?.events||[]).filter(e=>e.from===c.id&&Number.isFinite(e.ts)&&e.ts<=now&&now-e.ts<=30*86400000);
@@ -5854,9 +5854,14 @@ const saveGroups = () => DB.set('groups', groups);
 const gMembers = g => (g && g.members || []).map(charById).filter(Boolean);
 const G_REACT = ['❤️', '😂', '👍', '😮', '😢', '🔥', '🙄', '👏'];
 const G_ALL = /(?<!\p{L})(toți|toti|toată lumea|toata lumea|voi toate|voi toți|voi toti|voi doi|voi două|voi doua|voi trei|amândoi|amandoi|amândouă|amandoua|fetelor|fetele mele|băieților|baietilor|băieți|baieti|tuturor|oameni buni|grupule|grupul meu)(?!\p{L})/iu;   // 9.57: fără „voi” / „toate” / „grup” / „împreună” singure (ex. „voi veni”, „toate bune” nu înseamnă toată lumea)
+function groupPhotoHTML(g){ return g?.photo ? `<img class="av group-profile-photo" data-k="${esc(g.photo)}" data-t="s" alt="">` : ''; }
+function groupInitialChat(g){
+  const text = String(g.firstMessage || '').trim(), c = gMembers(g).find(c=>c.id===g.firstSpeaker);
+  return {msgs:text && c ? [{id:uid(),role:'ai',cid:c.id,text,ts:Date.now(),groupIntro:true}] : []};
+}
 function groupRowHTML(g){
   const ms = gMembers(g), last = g.last || 'Grup nou', un = g.unread || 0;
-  return `<div class="crow"><button class="cfront${un ? ' unr' : ''}" data-gopen="${g.id}"><span class="cav gstack">${ms.slice(0, 3).map(c => avatarHTML(c)).join('')}</span>
+  return `<div class="crow"><button class="cfront${un ? ' unr' : ''}" data-gopen="${g.id}"><span class="cav gstack">${groupPhotoHTML(g) || ms.slice(0, 3).map(c => avatarHTML(c)).join('')}</span>
     <span class="cmid"><span class="ctop"><b>👥 ${esc(g.name)}</b><time class="${un ? 'new' : ''}">${when(g.lastAt)}</time></span><span class="cbot"><small>${esc(last)}</small>${un ? `<span class="badge">${un > 9 ? '9+' : un}</span>` : ''}</span></span></button></div>`;
 }
 function groupsSheet(){
@@ -5874,10 +5879,13 @@ function groupEditSheet(g){
   const sel = new Set(g ? g.members : []);
   if(chars.length < 2){ toast('Ai nevoie de cel puțin 2 personaje ca să faci un grup.'); return; }
   openSheet(`<h4>${g ? '👥 Grupul' : '👥 Grup nou'}</h4><div class="pad">
+    <div class="group-photo-editor"><div id="gePhotoPreview">${groupPhotoHTML(g) || '👥'}</div><div><label for="gePhoto">Fotografie de grup</label><input id="gePhoto" type="file" accept="image/*"><button type="button" class="btn" id="gePhotoRemove">Șterge fotografia</button>${g?.photo ? '<button type="button" class="btn" id="gePhotoView">Vezi fotografia</button>' : ''}</div></div>
     <label for="geName">Numele grupului</label><input id="geName" maxlength="40" placeholder="ex. Fetele, Colegii, Familia" value="${esc(g ? g.name : '')}">
     <label style="margin-top:10px">Cine e în grup (2-${GROUP_MAX_MEMBERS}) · <span id="geCount">${sel.size}/${GROUP_MAX_MEMBERS}</span></label>
     <div class="gpick">${[...chars].filter(c => !duoOn(c)).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0)).map(c => `<button type="button" class="gpk${sel.has(c.id) ? ' on' : ''}" data-gc="${c.id}">${avatarHTML(c)}<span>${esc(c.name)}</span></button>`).join('')}</div>
     <label for="geTopic" style="margin-top:10px">Despre ce e grupul (opțional)</label><input id="geTopic" maxlength="160" placeholder="ex. plănuim o ieșire la munte" value="${esc(g && g.topic || '')}">
+    <label for="geFirstSpeaker">Autorul primei replici</label><select id="geFirstSpeaker"></select>
+    <label for="geFirstMessage">Prima replică (opțional)</label><textarea id="geFirstMessage" rows="4" maxlength="4000">${esc(g?.firstMessage || '')}</textarea><p class="hint">Se afișează numai la crearea conversației, fără API. Editarea nu schimbă istoricul existent.</p>
     <label for="geMaster">Group Master Prompt</label><textarea id="geMaster" rows="8" maxlength="60000">${esc(g?.masterPrompt || '')}</textarea>
     <details><summary>Group Intelligence · Natural Plus</summary>${Object.entries(giSettings(g)).map(([k,v])=>`<label>${GI_LABEL[k]} <input type="number" min="0" max="100" id="gi_${k}" value="${v}"></label>`).join('')}
     <label>Apelative (separate prin virgulă)</label>${chars.filter(c=>!duoOn(c)).map((c,i)=>`<label>${esc(c.name)}<input data-gi-alias="${esc(c.id)}" value="${esc(g?.aliases?.[c.id] || '')}"></label>`).join('')}</details>
@@ -5887,19 +5895,45 @@ function groupEditSheet(g){
     <label class="chk" style="margin-top:6px"><input type="checkbox" id="geLead" ${!g || g.lead !== false ? 'checked' : ''}> 👑 Tu conduci grupul: ce ceri se face aici, iar regulile tale rămân</label>
     <div class="btns"><button class="btn pri" id="geGo">${g ? 'Salvează' : 'Creează grupul'}</button></div></div>`);
   hydrate($('.sheet'));
+  let photoBlob = null, removePhoto = false, photoBusy = false, saving = false;
+  const speaker = $('#geFirstSpeaker');
+  function syncSpeaker(preferred = speaker.value){
+    speaker.innerHTML = '<option value="">Alege un membru</option>' + [...sel].map(id=>`<option value="${esc(id)}">${esc(charById(id)?.name || id)}</option>`).join('');
+    if(sel.has(preferred)) speaker.value = preferred;
+  }
+  syncSpeaker(g?.firstSpeaker);
+  $('#gePhoto').onchange = async e => {
+    const f = e.target.files[0]; if(!f || photoBusy || saving) return;
+    photoBusy = true; $('#geGo').disabled = true; $('#gePhotoRemove').disabled = true;
+    try { if(f.size > 30*1024*1024) throw Error('Fișier prea mare'); const b = await toJpeg(f, 2048, .9); if(!b) throw Error('Imagine invalidă');
+      photoBlob = b; removePhoto = false; const preview = $('#gePhotoPreview'); if(preview){preview.innerHTML = '<img class="av group-profile-photo" alt="">'; const im=preview.firstChild,u=URL.createObjectURL(b); im.onload=im.onerror=()=>URL.revokeObjectURL(u); im.src=u;}
+    } catch(e){toast('Fotografia nu a putut fi citită.');} finally {photoBusy=false; if($('#geGo')) $('#geGo').disabled=false; if($('#gePhotoRemove')) $('#gePhotoRemove').disabled=false;}
+  };
+  $('#gePhotoRemove').onclick = () => {if(saving || photoBusy)return; photoBlob=null; removePhoto=true; $('#gePhoto').value=''; $('#gePhotoPreview').textContent='👥';};
+  if($('#gePhotoView')) $('#gePhotoView').onclick=()=>viewImg(g.photo,[g.photo]);
   let tone = g && g.tone || 'normal';
   $('#geTone').onclick = e => { const b = e.target.closest('[data-v]'); if(!b) return; tone = b.dataset.v; $$('#geTone button').forEach(x => x.classList.toggle('on', x === b)); };
-  $('.gpick').onclick = e => { const b = e.target.closest('[data-gc]'); if(!b) return; const id = b.dataset.gc; if(sel.has(id)) sel.delete(id); else { if(sel.size >= GROUP_MAX_MEMBERS){ toast(`Cel mult ${GROUP_MAX_MEMBERS} personaje.`); return; } sel.add(id); } b.classList.toggle('on', sel.has(id)); $('#geCount').textContent = `${sel.size}/${GROUP_MAX_MEMBERS}`; };
+  $('.gpick').onclick = e => { const b = e.target.closest('[data-gc]'); if(!b) return; const id = b.dataset.gc; if(sel.has(id)) sel.delete(id); else { if(sel.size >= GROUP_MAX_MEMBERS){ toast(`Cel mult ${GROUP_MAX_MEMBERS} personaje.`); return; } sel.add(id); } b.classList.toggle('on', sel.has(id)); $('#geCount').textContent = `${sel.size}/${GROUP_MAX_MEMBERS}`; syncSpeaker(); };
   $('#geGo').onclick = async () => {
     if(sel.size < 2){ toast('Alege cel puțin 2 personaje.'); return; }
     if(sel.size > GROUP_MAX_MEMBERS){ toast(`Cel mult ${GROUP_MAX_MEMBERS} personaje.`); return; }
+    if(saving || photoBusy) return;
+    const firstMessage = $('#geFirstMessage').value.trim(), firstSpeaker = speaker.value;
+    if(firstMessage && !sel.has(firstSpeaker)){toast('Alege autorul primei replici.');return;}
+    saving=true; $('#geGo').disabled=true;
+    const oldPhoto=g?.photo || ''; let photo=removePhoto?'':oldPhoto;
+    try { if(photoBlob) photo=await saveImg(photoBlob); } catch(e){saving=false; $('#geGo').disabled=false;toast('Nu s-a putut salva fotografia.');return;}
     const ms = [...sel], name = $('#geName').value.trim() || ms.map(id => charById(id).name).join(', ');
-    const gi = {masterPrompt:$('#geMaster').value.trim(), intelligence:Object.fromEntries(Object.keys(GI_DEFAULT).map(k=>[k,Math.max(0,Math.min(100,Number($('#gi_'+k).value)||0))])), aliases:Object.fromEntries($$('.sheet [data-gi-alias]').filter(e=>sel.has(e.dataset.giAlias)).map(e=>[e.dataset.giAlias,e.value.trim()]))};
-    if(g){ Object.assign(g,gi); const t0 = g.tone || 'normal'; g.members = ms; g.name = name; g.topic = $('#geTopic').value.trim(); g.life = $('#geLife').checked; g.lead = $('#geLead').checked; g.tone = tone; await saveGroups(); closeSheet();
+    const gi = {photo,firstMessage,firstSpeaker,masterPrompt:$('#geMaster').value.trim(), intelligence:Object.fromEntries(Object.keys(GI_DEFAULT).map(k=>[k,Math.max(0,Math.min(100,Number($('#gi_'+k).value)||0))])), aliases:Object.fromEntries($$('.sheet [data-gi-alias]').filter(e=>sel.has(e.dataset.giAlias)).map(e=>[e.dataset.giAlias,e.value.trim()]))};
+    try {
+    if(g){ Object.assign(g,gi); const t0 = g.tone || 'normal'; g.members = ms; g.name = name; g.topic = $('#geTopic').value.trim(); g.life = $('#geLife').checked; g.lead = $('#geLead').checked; g.tone = tone; await saveGroups(); if(oldPhoto && oldPhoto!==photo) await delImg(oldPhoto).catch(()=>{}); closeSheet();
       if(grp === g && t0 !== tone && gchat){ gchat.msgs.push({id:uid(), role:'sys', text:`${gTone(g).e} Tonul grupului: ${gTone(g).n}`, ts:Date.now()}); await gSave(); }
       if(grp === g){ renderGroup(); gKnow(g, gchat, true).catch(() => {}); } renderHome(); return; }
     const ng = {...gi,id:uid(), name, members:ms, topic:$('#geTopic').value.trim(), life:$('#geLife').checked, lead:$('#geLead').checked, tone, created:Date.now(), lastAt:Date.now()};
-    groups.push(ng); await saveGroups(); closeSheet(); openGroup(ng.id);
+    const initial=groupInitialChat(ng);
+    if(initial.msgs.length) ng.last=charById(firstSpeaker).name+': '+plain(firstMessage).slice(0,80);
+    await DB.set('grp:'+ng.id,initial); groups.push(ng); await saveGroups(); closeSheet(); openGroup(ng.id);
+    } catch(e){saving=false; if($('#geGo')) $('#geGo').disabled=false; toast('Salvarea grupului a eșuat. Verifică spațiul disponibil.');}
   };
 }
 async function openGroup(id, push = true){
@@ -5943,7 +5977,7 @@ function renderGroup(toEnd){
   const sp = gSpect && gSpect.g === grp;
   $('#gTag').textContent = gbusy && gbusy.typing && gbusy.typing.length ? gbusy.typing.map(c => c.name).join(' și ') + (gbusy.typing.length > 1 ? ' scriu…' : ' scrie…') : sp ? '👀 mod spectator · ' + ms.map(c => c.name).join(', ') : (grp.tone && grp.tone !== 'normal' ? gTone(grp).e + ' ' : '') + ms.map(c => c.name).join(', ') + (grp.topic ? ' · ' + grp.topic : '');
   $('#gTag').classList.toggle('typing', !!(gbusy && gbusy.typing && gbusy.typing.length));
-  $('#gAvs').innerHTML = ms.slice(0, 3).map(c => avatarHTML(c)).join('') + (ms.length > 3 ? `<span class="gextra" title="${esc(ms.slice(3).map(c=>c.name).join(', '))}">+${ms.length-3}</span>` : ''); hydrate($('#gAvs'));   // 9.45: bulinele din antet (nu se încărcau)
+  $('#gAvs').innerHTML = groupPhotoHTML(grp) || ms.slice(0, 3).map(c => avatarHTML(c)).join('') + (ms.length > 3 ? `<span class="gextra" title="${esc(ms.slice(3).map(c=>c.name).join(', '))}">+${ms.length-3}</span>` : ''); hydrate($('#gAvs'));   // 9.45: bulinele din antet (nu se încărcau)
   const box = $('#gMsgs'), near = box.scrollHeight - box.scrollTop - box.clientHeight < 200;
   const lastU = [...gchat.msgs].reverse().find(m => m.role === 'user');
   const html = gchat.msgs.map((m, i) => {
@@ -5962,7 +5996,7 @@ function renderGroup(toEnd){
   const lastReal = [...gchat.msgs].reverse().find(m => m.role !== 'sys');   // 9.57: rândurile de sistem (🕸️, 👀) nu mai ascund butonul
   const lastI = lastReal ? gchat.msgs.lastIndexOf(lastReal) : -1, rk = !sp && lastI >= 0 ? gCanRegen(gchat, lastI) : null;   // 9.82
   const more = !gbusy && !sp && lastReal && lastReal.role === 'ai' ? `<div class="gmrow">${rk ? `<button class="gmore" data-gregen="${lastI}">↻ Alt mesaj de la ${esc(gShort(rk.c, ms))}</button>` : ''}<button class="gmore" data-gmore>▶ Lasă-i să mai vorbească</button></div>` : '';
-  box.innerHTML = gchat.msgs.length ? html + ty + more : `<div class="intro"><div class="gstack big">${ms.slice(0, 4).map(c => avatarHTML(c)).join('')}</div><b>${esc(grp.name)}</b><p>Scrie ceva pentru tot grupul. Ca să întrebi pe cineva anume, scrie-i numele (sau atinge-l mai jos). Ține apăsat pe un mesaj ca să-i răspunzi.</p></div>` + ty;
+  box.innerHTML = gchat.msgs.length ? html + ty + more : `<div class="intro"><div class="gstack big">${groupPhotoHTML(grp) || ms.slice(0, 4).map(c => avatarHTML(c)).join('')}</div><b>${esc(grp.name)}</b><p>Scrie ceva pentru tot grupul. Ca să întrebi pe cineva anume, scrie-i numele (sau atinge-l mai jos). Ține apăsat pe un mesaj ca să-i răspunzi.</p></div>` + ty;
   hydrate(box);
   if(toEnd || near){ box.scrollTop = box.scrollHeight; requestAnimationFrame(() => box.scrollTop = box.scrollHeight); }
   $('#gChips').innerHTML = sp
@@ -5983,7 +6017,8 @@ const gViewing = g => grp === g && !$('#vGroup').hidden && !document.hidden;
 function groupMenu(){
   if(!grp) return;
   sheet([
-    ['👥', 'Membri, nume și subiect', () => setTimeout(() => groupEditSheet(grp), 60)],
+    ...(grp.photo ? [['🖼️','Vezi fotografia grupului',()=>viewImg(grp.photo,[grp.photo])]] : []),
+    ['👥', 'Editează profilul grupului', () => setTimeout(() => groupEditSheet(grp), 60)],
     ['🕸️', 'Relațiile dintre ele (le poți schimba și fixa)', () => setTimeout(() => gRelSheet(), 60)],
     ['📌', 'Regulile grupului' + ((gchat && gchat.rules || []).length ? ' · ' + gchat.rules.length : ''), () => setTimeout(() => gRulesSheet(), 60)],   // 9.67
     ['💗', 'Cât țin la tine și cât te ajută', () => setTimeout(() => gRelSheet(true), 60)],
@@ -6005,7 +6040,7 @@ function groupMenu(){
     ['▶', 'Reia sesiunea întreruptă', () => gSpectStart(grp,true)],
     ['🧠', 'Ce știe grupul (dinamica și rezumatul)', () => setTimeout(() => openSheet(`<h4>🧠 ${esc(grp.name)}</h4><div class="pad"><p><b>Dinamica</b><br>${esc(gchat.dyn || 'Încă se formează, după câteva mesaje.')}</p><p><b>Ce s-a vorbit</b><br>${esc(gchat.recap || '—')}</p></div>`), 60)],
     ['🧹', 'Golește conversația grupului', () => confirmSheet('Golești conversația grupului?', 'Golește', async () => { gSpectStop(true); if(gbusy) gbusy.abort(); const old = gchat; old.dead = true; gchat = {msgs:[], lifeAt:Date.now(), rel:old.rel, dyn:old.dyn, lifeDay:old.lifeDay}; await gSave(); gPurgeImgs(old.msgs); renderGroup(true); }), 'dan'],
-    ['🗑️', 'Șterge grupul', () => confirmSheet('Ștergi grupul „' + grp.name + '”? Personajele rămân.', 'Șterge', async () => { gSpectStop(true); if(gbusy) gbusy.abort(); if(gchat){ gchat.dead = true; gPurgeImgs(gchat.msgs); } await DB.del('grp:' + grp.id).catch(() => {}); groups = groups.filter(x => x !== grp); await saveGroups(); grp = null; gchat = null; goHome(); }), 'dan'],
+    ['🗑️', 'Șterge grupul', () => confirmSheet('Ștergi grupul „' + grp.name + '”? Personajele rămân.', 'Șterge', async () => { gSpectStop(true); if(gbusy) gbusy.abort(); if(gchat){ gchat.dead = true; gPurgeImgs(gchat.msgs); } await DB.del('grp:' + grp.id).catch(() => {}); const groupPhoto=grp.photo; groups = groups.filter(x => x !== grp); await saveGroups(); if(groupPhoto) await delImg(groupPhoto).catch(()=>{}); grp = null; gchat = null; goHome(); }), 'dan'],
   ]);
 }
 // 9.82: „↻ Alt mesaj” în grup. Blocul = bulele trimise la rând de același personaj (o replică); se reface doar o replică din runda curentă (după ultimul tău mesaj)
