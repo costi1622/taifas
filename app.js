@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.18.1';
+const APP_VER = '14.18.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -633,17 +633,30 @@ function life16State(gc,c,now=Date.now()){
  let activity=asleep?'Somn / odihnă':h>=12&&h<14?'Prânz și pauză':h>=20||h<wake?'Relaxare în casă':pool[(block+lwHash(day+c.id)%pool.length)%pool.length];
  const execution=!asleep?life162Projection(gc,c,now).find(x=>x.state==='în desfășurare'):null;
  if(execution)activity=LIFE163_ACT[execution.category][2];
- const location=execution?.sharedId&&execution.category!=='cumpărături'?'Gospodăria '+execution.host+' (simulată)':/magazin|cumparaturi/.test(pnorm(activity))?'Magazin (simulat)':/curte|gradina|gainile/.test(pnorm(activity))?'Curte (simulată)':home;
- return {asleep,activity,location,wake,bed,execution,progress:execution?execution.progress:asleep?null:Math.min(99,Math.max(0,Math.floor(((h-start)*60+d.getMinutes())/120*100))),source:override?'declarație recentă':'simulare',day};
+ const shared=!asleep&&!execution?unp182Shared(gc,c,now):null;
+ if(shared)activity="Activitate comună simulată: "+shared.category;
+ const location=shared?"Loc comun neprecizat (simulare)":execution?.sharedId&&execution.category!=='cumpărături'?'Gospodăria '+execution.host+' (simulată)':/magazin|cumparaturi/.test(pnorm(activity))?'Magazin (simulat)':/curte|gradina|gainile/.test(pnorm(activity))?'Curte (simulată)':home;
+ return {asleep,activity,location,wake,bed,execution,progress:execution?execution.progress:asleep?null:Math.min(99,Math.max(0,Math.floor(((h-start)*60+d.getMinutes())/120*100))),shared,source:override?'declarație recentă':'simulare',day};
 }
 function life161Eligible(gc,ms,now=Date.now()){return !gc.world?.enabled?ms:ms.filter(c=>!life16State(gc,c,now).asleep);}
 function life16History(gc,c,now=Date.now(),ms=[c]){
  const out=[];for(let i=6;i>=0;i--){const t=now-i*3600000;const r=lwSnapshot(gc,ms,t).rows.find(v=>v.id===c.id);out.push({ts:t,activity:r.activity,source:r.personal.source});}return out;
 }
+function unp182Availability(personal,activity,seed){
+ if(personal.asleep)return 15;
+ if(personal.execution||personal.shared)return 35;
+ const t=pnorm(activity);const base=/odihn|relax|timp personal|taifas/.test(t)?82:/magazin|cumpar|spal|aluat|mancar|gatit|curte|gradin/.test(t)?45:/telefon|suna|vorbeste|vizita/.test(t)?58:68;
+ return Math.max(20,Math.min(95,base+(seed%11)-5));
+}
+function unp182Shared(gc,c,now){
+ if(!gc.world?.enabled)return null;
+ const p=(gc.social171?.items||[]).find(p=>p.status==='acceptat'&&!p.conditional&&p.from!==p.to&&p.to&&p.window?.start<=now&&p.window?.end>now&&(p.from===c.id||p.to===c.id));
+ return p||null;
+}
 function lwSnapshot(gc,ms,now=Date.now()){
  const d=new Date(now),day=[d.getFullYear(),d.getMonth()+1,d.getDate()].join('-'),h=d.getHours(),slot=Math.floor(h/2),season=d.getMonth()===11||d.getMonth()<2?'iarnă':d.getMonth()<5?'primăvară':d.getMonth()<8?'vară':'toamnă';
- const rows=ms.map(c=>{const k=lwKey(c),n=lwHash(day+c.id+slot),home=k==='roxana'?'Gospodăria Floricăi':'Acasă', routine=LW_ROUTINES[k]||['Treburi în casă','Cumpărături','Timp personal','Relaxare'];const personal=life16State(gc,c,now);let activity=personal.activity;if(season==='iarnă'&&activity==='Îngrijește grădina')activity='Aranjează proviziile';return {id:c.id,name:c.name,activity,location:personal.location,confirmed:!!gc.giLocations?.[c.name],confirmedLocation:gc.giLocations?.[c.name]||null,availability:personal.asleep?15:personal.execution?35:Math.min(95,40+n%46),seed:n,personal};});
- const events=[];if(h>=8&&h<21&&lwHash(day+slot+'event')%3===0){const r=rows[lwHash(day+slot+'actor')%Math.max(1,rows.length)];if(r&&!r.personal.asleep)events.push(r.name+': '+['se gândește să împrumute o carte','își amintește de o rețetă veche','are de ales o mică treabă pentru mâine'][lwHash(day+slot+'kind')%3]+' (idee simulată, neconfirmată)');}if(h>=14&&h<18&&lwHash(day+slot)%3===0){const a=rows.find(r=>lwKey(r)==='lacramioara'),b=rows.find(r=>lwKey(r)==='roxana');if(a&&b&&!a.confirmed&&!b.confirmed&&!a.personal.asleep&&!b.personal.asleep&&!a.personal.execution&&!b.personal.execution){a.location='Gospodăria Floricăi';a.activity='Vizită simulată la Roxana';a.personal={...a.personal,activity:a.activity,location:a.location};events.push(a.name+' o vizitează pe '+b.name+' (simulare)');}}return {day,slot,season,rows,events};}
+ const rows=ms.map(c=>{const k=lwKey(c),n=lwHash(day+c.id+slot),home=k==='roxana'?'Gospodăria Floricăi':'Acasă', routine=LW_ROUTINES[k]||['Treburi în casă','Cumpărături','Timp personal','Relaxare'];const personal=life16State(gc,c,now);let activity=personal.activity;if(season==='iarnă'&&activity==='Îngrijește grădina')activity='Aranjează proviziile';return {id:c.id,name:c.name,activity,location:personal.location,confirmed:!!gc.giLocations?.[c.name],confirmedLocation:gc.giLocations?.[c.name]||null,availability:unp182Availability(personal,activity,n),seed:n,personal};});
+ const events=[];if(h>=8&&h<21&&lwHash(day+slot+'event')%3===0){const r=rows[lwHash(day+slot+'actor')%Math.max(1,rows.length)];if(r&&!r.personal.asleep)events.push(r.name+': '+['se gândește să împrumute o carte','își amintește de o rețetă veche','are de ales o mică treabă pentru mâine'][lwHash(day+slot+'kind')%3]+' (idee simulată, neconfirmată)');}if(h>=14&&h<18&&lwHash(day+slot)%3===0){const a=rows.find(r=>lwKey(r)==='lacramioara'),b=rows.find(r=>lwKey(r)==='roxana');if(a&&b&&!a.confirmed&&!b.confirmed&&!a.personal.asleep&&!b.personal.asleep&&!a.personal.execution&&!b.personal.execution&&!a.personal.shared&&!b.personal.shared){a.location='Gospodăria Floricăi';a.activity='Vizită simulată la Roxana';a.personal={...a.personal,activity:a.activity,location:a.location};a.availability=unp182Availability(a.personal,a.activity,a.seed);events.push(a.name+' o vizitează pe '+b.name+' (simulare)');}}return {day,slot,season,rows,events};}
 function lwTimeline(gc,ms,now=Date.now()){if(!gc.world?.enabled)return [];const w=gc.world, end=Math.floor(now/7200000)*7200000,start=Math.max(end-83*7200000,Number(w.lastSlot)||end);const log=w.timeline||[];for(let t=start;t<=end;t+=7200000){if(log.some(e=>e.ts===t))continue;const a=lwSnapshot(gc,ms,t);log.push({ts:t,text:a.rows.map(r=>r.name+': '+r.activity).concat(a.events).join(' · ')});}w.lastSlot=end;w.timeline=log.slice(-84);life162Journal(gc,ms,now);return w.timeline;}
 function lwTopics(gc){const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-8),counts={};for(const m of recent)for(const w of geWords(m.text))if(!/^(care|ceva|asta|acum|mine|tine|drag|spune|numa|oleaca|faca|facut|toate|dupa|mai|pentru)/.test(w))counts[w]=(counts[w]||0)+1;return Object.keys(counts).filter(w=>counts[w]>=3).sort((a,b)=>counts[b]-counts[a]).slice(0,8);}
 function lwContext(gc,ms){if(!gc.world?.enabled)return '';const w=lwSnapshot(gc,ms);lwTimeline(gc,ms);return 'Fictional local simulation, subordinate to explicit dialogue and confirmed locations; never assume user location or physical presence. '+w.rows.map(r=>r.name+': '+r.activity+', '+r.location+' ('+r.personal.source+')'+(r.confirmedLocation?', separately recorded location: '+r.confirmedLocation:'')).join('; ')+'. '+w.events.join('; ')+'; Recent simulated plan outcomes (not confirmed dialogue facts): '+JSON.stringify((gc.world.executionJournal||[]).slice(-5).map(x=>({author:x.author,category:x.category,participants:x.participants||[x.author],date:new Date(x.ts).toLocaleDateString('ro-RO')})))+'; sleeping or departing characters should not spontaneously resume without a plausible reason; allow natural farewells. Simulated progress is not proof of completed plans. Use sparingly, not as mandatory topic.';}
@@ -802,10 +815,11 @@ function social171Observe(gc,msg,ms,targets){
 function social172Pending(gc,c,now=Date.now()){
  return (gc.social171?.items||[]).filter(p=>p.to===c.id&&p.status==='propus'&&now>=p.ts&&now-p.ts<172800000);
 }
+function unp182TopicCategory(text){const t=pnorm(text),k=life81Category(text);if(k!=='general')return k;if(/\b(gaini|oua|dovleac|gutui|placint\w*|gospodar\w*|faina)\b/.test(t))return 'gospodărie';if(/\b(vreme|ploaie|frig|zapada)\b/.test(t))return 'vreme';if(/\b(amintir\w*|copilar\w*|odinioara)\b/.test(t))return 'amintiri';return 'general';}
 function social172Topic(gc){
  const rows=(gc.msgs||[]).filter(m=>m.role==='ai'&&!m.err).slice(-8),counts={};
- for(const m of rows){const k=life81Category(m.text);if(k!=='general')counts[k]=(counts[k]||0)+1;}
- return Object.entries(counts).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>=4)[0]?.[0]||'';
+ for(const m of rows){const k=unp182TopicCategory(m.text);if(k!=='general')counts[k]=(counts[k]||0)+1;}
+ return Object.entries(counts).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>=3)[0]?.[0]||'';
 }
 function social171Context(gc,c,ms){
  const now=Date.now(),name=id=>ms.find(m=>m.id===id)?.name||'—';
@@ -830,8 +844,8 @@ function unpState(gc,ms,now=Date.now()){
  const world=gc.world?.enabled?lwSnapshot(gc,ms,now):null;
  return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),commitments:unpCommitments(gc,c,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===p.from).name,category:p.category,check:unpConflict(gc,ms,p,now)}))};});
 }
-function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return 'Unified presence (local estimates, not facts): '+row.pending.slice(-3).map(p=>p.from+' / '+p.category+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Answer one relevant pending invitation naturally before reopening exhausted topics; never invent agreement or physical presence.';}
-function unpSheet(){if(!grp||!gchat)return;const ms=gMembers(grp),gc=gchat;openSheet(`<h4>Unified Inspector · 14.18.1</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${unpState(gc,ms).map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`);}
+function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
+function unpSheet(){if(!grp||!gchat)return;const ms=gMembers(grp),gc=gchat;openSheet(`<h4>Unified Inspector · 14.18.2</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${unpState(gc,ms).map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`);}
 
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
@@ -6105,7 +6119,6 @@ function gTurn(c, g, gc = gchat, x = {}){
     life8Context(gc),
     emContext(gc,[c]),
     social17Context(gc,c,gMembers(g)),
-    social171Context(gc,c,gMembers(g)),
     unpContext(gc,c,gMembers(g)),
     lwContext(gc,gMembers(g)),
     `## Tu și celelalte, acum\n${rels || '-'}`,
