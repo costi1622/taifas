@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.17.1.1';
+const APP_VER = '14.17.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -535,7 +535,7 @@ function giMemory(gc){
 }
 function giSpeaker(ms,gc,targets=[]){
  const recent=gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-18), last=recent.at(-1)?.cid;
- return ms.filter(c=>c.id!==last).map(c=>({c,score:(targets.some(t=>t.id===c.id)?5:0)-recent.filter(m=>m.cid===c.id).length*2})).sort((a,b)=>b.score-a.score)[0]?.c||ms[0];
+ return ms.filter(c=>c.id!==last).map(c=>({c,score:(targets.some(t=>t.id===c.id)?5:0)+(social172Pending(gc,c).some(p=>p.from===last)?3:0)-recent.filter(m=>m.cid===c.id).length*2})).sort((a,b)=>b.score-a.score)[0]?.c||ms[0];
 }
 function giLength(session){return session.recovery?2400:[1400,1600,1800,1600][Math.max(0,12-session.left)%4];}
 function giCompleteParts(parts){
@@ -770,13 +770,15 @@ function social171Observe(gc,msg,ms,targets){
   const addressed=others.filter(c=>aliases(c).some(n=>new RegExp('(?:^|,\\s*)(?:(?:mai|fa|tanti)\\s+)?'+n+'\\s*,','i').test(raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim())));
   if(addressed.length)current=addressed.map(c=>c.id);
   const collective=/\b(fetelor|pe la voi|la voi toate|haideti|veniti)\b/.test(t);
-  const dest=collective?others.map(c=>c.id):(current||fallback);
+  const explicit=addressed.length===1&&!/\b(fetelor|veniti|haideti|la voi toate)\b/.test(t);
+  const groupTarget=collective&&!explicit;
+  const dest=groupTarget?others.map(c=>c.id):(current||fallback);
   const conditional=/\b(daca|poate|as putea|vedem|nu stiu)\b/.test(t);
   const pending=s.items.filter(p=>p.to===msg.cid&&p.status==='propus'&&now>=p.ts&&now-p.ts<172800000&&dest.length===1&&dest[0]===p.from&&(!p.kind||p.kind==='invitație'));
   if(pending.length===1&&!conditional){const p=pending[0];
-   if(/\b(nu pot veni|nu vin|nu pot sa vin|refuz)\b/.test(t)){record(p,'refuzat');hits++;}
-   else if(/\b(amanam|reprogramam|alta zi)\b/.test(t)){record(p,'de reprogramat');hits++;}
-   else if(!p.conditional&&/\b(accept invitatia|vin sigur|da vin|vin cu drag|sigur ca vin)\b/.test(t)&&!/\bnu\b/.test(t)){record(p,'acceptat');hits++;}
+   if(/\b(nu pot veni|nu vin|nu pot sa vin|nu ajung|refuz)\b/.test(t)){record(p,'refuzat');hits++;}
+   else if(/\b(amanam|reprogramam|alta zi|mai bine poimaine)\b/.test(t)){record(p,'de reprogramat');hits++;}
+   else if(!p.conditional&&/\b(accept invitatia|vin sigur|da vin|vin cu drag|sigur ca vin|vin negresit|vin la tine|trec pe la tine)\b/.test(t)&&!/\bnu\b/.test(t)){record(p,'acceptat');hits++;continue;}
   }
   let kind=null;
   if(/\b(vino|veniti|hai pe la mine|treci pe la mine|te invit|hai sa facem impreuna|haideti sa)\b/.test(t))kind='invitație';
@@ -784,21 +786,30 @@ function social171Observe(gc,msg,ms,targets){
   else if(/\b(te ajut|va ajut|iti dau|ti dau|iti aduc|ti aduc|dau o mana)\b/.test(t))kind='ofertă de ajutor';
   if(!kind)continue;
   if(/\bnu (?:veni|veniti|te invit|te ajut|va ajut|iti dau|ti dau|trec|vin|dau o fuga)\b/.test(t)){reasons.push('negație');continue;}
-  if(!dest.length||(!collective&&dest.length!==1)){reasons.push('destinatar ambiguu');continue;}
-  const category0=life81Category(raw),category=kind==='intenție de vizită'?'vizită':category0==='general'?(kind==='ofertă de ajutor'?'ajutor':'vizită'):category0;
+  if(!dest.length||(!groupTarget&&dest.length!==1)){reasons.push('destinatar ambiguu');continue;}
+  const category0=/\b(placint\w*|foile subtiri)\b/.test(t)?'plăcinte':life81Category(raw),category=kind==='intenție de vizită'?'vizită':category0==='general'?(kind==='ofertă de ajutor'?'ajutor':'vizită'):category0;
   const d=new Date(now);let due=null;if(/\b(azi|astazi|maine|poimaine)\b/.test(t)){d.setDate(d.getDate()+(/\bpoimaine\b/.test(t)?2:/\bmaine\b/.test(t)?1:0));d.setHours(0,0,0,0);due=d.getTime();}
   // Collective proposals stay unassigned: no invented individual acceptance or household.
-  const to=collective?null:dest[0], status=kind==='invitație'&&!collective?'propus':'intenție';
+  const to=groupTarget?null:dest[0], status=kind==='invitație'&&!groupTarget?'propus':'intenție';
   if(s.items.some(p=>p.from===msg.cid&&p.to===to&&(p.kind||'invitație')===kind&&p.category===category&&p.due===due&&p.status===status&&now-p.ts<172800000))continue;
-  const p={id:msg.id+':'+i,from:msg.cid,to,group:collective,kind,category,due,ts:now,text:raw.trim().slice(0,240),conditional};s.items.push(p);record(p,status);hits++;
+  const p={id:msg.id+':'+i,from:msg.cid,to,group:groupTarget,kind,category,due,ts:now,text:raw.trim().slice(0,240),conditional};s.items.push(p);record(p,status);hits++;
  }
  const diag=s.diagnostics||(s.diagnostics=[]);diag.push({id:msg.id,author:ms.find(c=>c.id===msg.cid).name,hits,reason:reasons.join(', ')||(!hits?'fără inițiativă atribuibilă':'')});s.diagnostics=diag.slice(-100);
  s.items=s.items.slice(-100);s.journal=s.journal.slice(-200);
 }
+function social172Pending(gc,c,now=Date.now()){
+ return (gc.social171?.items||[]).filter(p=>p.to===c.id&&p.status==='propus'&&now>=p.ts&&now-p.ts<172800000);
+}
+function social172Topic(gc){
+ const rows=(gc.msgs||[]).filter(m=>m.role==='ai'&&!m.err).slice(-8),counts={};
+ for(const m of rows){const k=life81Category(m.text);if(k!=='general')counts[k]=(counts[k]||0)+1;}
+ return Object.entries(counts).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>=4)[0]?.[0]||'';
+}
 function social171Context(gc,c,ms){
  const now=Date.now(),name=id=>ms.find(m=>m.id===id)?.name||'—';
  const rows=(gc.social171?.items||[]).filter(p=>(p.from===c.id||p.to===c.id||p.group)&&ms.some(m=>m.id===p.from)&&(p.group||ms.some(m=>m.id===p.to))&&now-p.ts<172800000).slice(-4);
- return 'Social initiative: when natural, offer a visit or shared task based on public memory and current availability. Check your own current activity and existing plans before offering or accepting; if busy, suggest another time. If a topic is exhausted, introduce a relevant different everyday topic. Do not force invitations or speak for others. Explicitly accept, decline or suggest another day if addressed; an agreement is not execution. '+rows.map(p=>`${name(p.from)} → ${p.group?'group':name(p.to)}: ${p.kind||'invitation'} / ${p.category}, ${p.status}${p.conditional?' (conditional proposal)':''}${p.due!==null?' '+new Date(p.due).toLocaleDateString('ro-RO'):''}`).join('; ');
+ const pending=social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from));const topic=social172Topic(gc);
+ return (pending.length?'Unanswered invitations addressed to you: '+pending.slice(-3).map(p=>name(p.from)+' / '+p.category+' / '+(p.due!=null?new Date(p.due).toLocaleDateString('ro-RO'):'date unspecified')).join('; ')+'. If relevant, explicitly name the inviter and answer in your own words; do not accept if unavailable. ': '')+(topic?'Repeated recent topic: '+topic+'. When naturally resolved, shift to a different relevant topic; do not abruptly interrupt. ':'')+'Social initiative: when natural, offer a visit or shared task based on public memory and current availability. Check your own current activity and existing plans before offering or accepting; if busy, suggest another time. If a topic is exhausted, introduce a relevant different everyday topic. Do not force invitations or speak for others. Explicitly accept, decline or suggest another day if addressed; an agreement is not execution. '+rows.map(p=>`${name(p.from)} → ${p.group?'group':name(p.to)}: ${p.kind||'invitation'} / ${p.category}, ${p.status}${p.conditional?' (conditional proposal)':''}${p.due!==null?' '+new Date(p.due).toLocaleDateString('ro-RO'):''}`).join('; ');
 }
 function social171Sheet(){if(!grp||!gchat)return;const ms=gMembers(grp),name=id=>ms.find(c=>c.id===id)?.name||'—',s=gchat.social171||{},now=Date.now();openSheet(`<h4>Viață socială · invitații</h4><div class="pad"><p>Propuneri publice, nu vizite efectuate. Acordul nu rezervă automat un interval.</p>${(s.items||[]).filter(p=>ms.some(c=>c.id===p.from)&&(p.group||ms.some(c=>c.id===p.to))).slice().reverse().map(p=>`<p><b>${esc(name(p.from))} → ${esc(p.group?"Grup (destinatar neprecizat)":name(p.to))}</b><br>${esc(p.kind||"invitație")} · ${esc(p.category)} · ${esc(p.status==='propus'&&now-p.ts>=172800000?'expirat':p.status)}${p.conditional?' · condiționat':''}<br>${esc(p.text)}<br>${p.due!==null?esc(new Date(p.due).toLocaleDateString('ro-RO')):'Fără dată'}</p>`).join('')||'Nicio invitație încă.'}<h4>Jurnal social</h4>${(s.journal||[]).slice(-20).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.status)}</p>`).join('')||'—'}<h4>Diagnostic inițiative</h4>${(s.diagnostics||[]).slice(-20).reverse().map(d=>`<p>${esc(d.author)} · ${d.hits} semnale · ${esc(d.reason)}</p>`).join('')||'—'}</div>`);}
 
@@ -5979,6 +5990,7 @@ async function gDirector(g, ms, more, mentioned, photoAsk, toAll, gc = gchat, x 
 `Group "${g.name}"${g.topic ? ' (' + g.topic + ')' : ''}. Characters: ${ms.map(c => c.name + (c.tag ? ' (' + c.tag + ')' : '')).join('; ')}.
 ${gc.dyn ? 'Group dynamic (Romanian): ' + gc.dyn + '\n' : ''}${rels ? 'Relationships between them (Romanian): ' + rels + '\n' : ''}Toward ${u}: ${gMeLines(gc, ms)}. Characters who care more answer ${u} more often and more warmly; when ${u} asks for help or has a problem, the ones with high "helps" reply first with concrete help, low ones may only react or stay silent.
 Group tone: ${T.dir}.\n${giPrompt(g)}\n${gPresenceContext(gc)}\n${emContext(gc,ms)}
+${x.spect?ms.map(c=>social172Pending(gc,c).length?c.name+": unanswered invitation; allow a natural reply if available.":"").filter(Boolean).join(" ")+ (social172Topic(gc)?" Repeated topic: "+social172Topic(gc)+"; allow natural transition.":""):""}
 ${(gc.rules || []).length ? 'Group rules set by ' + u + ' (Romanian), everyone follows them: ' + gc.rules.map(r => r.t).join('; ') + '\n' : ''}${lead ? `${u} LEADS this group. If ${u}'s last message asks the group or someone to DO something now (a task, a game, a round where each answers, a question for everyone, "each of you…", "Ana, sing…"), set "task" (Romanian, short and concrete: what exactly to do) and "who" ("all" or the names asked); everyone in "who" replies and does it, no refusing or dodging. If ${u} sets a standing rule for the group from now on ("from now on…", "no more…", "everyone always…"), set "rule" (Romanian, short). If ${u} cancels a rule, set "unrule" with that rule. Otherwise leave them null.\n` : ''}${gc.subj ? 'New topic set for the group (Romanian), they get into it naturally: ' + gc.subj + '\n' : ''}Recent messages:
 ${recent}
 ${x.spect ? 'The user is only watching silently now: the characters talk among themselves (answer each other, not the user); 1-' + T.max + ' replies.' : more ? 'The user wants the characters to keep talking among themselves now.' : 'The last message is from ' + u + '.'}${x.bomb ? ' The user just dropped big news: almost everyone reacts, most of them with text.' : ''}${mentioned.length ? ' The user addressed: ' + mentioned.map(c => c.name).join(', ') + ' (they reply first).' : ''}${toAll ? ' The user addressed everyone: most of them react (reply or emoji), but not necessarily all with text.' : ''}${photoAsk ? ' The user asked for a photo: decide who sends it ("photo": the names of who must be IN the photo, and "by": who sends it; a photo of several of them together is fine).' : ''}
