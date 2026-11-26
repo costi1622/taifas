@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.17.1';
+const APP_VER = '14.17.1.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -761,30 +761,46 @@ function social171Observe(gc,msg,ms,targets){
  if(msg.role!=='ai'||msg.err||!msg.id||!msg.text||!ms.some(c=>c.id===msg.cid))return;
  const s=gc.social171||(gc.social171={items:[],seen:[],journal:[]});
  if(s.seen.includes(msg.id))return;s.seen.push(msg.id);s.seen=s.seen.slice(-300);
- const now=msg.ts||Date.now(), t=pnorm(msg.text), dest=[...new Set((targets||[]).map(c=>c.id))].filter(id=>id!==msg.cid&&ms.some(c=>c.id===id));
+ const now=msg.ts||Date.now(), others=ms.filter(c=>c.id!==msg.cid), fallback=[...new Set((targets||[]).map(c=>c.id))].filter(id=>others.some(c=>c.id===id));
  const record=(p,status)=>{p.status=status;p.updated=now;s.journal.push({id:p.id,status,ts:now,source:msg.id});};
- const pending=s.items.filter(p=>p.to===msg.cid&&p.status==='propus'&&now>=p.ts&&now-p.ts<172800000&&dest.length===1&&dest[0]===p.from);
- const conditional=/\b(daca|poate|as putea|vedem|nu stiu)\b/.test(t);
- if(pending.length===1&&!conditional){const p=pending[0];
-  if(/\b(nu pot veni|nu vin|nu pot sa vin|refuz)\b/.test(t))record(p,'refuzat');
-  else if(/\b(amanam|reprogramam|alta zi)\b/.test(t))record(p,'de reprogramat');
-  else if(!p.conditional&&/\b(accept invitatia|vin sigur|da vin|vin cu drag|sigur ca vin)\b/.test(t)&&!/\bnu\b/.test(t))record(p,'acceptat');
- }
- if(dest.length===1&&!/\b(nu veni|nu te astept|nu te invit)\b/.test(t)&&/\b(vino|hai pe la mine|treci pe la mine|te invit|hai sa facem impreuna)\b/.test(t)){
-  const to=dest[0], category0=life81Category(msg.text), category=category0==='general'?'vizită':category0, d=new Date(now);let due=null;
-  if(/\b(azi|astazi|maine|poimaine)\b/.test(t)){d.setDate(d.getDate()+(/\bpoimaine\b/.test(t)?2:/\bmaine\b/.test(t)?1:0));d.setHours(0,0,0,0);due=d.getTime();}
-  if(!s.items.some(p=>p.from===msg.cid&&p.to===to&&p.category===category&&p.due===due&&p.status==='propus'&&now-p.ts<172800000)){
-   const p={id:msg.id,from:msg.cid,to,category,due,ts:now,text:String(msg.text).slice(0,240),conditional};s.items.push(p);record(p,'propus');
+ const aliases=c=>{const n=pnorm(c.name).split(' ')[0];return [n,n.endsWith('a')?n.slice(0,-1)+'o':n,...({roxana:['roxanico','roxi'],lacramioara:['lacri','lacramioaro'],stela:['stelo']}[n]||[])];};
+ let current=null, hits=0, reasons=[];
+ for(const [i,raw] of String(msg.text).split(/[.!?;\n]+/).entries()){
+  const t=pnorm(raw);if(!t)continue;
+  const addressed=others.filter(c=>aliases(c).some(n=>new RegExp('(?:^|,\\s*)(?:(?:mai|fa|tanti)\\s+)?'+n+'\\s*,','i').test(raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim())));
+  if(addressed.length)current=addressed.map(c=>c.id);
+  const collective=/\b(fetelor|pe la voi|la voi toate|haideti|veniti)\b/.test(t);
+  const dest=collective?others.map(c=>c.id):(current||fallback);
+  const conditional=/\b(daca|poate|as putea|vedem|nu stiu)\b/.test(t);
+  const pending=s.items.filter(p=>p.to===msg.cid&&p.status==='propus'&&now>=p.ts&&now-p.ts<172800000&&dest.length===1&&dest[0]===p.from&&(!p.kind||p.kind==='invitație'));
+  if(pending.length===1&&!conditional){const p=pending[0];
+   if(/\b(nu pot veni|nu vin|nu pot sa vin|refuz)\b/.test(t)){record(p,'refuzat');hits++;}
+   else if(/\b(amanam|reprogramam|alta zi)\b/.test(t)){record(p,'de reprogramat');hits++;}
+   else if(!p.conditional&&/\b(accept invitatia|vin sigur|da vin|vin cu drag|sigur ca vin)\b/.test(t)&&!/\bnu\b/.test(t)){record(p,'acceptat');hits++;}
   }
+  let kind=null;
+  if(/\b(vino|veniti|hai pe la mine|treci pe la mine|te invit|hai sa facem impreuna|haideti sa)\b/.test(t))kind='invitație';
+  else if(/\b(dau o fuga|trec pe la|vin pe la|ma duc pe la|trec si io|trec si eu)\b/.test(t))kind='intenție de vizită';
+  else if(/\b(te ajut|va ajut|iti dau|ti dau|iti aduc|ti aduc|dau o mana)\b/.test(t))kind='ofertă de ajutor';
+  if(!kind)continue;
+  if(/\bnu (?:veni|veniti|te invit|te ajut|va ajut|iti dau|ti dau|trec|vin|dau o fuga)\b/.test(t)){reasons.push('negație');continue;}
+  if(!dest.length||(!collective&&dest.length!==1)){reasons.push('destinatar ambiguu');continue;}
+  const category0=life81Category(raw),category=kind==='intenție de vizită'?'vizită':category0==='general'?(kind==='ofertă de ajutor'?'ajutor':'vizită'):category0;
+  const d=new Date(now);let due=null;if(/\b(azi|astazi|maine|poimaine)\b/.test(t)){d.setDate(d.getDate()+(/\bpoimaine\b/.test(t)?2:/\bmaine\b/.test(t)?1:0));d.setHours(0,0,0,0);due=d.getTime();}
+  // Collective proposals stay unassigned: no invented individual acceptance or household.
+  const to=collective?null:dest[0], status=kind==='invitație'&&!collective?'propus':'intenție';
+  if(s.items.some(p=>p.from===msg.cid&&p.to===to&&(p.kind||'invitație')===kind&&p.category===category&&p.due===due&&p.status===status&&now-p.ts<172800000))continue;
+  const p={id:msg.id+':'+i,from:msg.cid,to,group:collective,kind,category,due,ts:now,text:raw.trim().slice(0,240),conditional};s.items.push(p);record(p,status);hits++;
  }
+ const diag=s.diagnostics||(s.diagnostics=[]);diag.push({id:msg.id,author:ms.find(c=>c.id===msg.cid).name,hits,reason:reasons.join(', ')||(!hits?'fără inițiativă atribuibilă':'')});s.diagnostics=diag.slice(-100);
  s.items=s.items.slice(-100);s.journal=s.journal.slice(-200);
 }
 function social171Context(gc,c,ms){
  const now=Date.now(),name=id=>ms.find(m=>m.id===id)?.name||'—';
- const rows=(gc.social171?.items||[]).filter(p=>(p.from===c.id||p.to===c.id)&&ms.some(m=>m.id===p.from)&&ms.some(m=>m.id===p.to)&&now-p.ts<172800000).slice(-4);
- return 'Social initiative: when natural, offer a visit or shared task based on public memory and current availability. Do not force invitations or speak for others. Explicitly accept, decline or suggest another day if addressed; an agreement is not execution. '+rows.map(p=>`${name(p.from)} → ${name(p.to)}: ${p.category}, ${p.status}${p.conditional?' (conditional proposal)':''}${p.due!==null?' '+new Date(p.due).toLocaleDateString('ro-RO'):''}`).join('; ');
+ const rows=(gc.social171?.items||[]).filter(p=>(p.from===c.id||p.to===c.id||p.group)&&ms.some(m=>m.id===p.from)&&(p.group||ms.some(m=>m.id===p.to))&&now-p.ts<172800000).slice(-4);
+ return 'Social initiative: when natural, offer a visit or shared task based on public memory and current availability. Check your own current activity and existing plans before offering or accepting; if busy, suggest another time. If a topic is exhausted, introduce a relevant different everyday topic. Do not force invitations or speak for others. Explicitly accept, decline or suggest another day if addressed; an agreement is not execution. '+rows.map(p=>`${name(p.from)} → ${p.group?'group':name(p.to)}: ${p.kind||'invitation'} / ${p.category}, ${p.status}${p.conditional?' (conditional proposal)':''}${p.due!==null?' '+new Date(p.due).toLocaleDateString('ro-RO'):''}`).join('; ');
 }
-function social171Sheet(){if(!grp||!gchat)return;const ms=gMembers(grp),name=id=>ms.find(c=>c.id===id)?.name||'—',s=gchat.social171||{},now=Date.now();openSheet(`<h4>Viață socială · invitații</h4><div class="pad"><p>Propuneri publice, nu vizite efectuate. Acordul nu rezervă automat un interval.</p>${(s.items||[]).filter(p=>ms.some(c=>c.id===p.from)&&ms.some(c=>c.id===p.to)).slice().reverse().map(p=>`<p><b>${esc(name(p.from))} → ${esc(name(p.to))}</b><br>${esc(p.category)} · ${esc(p.status==='propus'&&now-p.ts>=172800000?'expirat':p.status)}${p.conditional?' · condiționat':''}<br>${esc(p.text)}<br>${p.due!==null?esc(new Date(p.due).toLocaleDateString('ro-RO')):'Fără dată'}</p>`).join('')||'Nicio invitație încă.'}<h4>Jurnal social</h4>${(s.journal||[]).slice(-20).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.status)}</p>`).join('')||'—'}</div>`);}
+function social171Sheet(){if(!grp||!gchat)return;const ms=gMembers(grp),name=id=>ms.find(c=>c.id===id)?.name||'—',s=gchat.social171||{},now=Date.now();openSheet(`<h4>Viață socială · invitații</h4><div class="pad"><p>Propuneri publice, nu vizite efectuate. Acordul nu rezervă automat un interval.</p>${(s.items||[]).filter(p=>ms.some(c=>c.id===p.from)&&(p.group||ms.some(c=>c.id===p.to))).slice().reverse().map(p=>`<p><b>${esc(name(p.from))} → ${esc(p.group?"Grup (destinatar neprecizat)":name(p.to))}</b><br>${esc(p.kind||"invitație")} · ${esc(p.category)} · ${esc(p.status==='propus'&&now-p.ts>=172800000?'expirat':p.status)}${p.conditional?' · condiționat':''}<br>${esc(p.text)}<br>${p.due!==null?esc(new Date(p.due).toLocaleDateString('ro-RO')):'Fără dată'}</p>`).join('')||'Nicio invitație încă.'}<h4>Jurnal social</h4>${(s.journal||[]).slice(-20).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.status)}</p>`).join('')||'—'}<h4>Diagnostic inițiative</h4>${(s.diagnostics||[]).slice(-20).reverse().map(d=>`<p>${esc(d.author)} · ${d.hits} semnale · ${esc(d.reason)}</p>`).join('')||'—'}</div>`);}
 
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
