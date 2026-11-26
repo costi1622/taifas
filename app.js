@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.17.0.1';
+const APP_VER = '14.17.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -756,12 +756,43 @@ function social17Sheet(){
   openSheet(`<h4>Social Inspector</h4><div class="pad"><p>Semnale publice observate local; scor orientativ, nu schimbă relațiile fixate. 50 = fără semnale.</p>${edges.map(e=>`<p><b>${esc(name(e.from))} → ${esc(name(e.to))}</b><br>Sprijin: ${e.support}/100 · ${e.count} observații</p>`).join('')}<h4>Evenimente sociale recente</h4>${(gchat.social17?.events||[]).filter(e=>ms.some(c=>c.id===e.from)&&ms.some(c=>c.id===e.to)).slice(-20).reverse().map(e=>`<p>${esc(name(e.from))} → ${esc(name(e.to))}: ${esc(e.signals.join(', '))}</p>`).join('')||'Nicio observație încă.'}<h4>Diagnostic local (ultimele 100)</h4><p>Mesaje analizate: ${(gchat.social17?.diagnostics||[]).length}</p>${(gchat.social17?.diagnostics||[]).slice(-12).reverse().map(d=>`<p>${esc(name(d.from))}: ${esc(d.result)} · ${d.clauses} fragmente</p>`).join('')}</div>`);
 }
 
+// 14.17.1: public invitation lifecycle, no background generation.
+function social171Observe(gc,msg,ms,targets){
+ if(msg.role!=='ai'||msg.err||!msg.id||!msg.text||!ms.some(c=>c.id===msg.cid))return;
+ const s=gc.social171||(gc.social171={items:[],seen:[],journal:[]});
+ if(s.seen.includes(msg.id))return;s.seen.push(msg.id);s.seen=s.seen.slice(-300);
+ const now=msg.ts||Date.now(), t=pnorm(msg.text), dest=[...new Set((targets||[]).map(c=>c.id))].filter(id=>id!==msg.cid&&ms.some(c=>c.id===id));
+ const record=(p,status)=>{p.status=status;p.updated=now;s.journal.push({id:p.id,status,ts:now,source:msg.id});};
+ const pending=s.items.filter(p=>p.to===msg.cid&&p.status==='propus'&&now>=p.ts&&now-p.ts<172800000&&dest.length===1&&dest[0]===p.from);
+ const conditional=/\b(daca|poate|as putea|vedem|nu stiu)\b/.test(t);
+ if(pending.length===1&&!conditional){const p=pending[0];
+  if(/\b(nu pot veni|nu vin|nu pot sa vin|refuz)\b/.test(t))record(p,'refuzat');
+  else if(/\b(amanam|reprogramam|alta zi)\b/.test(t))record(p,'de reprogramat');
+  else if(!p.conditional&&/\b(accept invitatia|vin sigur|da vin|vin cu drag|sigur ca vin)\b/.test(t)&&!/\bnu\b/.test(t))record(p,'acceptat');
+ }
+ if(dest.length===1&&!/\b(nu veni|nu te astept|nu te invit)\b/.test(t)&&/\b(vino|hai pe la mine|treci pe la mine|te invit|hai sa facem impreuna)\b/.test(t)){
+  const to=dest[0], category0=life81Category(msg.text), category=category0==='general'?'vizită':category0, d=new Date(now);let due=null;
+  if(/\b(azi|astazi|maine|poimaine)\b/.test(t)){d.setDate(d.getDate()+(/\bpoimaine\b/.test(t)?2:/\bmaine\b/.test(t)?1:0));d.setHours(0,0,0,0);due=d.getTime();}
+  if(!s.items.some(p=>p.from===msg.cid&&p.to===to&&p.category===category&&p.due===due&&p.status==='propus'&&now-p.ts<172800000)){
+   const p={id:msg.id,from:msg.cid,to,category,due,ts:now,text:String(msg.text).slice(0,240),conditional};s.items.push(p);record(p,'propus');
+  }
+ }
+ s.items=s.items.slice(-100);s.journal=s.journal.slice(-200);
+}
+function social171Context(gc,c,ms){
+ const now=Date.now(),name=id=>ms.find(m=>m.id===id)?.name||'—';
+ const rows=(gc.social171?.items||[]).filter(p=>(p.from===c.id||p.to===c.id)&&ms.some(m=>m.id===p.from)&&ms.some(m=>m.id===p.to)&&now-p.ts<172800000).slice(-4);
+ return 'Social initiative: when natural, offer a visit or shared task based on public memory and current availability. Do not force invitations or speak for others. Explicitly accept, decline or suggest another day if addressed; an agreement is not execution. '+rows.map(p=>`${name(p.from)} → ${name(p.to)}: ${p.category}, ${p.status}${p.conditional?' (conditional proposal)':''}${p.due!==null?' '+new Date(p.due).toLocaleDateString('ro-RO'):''}`).join('; ');
+}
+function social171Sheet(){if(!grp||!gchat)return;const ms=gMembers(grp),name=id=>ms.find(c=>c.id===id)?.name||'—',s=gchat.social171||{},now=Date.now();openSheet(`<h4>Viață socială · invitații</h4><div class="pad"><p>Propuneri publice, nu vizite efectuate. Acordul nu rezervă automat un interval.</p>${(s.items||[]).filter(p=>ms.some(c=>c.id===p.from)&&ms.some(c=>c.id===p.to)).slice().reverse().map(p=>`<p><b>${esc(name(p.from))} → ${esc(name(p.to))}</b><br>${esc(p.category)} · ${esc(p.status==='propus'&&now-p.ts>=172800000?'expirat':p.status)}${p.conditional?' · condiționat':''}<br>${esc(p.text)}<br>${p.due!==null?esc(new Date(p.due).toLocaleDateString('ro-RO')):'Fără dată'}</p>`).join('')||'Nicio invitație încă.'}<h4>Jurnal social</h4>${(s.journal||[]).slice(-20).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.status)}</p>`).join('')||'—'}</div>`);}
+
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
   const e=gc.emotional||(gc.emotional={states:{},memory:[],candidates:[],seen:[]}); if(e.seen.includes(msg.id))return;
   e.seen.push(msg.id);e.seen=e.seen.slice(-150);const now=msg.ts||Date.now(),d=emSignals(msg.text);
   const speaker=ms.find(c=>c.id===msg.cid), targets=speaker?gAddressTargets([msg.text],speaker,ms,g):gMentioned(msg.text,ms,true);
   social17Observe(gc,msg,ms,targets);
+  social171Observe(gc,msg,ms,targets);
   if(Object.keys(d).length){for(const c of ms){const scale=c===speaker?1:targets.includes(c)?0.65:msg.role==='user'&&!targets.length?.45:.2;emApply(gc,c.id,d,scale,now);}
     e.memory.push({id:msg.id,ts:now,author:msg.role==='user'?'Tu':msg.name,signals:Object.keys(d)});e.memory=e.memory.slice(-30);}
   if(/\b(maine|poimaine|luni|marti|miercuri|joi|vineri|sambata|duminica)\b/.test(pnorm(msg.text))&&/\b(vin|merg|trec|plec|ne vedem|intalnim|vizita)\w*/.test(pnorm(msg.text))){e.candidates.push({id:msg.id,ts:now,text:String(msg.text).slice(0,240)});e.candidates=e.candidates.slice(-20);}
@@ -5803,6 +5834,7 @@ function groupMenu(){
     ['🔎', 'Response Inspector', () => setTimeout(giResponseSheet,60)],
     ['🔎', 'Context Inspector', () => setTimeout(giContextSheet,60)],
     ['🧠', 'Memorie și locații grup', () => setTimeout(giPersistentSheet,60)],
+    ['🤝', 'Viață socială', () => setTimeout(social171Sheet,60)],
     ['🕸️', 'Social Inspector', () => setTimeout(social17Sheet,60)],
     ['💗', 'Emotional Inspector', () => setTimeout(emSheet,60)],
     ['🎚️', 'Profiluri emoționale individuale', () => setTimeout(lwProfileSheet,60)],
@@ -6024,6 +6056,7 @@ function gTurn(c, g, gc = gchat, x = {}){
     life8Context(gc),
     emContext(gc,[c]),
     social17Context(gc,c,gMembers(g)),
+    social171Context(gc,c,gMembers(g)),
     lwContext(gc,gMembers(g)),
     `## Tu și celelalte, acum\n${rels || '-'}`,
     `## Ce simți pentru ${u}, aici\n${gCareWord(m.care)} (${m.care}/100).${m.why ? ' De ce: ' + m.why + '.' : ''}\nCât îl ajuți: ${gHelpWord(m.help)} (${m.help}/100). Când ${u} cere ajutor sau are o problemă, asta decide cât de repede și cât de concret sari (sau nu). Arată asta prin fapte și ton, nu spunând cifrele.`,
