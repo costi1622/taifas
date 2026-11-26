@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.16.5';
+const APP_VER = '14.17.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -707,11 +707,44 @@ function life8Context(gc,now=Date.now()){
 }
 function life8Sheet(){const g=grp,gc=gchat;if(!g||!gc)return;const a=life8State(gc);openSheet(`<h4>Memorie pe termen lung</h4><div class="pad"><p>Amintiri din grup, nu din conversații private. Planurile sunt propuneri până la confirmare. Categorii locale, fără cereri API.</p><div id="life164Tabs" style="display:flex;flex-wrap:wrap;gap:6px">${['Planuri','Amintiri','Jurnal','Testare'].map((v,i)=>`<button class="btn" data-life164-tab="${i}">${v}</button>`).join('')}</div><section id="life164Pane2" hidden><h4>Agendă azi (intenții, nu fapte)</h4>${life9Agenda(a).map(p=>`<p>${esc(p.author)} · ${esc(p.status)} · ${esc(p.text)}</p>`).join('')||'—'}<h4>Planuri asociate după temă și dată</h4>${life9Events(a).slice(0,10).map(e=>`<p><b>${esc(e.category)}</b> · ${esc(new Date(e.due).toLocaleDateString('ro-RO'))}<br>${e.statements.map(p=>esc(p.author+': '+p.text+' ('+p.status+')')).join('<br>')}</p>`).join('')||'—'}</section><section id="life164Pane0"><h4>Planuri (${a.plans.length})</h4><input id="life163Q" placeholder="Caută: murături, tricotat…"><label>Personaj <select id="life163Author"><option value="">Toți</option>${[...new Set(a.plans.map(p=>p.author||''))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><label>Statut <select id="life163Status"><option value="">Toate</option>${['propus','confirmat','finalizat','anulat'].map(v=>`<option>${v}</option>`).join('')}</select></label><label>Data planului (gol = toate datele) <input type="date" id="life163Day" style="width:100%;color-scheme:dark;background:transparent;color:inherit;padding:10px;border:1px solid #777;border-radius:10px"></label><button class="btn" id="life164Reset">Resetează filtrele</button><p id="life164Count"></p><div id="life163Rows"></div></section><section id="life164Pane1" hidden><h4>Amintiri recente (${a.episodes.length})</h4><label>Personaj <select id="life82Author"><option value="">Toți</option>${[...new Set(a.episodes.map(e=>e.author||''))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><label>Categorie <select id="life82Category"><option value="">Toate</option>${[...new Set(a.episodes.map(e=>life81Category(e.text)))].map(v=>`<option>${esc(v)}</option>`).join('')}</select></label><div id="life82Rows"></div></section><section id="life164Pane3" hidden><h4>Testare locală</h4><p>Alege un plan eligibil din fila Planuri și apasă Test local. Simularea nu salvează date.</p></section></div>`);document.querySelectorAll("[data-life164-tab]").forEach(b=>b.onclick=()=>{for(let i=0;i<4;i++)$("#life164Pane"+i).hidden=i!==Number(b.dataset.life164Tab);});const draw=()=>{const author=$('#life82Author').value,cat=$('#life82Category').value;$('#life82Rows').innerHTML=life81Unique(a.episodes.slice().reverse()).reverse().filter(e=>(!author||e.author===author)&&(!cat||life81Category(e.text)===cat)).slice(-50).reverse().map(e=>`<p>${esc(new Date(e.ts).toLocaleString('ro-RO'))} · ${esc(e.author||'')} · ${esc(life81Category(e.text))} · importanță ${life81Importance(e.text)}<br>${esc(e.text)}</p>`).join('')||'—';};$('#life82Author').onchange=draw;$('#life82Category').onchange=draw;draw();const drawPlans=()=>{const rows=life163Filter(a.plans,$('#life163Q').value,$('#life163Author').value,$('#life163Status').value,$('#life163Day').value).slice().reverse();$('#life164Count').textContent=rows.length+' / '+a.plans.length+' rezultate';$('#life163Rows').innerHTML=rows.map(p=>{const c=gMembers(g).find(c=>c.name===p.author),reason=life163Reason(p,c),w=life162Window(p,c),shared=w&&life165Shared(gc,w);return `<p><b>${esc(p.author||'')}</b> · ${esc(p.status)}<br>${esc(p.text)}<br>${p.due?esc(new Date(p.due).toLocaleDateString('ro-RO')):'Fără dată'}<br><small>${esc(reason||('Eligibil · '+new Date(w.start).toLocaleString('ro-RO')))}${shared?.participants?' · împreună: '+esc(shared.participants.join(', ')):''}</small><br>${['confirmat','finalizat','anulat'].map(v=>`<button class="btn" data-life8-id="${esc(p.id)}" data-life8-status="${v}">${v}</button>`).join(' ')} ${w?`<button class="btn" data-life163-test="${esc(p.id)}">Test local</button> <button class="btn" data-life165-link="${esc(p.id)}">Leagă activitate comună</button>`:''}</p>`;}).join('')||'Niciun rezultat.';document.querySelectorAll('[data-life8-id]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const p=a.plans.find(x=>x.id===b.dataset.life8Id);if(p){p.status=b.dataset.life8Status;p.statusAt=Date.now();await gSave(g,gc);drawPlans();}});document.querySelectorAll('[data-life165-link]').forEach(b=>b.onclick=async()=>{if(gbusy||gSpect||grp!==g||gchat!==gc)return;const p=a.plans.find(x=>x.id===b.dataset.life165Link),members=gMembers(g).map(c=>c.name),qs=a.plans.filter(q=>members.includes(q.author)&&life165Pair(p,q));if(!qs.length){alert('Niciun alt plan confirmat compatibil.');return;}const choice=prompt('Alege participantul (număr):\n'+qs.map((q,i)=>(i+1)+'. '+q.author+' — '+q.text).join('\n'),'1');if(choice===null)return;const q=qs[Number(choice)-1];if(!q||!life165Link(gc,p,q)){alert('Plan incompatibil sau deja asociat.');return;}await gSave(g,gc);life8Sheet();});document.querySelectorAll('[data-life163-test]').forEach(b=>b.onclick=()=>{const p=a.plans.find(x=>x.id===b.dataset.life163Test),c=gMembers(g).find(c=>c.name===p?.author),w=p&&life162Window(p,c);if(w){const v=prompt('Minute de la început (0–'+Math.round((w.end-w.start)/60000)+')','30');if(v!==null&&v.trim()&&Number.isFinite(Number(v)))alert('Test fără salvare: '+w.category+' · progres '+life164Progress(w,w.start+Number(v)*60000)+'%');}});};for(const id of ['life163Q','life163Author','life163Status','life163Day'])$('#'+id).oninput=drawPlans;$('#life164Reset').onclick=()=>{for(const id of ['life163Q','life163Author','life163Status','life163Day'])$('#'+id).value='';drawPlans();};drawPlans();}
 
+// 14.17.0: group-only directional social observations; never changes canon or locked relationships.
+function social17Observe(gc,msg,ms,targets){
+  if(msg.role!=='ai'||msg.err||!msg.id||!msg.text||!ms.some(c=>c.id===msg.cid))return;
+  const ids=[...new Set(targets.map(c=>c.id))].filter(id=>id!==msg.cid&&ms.some(c=>c.id===id));
+  if(ids.length!==1)return;
+  const t=pnorm(msg.text), signals=[];
+  if(/\b(multumesc|mersi)\b/.test(t))signals.push('multumire');
+  if(/\b(te ajut|iti dau o mana|pot sa te ajut)\b/.test(t)&&!/\b(nu|daca)\b/.test(t))signals.push('oferta de ajutor');
+  if(/\b(imi pare rau|ai grija de tine)\b/.test(t))signals.push('grija');
+  if(!signals.length)return;
+  const s=gc.social17||(gc.social17={events:[]});
+  if(s.events.some(e=>e.id===msg.id))return;
+  s.events.push({id:msg.id,from:msg.cid,to:ids[0],ts:msg.ts||Date.now(),signals});
+  s.events=s.events.slice(-200);
+}
+function social17Edges(gc,ms){
+  const events=gc.social17?.events||[];
+  return ms.flatMap(a=>ms.filter(b=>b.id!==a.id).map(b=>{
+    const ev=events.filter(e=>e.from===a.id&&e.to===b.id);
+    return {from:a.id,to:b.id,count:ev.length,support:Math.min(100,50+ev.slice(-20).reduce((n,e)=>n+e.signals.length,0)),last:ev.at(-1)};
+  }));
+}
+function social17Context(gc,c,ms){
+  const rows=social17Edges(gc,ms).filter(e=>e.from===c.id&&e.count).slice(0,5);
+  return 'Social continuity: respond sensitively to explicitly expressed feelings; do not assume feelings or consent, private knowledge, or completed favors. Canon and fixed relationships take priority. '+rows.map(e=>`${ms.find(m=>m.id===e.to).name}: recent public signals from you: ${e.last.signals.join(', ')}`).join('; ');
+}
+function social17Sheet(){
+  if(!grp||!gchat)return;
+  const ms=gMembers(grp), edges=social17Edges(gchat,ms), name=id=>ms.find(c=>c.id===id)?.name||'—';
+  openSheet(`<h4>Social Inspector</h4><div class="pad"><p>Semnale publice observate local; scor orientativ, nu schimbă relațiile fixate. 50 = fără semnale.</p>${edges.map(e=>`<p><b>${esc(name(e.from))} → ${esc(name(e.to))}</b><br>Sprijin: ${e.support}/100 · ${e.count} observații</p>`).join('')}<h4>Evenimente sociale recente</h4>${(gchat.social17?.events||[]).filter(e=>ms.some(c=>c.id===e.from)&&ms.some(c=>c.id===e.to)).slice(-20).reverse().map(e=>`<p>${esc(name(e.from))} → ${esc(name(e.to))}: ${esc(e.signals.join(', '))}</p>`).join('')||'Nicio observație încă.'}</div>`);
+}
+
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
   const e=gc.emotional||(gc.emotional={states:{},memory:[],candidates:[],seen:[]}); if(e.seen.includes(msg.id))return;
   e.seen.push(msg.id);e.seen=e.seen.slice(-150);const now=msg.ts||Date.now(),d=emSignals(msg.text);
   const speaker=ms.find(c=>c.id===msg.cid), targets=speaker?gAddressTargets([msg.text],speaker,ms,g):gMentioned(msg.text,ms,true);
+  social17Observe(gc,msg,ms,targets);
   if(Object.keys(d).length){for(const c of ms){const scale=c===speaker?1:targets.includes(c)?0.65:msg.role==='user'&&!targets.length?.45:.2;emApply(gc,c.id,d,scale,now);}
     e.memory.push({id:msg.id,ts:now,author:msg.role==='user'?'Tu':msg.name,signals:Object.keys(d)});e.memory=e.memory.slice(-30);}
   if(/\b(maine|poimaine|luni|marti|miercuri|joi|vineri|sambata|duminica)\b/.test(pnorm(msg.text))&&/\b(vin|merg|trec|plec|ne vedem|intalnim|vizita)\w*/.test(pnorm(msg.text))){e.candidates.push({id:msg.id,ts:now,text:String(msg.text).slice(0,240)});e.candidates=e.candidates.slice(-20);}
@@ -5753,6 +5786,7 @@ function groupMenu(){
     ['🔎', 'Response Inspector', () => setTimeout(giResponseSheet,60)],
     ['🔎', 'Context Inspector', () => setTimeout(giContextSheet,60)],
     ['🧠', 'Memorie și locații grup', () => setTimeout(giPersistentSheet,60)],
+    ['🕸️', 'Social Inspector', () => setTimeout(social17Sheet,60)],
     ['💗', 'Emotional Inspector', () => setTimeout(emSheet,60)],
     ['🎚️', 'Profiluri emoționale individuale', () => setTimeout(lwProfileSheet,60)],
     ['🧠', 'Memorie pe termen lung și planuri', () => setTimeout(life8Sheet,60)],
@@ -5972,6 +6006,7 @@ function gTurn(c, g, gc = gchat, x = {}){
     x.spect && `Avoid exhausted topics and repeated wording: ${lwTopics(gc).join(", ")}. ${x.session?.recovery?"Choose a genuinely new angle or topic; do not paraphrase previous messages.":""}` ,
     life8Context(gc),
     emContext(gc,[c]),
+    social17Context(gc,c,gMembers(g)),
     lwContext(gc,gMembers(g)),
     `## Tu și celelalte, acum\n${rels || '-'}`,
     `## Ce simți pentru ${u}, aici\n${gCareWord(m.care)} (${m.care}/100).${m.why ? ' De ce: ' + m.why + '.' : ''}\nCât îl ajuți: ${gHelpWord(m.help)} (${m.help}/100). Când ${u} cere ajutor sau are o problemă, asta decide cât de repede și cât de concret sari (sau nu). Arată asta prin fapte și ton, nu spunând cifrele.`,
