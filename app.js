@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '14.18.2';
+const APP_VER = '15.0.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -648,10 +648,22 @@ function unp182Availability(personal,activity,seed){
  const t=pnorm(activity);const base=/odihn|relax|timp personal|taifas/.test(t)?82:/magazin|cumpar|spal|aluat|mancar|gatit|curte|gradin/.test(t)?45:/telefon|suna|vorbeste|vizita/.test(t)?58:68;
  return Math.max(20,Math.min(95,base+(seed%11)-5));
 }
-function unp182Shared(gc,c,now){
- if(!gc.world?.enabled)return null;
- const p=(gc.social171?.items||[]).find(p=>p.status==='acceptat'&&!p.conditional&&p.from!==p.to&&p.to&&p.window?.start<=now&&p.window?.end>now&&(p.from===c.id||p.to===c.id));
- return p||null;
+function living15Window(p){return p.status==='acceptat'&&!p.conditional&&!p.group&&p.from&&p.to&&p.from!==p.to&&Number.isFinite(p.window?.start)&&Number.isFinite(p.window?.end)&&p.window.end>p.window.start;}
+function living15Eligible(gc,p,now){
+ if(!living15Window(p)||!gc.world?.enabled)return false;
+ const members=(gc.living15?.members||[]), people=[p.from,p.to];
+ if(members.length&&!people.every(id=>members.some(c=>c.id===id)))return false;
+ return people.every(id=>{const c=members.find(c=>c.id===id);if(!c)return true;const h=new Date(now).getHours(),[wake,bed]=LIFE16_SLEEP[lwKey(c)]||[7,23];return h>=wake&&h<bed&&!life162Projection(gc,c,now).some(x=>x.start<=now&&x.end>now);})&&!(gc.social171?.items||[]).some(q=>q.id!==p.id&&living15Window(q)&&q.window.start<=now&&q.window.end>now&&people.some(id=>q.from===id||q.to===id));
+}
+function unp182Shared(gc,c,now){return (gc.social171?.items||[]).find(p=>living15Eligible(gc,p,now)&&p.window.start<=now&&p.window.end>now&&(p.from===c.id||p.to===c.id))||null;}
+function living15Sync(gc,ms,now=Date.now()){
+ if(!gc.world?.enabled)return [];
+ const st=gc.living15||(gc.living15={journal:[]});st.members=ms.map(c=>({id:c.id,name:c.name}));
+ const old=st.journal||[], fresh=[];
+ for(const p of gc.social171?.items||[]){if(!living15Window(p)||!Number.isFinite(p.updated)||p.updated>p.window.start||p.window.end>now||now-p.window.end>7*86400000||!living15Eligible(gc,p,p.window.start)||!living15Eligible(gc,p,p.window.end-1))continue;
+ if(ms.some(c=>(c.id===p.from||c.id===p.to)&&life162Projection(gc,c,now).some(x=>x.start<p.window.end&&x.end>p.window.start)))continue;
+ fresh.push({id:p.id,from:p.from,to:p.to,category:p.category,ts:p.window.end,status:'interval încheiat simulat'});}
+ st.journal=[...new Map([...old,...fresh].map(x=>[x.id,x])).values()].sort((a,b)=>a.ts-b.ts).slice(-100);return st.journal;
 }
 function lwSnapshot(gc,ms,now=Date.now()){
  const d=new Date(now),day=[d.getFullYear(),d.getMonth()+1,d.getDate()].join('-'),h=d.getHours(),slot=Math.floor(h/2),season=d.getMonth()===11||d.getMonth()<2?'iarnă':d.getMonth()<5?'primăvară':d.getMonth()<8?'vară':'toamnă';
@@ -844,8 +856,8 @@ function unpState(gc,ms,now=Date.now()){
  const world=gc.world?.enabled?lwSnapshot(gc,ms,now):null;
  return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),commitments:unpCommitments(gc,c,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===p.from).name,category:p.category,check:unpConflict(gc,ms,p,now)}))};});
 }
-function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
-function unpSheet(){if(!grp||!gchat)return;const ms=gMembers(grp),gc=gchat;openSheet(`<h4>Unified Inspector · 14.18.2</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${unpState(gc,ms).map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`);}
+function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Recent elapsed simulated social slots (not proof of attendance): '+(gc.living15?.journal||[]).filter(e=>e.from===c.id||e.to===c.id).slice(-2).map(e=>e.category+' '+new Date(e.ts).toLocaleDateString('ro-RO')).join('; ')+'. Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
+function unpSheet(){if(!grp||!gchat)return;const ms=gMembers(grp),gc=gchat;openSheet(`<h4>Living Characters Inspector · 15.0.0</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${unpState(gc,ms).map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${(gc.living15?.journal||[]).slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`);}
 
 function emObserve(gc,msg,ms,g){if(!msg||msg.err||!['user','ai'].includes(msg.role)||!msg.text)return;
   life8Observe(gc,msg);
@@ -5811,7 +5823,7 @@ async function openGroup(id, push = true){
   if(grp === g && gchat && gbusy) {}   // 9.48: același grup, încă răspund: păstrăm conversația din memorie (nu o recitim din DB)
   else gchat = (await DB.get('grp:' + id)) || {msgs:[]};
   if(!gchat.life8){for(const m of gchat.msgs.slice(-300))life8Observe(gchat,m);}
-  if(gchat.world?.enabled)lwTimeline(gchat,gMembers(g));
+  if(gchat.world?.enabled){living15Sync(gchat,gMembers(g));lwTimeline(gchat,gMembers(g));}
   await DB.set('grp:' + id,gchat);
   grp = g; cur = null; chat = null; gReply = null; $('#gReplyBar').hidden = true;
   if(g.unread){ g.unread = 0; saveGroups(); }
@@ -5875,7 +5887,7 @@ function renderGroup(toEnd){
 // 9.48: salvează exact grupul dat (înainte salva „grupul deschis”, deci un răspuns întârziat putea ajunge în alt grup)
 async function gSave(g = grp, gc = g === grp ? gchat : null){
   if(!g || !gc || gc.dead || !groups.includes(g)) return;
-  if(gc.world?.enabled)lwTimeline(gc,gMembers(g));
+  if(gc.world?.enabled){living15Sync(gc,gMembers(g));lwTimeline(gc,gMembers(g));}
   const last = [...gc.msgs].reverse().find(m => (m.text || m.img) && !m.err && m.role !== 'sys');
   g.lastAt = Date.now(); g.last = last ? (last.role === 'user' ? 'Tu: ' : gName(last) + ': ') + (last.img && !last.text ? '📷 Poză' : plain(last.text).slice(0, 80)) : '';
   await DB.set('grp:' + g.id, gc); await saveGroups();
@@ -5895,7 +5907,7 @@ function groupMenu(){
     ['🔎', 'Response Inspector', () => setTimeout(giResponseSheet,60)],
     ['🔎', 'Context Inspector', () => setTimeout(giContextSheet,60)],
     ['🧠', 'Memorie și locații grup', () => setTimeout(giPersistentSheet,60)],
-    ['🧭', 'Unified Inspector', () => setTimeout(unpSheet,60)],
+    ['🧭', 'Living Characters Inspector', () => setTimeout(unpSheet,60)],
     ['🤝', 'Viață socială', () => setTimeout(social171Sheet,60)],
     ['🕸️', 'Social Inspector', () => setTimeout(social17Sheet,60)],
     ['💗', 'Emotional Inspector', () => setTimeout(emSheet,60)],
