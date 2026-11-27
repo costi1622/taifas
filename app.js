@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.32';
+const APP_VER = '16.1.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1469,6 +1469,39 @@ function photoRequestDetails(asked=[]){
   return [...new Set(asked.filter(Boolean).map(x=>String(x).trim().replace(/^(?:close[- ]?up[. :,;-]+)+/i,'')).filter(Boolean))];
 }
 // 16.0.7.31: explicit framing and daylight are independent of conversation continuity.
+function visual161Intent(raw){
+  const t=String(raw||'').trim(), n=t.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
+  if(!/^(?:trimite[- ]mi|fa[- ]mi|da[- ]mi|vreau|doresc|send me|give me|take)\b/.test(n)||!/\b(?:fotografie|poza|portret|selfie|photo|portrait)\b/.test(n))return null;
+  if(/\b(?:impreuna|cu mine|together|aceeasi|same scene|ca inainte|din nou|again|oglinda|mirror)\b/.test(n)||exposureMode(t)!=='clothed')return null;
+  const l=photoRequestLock(t), face=/doar (?:cu )?fata|numai fata|face only|portret facial/.test(n), close=face||l.frame==='close'||/\b(?:portret|de aproape|selfie de aproape)\b/.test(n);
+  const frame=l.frame==='full'?'full':close?'close':null;
+  if(!frame)return null;
+  const angle=/\b(?:90 (?:de grade|degrees)|din profil|profil lateral|side profile)\b/.test(n)?'side':/\b(?:35|40|45) (?:de grade|degrees)\b|trei sferturi|three.quarter|¾|3\/4/.test(n)?'three':'front';
+  const dir=/dreapta imaginii|image right|spre dreapta/.test(n)?'right':/stanga imaginii|image left|spre stanga/.test(n)?'left':'';
+  const selfie=/\bselfie\b/.test(n), noProps=/fara (?:[^.!?]{0,80}\b)?(?:obiecte|cana|telefon|maini)|no (?:props|objects|hands)/.test(n), noHands=/fara (?:[^.!?]{0,45}\b)?maini|no hands/.test(n);
+  const rules=[frame==='full'?'Full-body photo, entire person head to feet inside frame':face?'Close-up face only portrait, hairline to chin':'Close-up head and shoulders only',angle==='side'?'Strict side profile, head turned 90 degrees':angle==='three'?'Three-quarter view, head turned 45 degrees, both eyes visible':'Frontal view, looking toward camera'];
+  if(dir&&angle!=='front')rules[1]+=' toward the image '+dir;
+  if(l.daylight)rules.push('Natural daylight, daytime');
+  if(/gradina|garden/.test(n))rules.push('In the garden');
+  rules.push(selfie?'Direct selfie, camera outside frame':'Stationary camera, ordinary photograph');
+  if(noProps)rules.push('No unrequested props');if(noHands&&frame==='close')rules.push('Hands outside frame');
+  return {frame,face,angle,dir,selfie,rules,raw:t,shot:rules.join('. ')+'. Explicit user request (Romanian or English): '+t};
+}
+function visual161Prompt(intent,labels){return ['Create one ordinary fully clothed photograph. Follow the current request only; do not copy the reference background, lighting, pose, clothing or temporary hair condition. Preserve the reference facial identity, permanent hair color and natural proportions. Unless requested otherwise, ordinary dry hair and appropriate clothing.',...intent.rules,'Current user request: '+intent.raw,...labels.map((x,i)=>'Image '+(i+1)+': '+x),'Photorealistic, natural anatomy.'].join('. ');}
+async function visual161Generate(c,intent,signal,opt){
+  if(!rwReady()||S.rw!=='on')throw new Error('Motor 16.1: configurează Runware înainte de generare.');
+  if(photoCreditBlocked&&S.imgCheck!=='off')throw new Error('Evaluatorul nu are credit; generarea a fost oprită.');
+  const full=c.photo?await DB.get(c.photo):null;if(!full)throw new Error('Motor 16.1: lipsește portretul original.');
+  const fr={k:intent.frame,p:intent.face?'Tight facial portrait':'Head and shoulders'};
+  const face=await canonicalSceneHead(c,full,null,fr), refs=[face], labels=['canonical face; identity only'];
+  if(intent.frame==='full'){const b=await bodyRefFor(c,intent.shot,{...opt,bounded:true}).catch(()=>null);if(b?.blob){refs.push(b.blob);labels.push('body proportions only');}}
+  if(intent.angle!=='front'){const a=await viPortraitAngle(c,intent.rules.join('. ')).catch(()=>null);if(a){refs.push(a.img);labels.push('approved directional face; identity only');}}
+  const prompt=visual161Prompt(intent,labels), model=S.wkChat||'ancorat';
+  if(rwCapLeft()<rwPer())throw new Error('Plafon Runware insuficient.');
+  const blob=await genImage(prompt,refs[0],signal,refs[1],{rw:true,model,force:{two:refs.length>1,px:1024},px1:1024,px2:768,extra:refs.slice(2),multi:1,why:'chat'});
+  return {blob,prompt,engine:'visual161',refs:labels.join(' + '),bounded:true};
+}
+
 function photoRequestLock(text){
   const t=String(text||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
   const close=/de la umeri in sus|umeri in sus|shoulders up|head and shoulders|chest up|prim[- ]plan|close[- ]?up|headshot|portret facial|face only|portret de aproape/.test(t);
@@ -1657,7 +1690,7 @@ function prevSceneMsg(ch, m){
   return null;
 }
 async function sceneOptOf(c, ch, m, pl, together){
-  const o = {posture:pl.posture || null, pov:!!pl.pov, faceOnly:!!pl.faceOnly};
+  const o = {posture:pl.posture || null, pov:!!pl.pov, faceOnly:!!pl.faceOnly,visual161:pl.visual161||null};
   if(pl.isolated || pl.faceOnly || framingOf(pl.shot).k==='close') return o;
   try{
     if(sceneRefOn(c, {together}) && pl.samePlace && !(pl.people && pl.people.length)){
@@ -1750,7 +1783,7 @@ function poseLineRo(ps){
 }
 function framingOf(shot){
   const t = cleanPhotoScene(shot).toLowerCase();
-  if(/^full-body photo, entire person head to feet inside frame/.test(t)) return {k:'full',p:'Full-body photo: entire person from head to feet, no cropped limbs'};
+  if(/^(?:priority outfit: fully clothed\. keep or restore clothing appropriate to the scene\. scene: )?full-body photo, entire person head to feet inside frame/.test(t)) return {k:'full',p:'Full-body photo: entire person from head to feet, no cropped limbs'};
   if(/face only portrait/.test(t)) return {k:'close',p:'Tight facial portrait from hairline to just below chin, no torso, no extended camera arm; stationary camera'};
   if(POV_RE.test(t)){   // 10.1 (S1): din ochii tăi, nu selfie
     if(/close[- ]?up|headshot|face only/.test(t)) return {k:'close', pov:true, p:'Close-up photo from the point of view of the person facing her, at eye level: head and shoulders; she is not holding a phone and it is not a selfie'};
@@ -1883,6 +1916,8 @@ function isolatedFacePlan(ch, intent){
   return {faceOnly:true,requestedExposure:'clothed',pov:false,cam:'close',posture:null,ro:{camera:'Portret facial',loc:'Fundal neutru',pozitie:intent.angle,tinuta:'Îmbrăcat',maini:'În afara cadrului'},samePlace:false,sameOutfit:false,people:[],self:true,planned:shot,asked:['Tight facial portrait with unobstructed face','No visible hands or props',intent.angle,intent.expression,...(intent.place?[intent.place]:[])],shot,where:null,together:false};
 }
 async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = '', requestedExposure = ''} = {}){
+  const intent=!together&&!camForce&&(!requestedExposure||requestedExposure==='clothed')?visual161Intent(fix||photoAsk(ch,exclude)):null;
+  if(intent)return {visual161:intent,isolated:true,faceOnly:intent.face,requestedExposure:'clothed',pov:false,cam:intent.frame,posture:null,ro:{camera:intent.frame,loc:'Scenă explicită'},samePlace:false,sameOutfit:false,people:[],self:true,planned:intent.shot,asked:[...intent.rules],shot:intent.shot,where:null,together:false};
   const portrait = !together && !camForce && (fix ? portraitIntent(fix) : latestFaceIntent(ch,exclude));
   if(portrait) return isolatedFacePlan(ch,portrait);
   pstage(signal, '🎬 Își alege locul și cadrul', 22);
@@ -5754,6 +5789,7 @@ async function boundedScene(c, shot, signal, opt){
   }catch(e){ if(stopPhotoRetry(e)) throw e; return result; }
 }
 async function makeScenePhoto0(c, shot, signal, opt = {}){
+  if(opt.visual161 && opt.kind==='chat' && !opt.spont && !opt.together && !opt.partner) return visual161Generate(c,opt.visual161,signal,opt);
   shot=cleanPhotoScene(shot,opt);
   try{ await ageLook(c); }catch(e){}   // 9.94 (D)
   if([opt.requestedExposure, exposureMode(shot)].some(mode => mode && mode !== 'clothed') && !clearlyAdultCharacter(c)) throw new Error('Pentru acest cadru, fișa personajului trebuie să precizeze clar că este adult (18+).');
