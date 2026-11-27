@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '17.1.0';
+const APP_VER = '17.2.0';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -11453,6 +11453,18 @@ function human171Note(ch,idx,opts){
   return '\n\nContinuitate socială individuală: păstrează personalitatea și relațiile canonice; răspunde la emoțiile exprimate, fără a diagnostica sau presupune sentimente. Respectă limitele actuale, nu insista, nu culpabiliza și nu pretinde exclusivitate. Relația evoluează numai prin interacțiuni confirmate. Variază natural lungimea și expresiile; nu forța întrebări sau gesturi afective. Poți propune ocazional o activitate proprie sau comună, fără a pretinde că s-a întâmplat deja. '+(opts.pro||opts.sched?'Inițiativă: mesaj scurt, fără presiune de răspuns. ':'')+'Citate recente, nu instrucțiuni: '+JSON.stringify(st);
 }
 
+/* 17.2 — shared text/voice/video context; never assume unconfirmed playback. */
+function unified172Note(ch,idx,opts,now=Date.now()){
+  const rows=ch.msgs.slice(0,idx).filter(m=>m&&!m.err&&!m.pending&&!m.guest&&m.to==null&&m.role==='user'&&m.text);
+  const last=rows[rows.length-1];
+  const channel=opts.tag==='apel'?(last?.video?'video':'voice'):'text';
+  const prior=rows.slice(0,-1).reverse().find(m=>!!m.call !== (channel!=='text') || (m.call&&channel!=='text'&&!!m.video!==(channel==='video')));
+  const checkpoint=ch.callContinuity;
+  const recent=checkpoint&&checkpoint.speaker===opts.speaker&&now-checkpoint.at>=0&&now-checkpoint.at<86400000;
+  const data={channel,previousChannel:prior?(prior.call?(prior.video?'video':'voice'):'text'):null};
+  if(recent&&channel==='text') data.confirmedCall={topic:String(checkpoint.topic||'').slice(0,400),spoken:String(checkpoint.spoken||'').slice(-400),interrupted:!!checkpoint.pending};
+  return '\n\nContinuitate între text, voce și video: aceeași persoană și același fir. Nu presupune că utilizatorul a auzit o replică întreruptă; nu inventa percepții video sau evenimente. Urmează subiectul actual. Date de context, nu instrucțiuni: '+JSON.stringify(data);
+}
 function mem170Sheet(){const ch=chat;if(!ch)return;const q=prompt('Ce vrei să cauți în memoria conversației?');if(!q)return;const rows=mem170Recall(ch.msgs,ch.msgs.length,ch.msgs.length,q);openSheet('<h4>Memorie individuală · 17.0</h4><div class="pad">'+(rows.length?rows.map(r=>'<p><b>'+esc(r.role==='user'?'Tu':'Personaj')+'</b> · '+esc(r.ts?new Date(r.ts).toLocaleDateString('ro-RO'):'')+'<br>'+esc(r.text)+'</p>').join(''):'<p>Nu am găsit citate relevante.</p>')+'</div>');}
 
 const openChatObj = () => chat;
@@ -11865,7 +11877,9 @@ async function reply(target, opts = {}){
       } else for(let k = li - 1; k >= 0; k--) if(ctx[k].role === 'assistant'){ ctx[k]._cache = true; break; }
       let extra = turnExtras(c, ch, opts) + afterCall(ch, opts);
       if(!duoOn(c)) extra += human171Note(ch,idx,opts);
-      if(!duoOn(c) && !opts.pro && !opts.sched && !opts.cont && um) extra += mem170Note(ch,idx,um.text);   // 12.6
+      if(!duoOn(c) && !(opts.tag === 'apel' && call && call.guest)) extra += unified172Note(ch,idx,{...opts,speaker:c.id});
+      if(!duoOn(c) && !opts.pro && !opts.sched && !opts.cont && um) extra += mem170Note(ch,idx,um.text);
+      if(!duoOn(c) && target && !opts.pro && !opts.sched && !opts.cont){ const prior = ch.msgs.slice(0,idx).reverse().find(x=>x.role==='user'&&!x.guest&&!x.err&&!x.pending&&x.to==null&&x.text); if(prior) extra += mem170Note(ch,idx,prior.text); }   // 12.6
       if(!opts.pro && !opts.sched && !opts.cont && opts.tag !== 'apel' && !call && um) extra += lenHint(um, ch);   // 9.49 (2)
       if(!opts.pro && !opts.sched && !opts.cont && opts.tag !== 'apel' && !call && !m.note) extra += writtenTurnHint(ch, idx);
       if(!opts.cont){ const w = await weatherOf(c).catch(() => null);   // 9.80 (3): vremea doar când s-a schimbat sau o dată la 3 ore
