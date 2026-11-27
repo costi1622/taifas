@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.6.5';
+const APP_VER = '16.0.6.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1276,6 +1276,14 @@ const stripBodyEn = t => String(t || '').replace(EN_BODY_RE, (a) => a.startsWith
 const IDT_MAX = 2400;
 const idCut = (t, n) => { t = String(t || ''); if(t.length <= n) return t; const x = t.slice(0, n), k = Math.max(x.lastIndexOf('. '), x.lastIndexOf(', '), x.lastIndexOf('; ')); return (k > n * .5 ? x.slice(0, k) : x).trim(); };
 const hairOf = id => { const m = String(id && !id.none && id.phys || '').match(/(?:^|;\s*)hair:\s*([^;]+)/i); return m ? m[1].trim() : ''; };
+// 16.0.6.6: automatic hair descriptions are not authoritative pigment evidence.
+function canonicalHair(c, id){
+  const manual = c?.physAuto === false && c?.physUser ? String(c.physEn || '') : '';
+  const explicit = manual.match(/(?:^|[.;]\s*)hair:\s*([^;.]+)/i);
+  if(explicit) return explicit[1].trim();
+  return ''; // use the actual portrait rather than hallucinated hair attributes
+}
+function identityHairText(c,id){return canonicalHair(c,id) || 'match the approved portrait hair color, hairline, length and texture; scene may change styling only';}
 // 10.2: ordinea contează și nimic important nu se mai pierde: ce ai ales tu, părul, fața, ochelarii, corpul, descrierea, semnele din cadru
 /* 14.0 (3): pistruii, alunițele și petele de pe față le dă imaginea (reperele); scrise, generatorul le exagera (fața plină de pistrui).
    Rămân în text semnele de pe corp (tatuaje, cicatrici, piercing-uri). „Setări → Poze → Semnele feței în text” le pune înapoi. */
@@ -1287,7 +1295,7 @@ function idText(c, id, shot){
   { const ov = mustOver(c); if(ov.length) head.push('IMPORTANT, this overrides the reference photos: ' + ov.join('; ')); }   // 10.0 (F5)
   const userRaw = B.src === 'intreaga' || B.src === 'portret' ? stripBodyEn(c && c.physEn) : (c && c.physEn || '');
   const mine = !!(userRaw && c.physUser && c.physAuto !== true);   // scris de tine la „Cum arată”: are prioritate
-  const fp = id && !id.none && id.phys ? stripBodyPhys(id.phys) : '', hair = hairOf(id), face = faceNoMarks(fp.replace(/(?:^|;\s*)hair:[^;]*/i, '').replace(/^;\s*/, '').trim());
+  const fp = id && !id.none && id.phys ? stripBodyPhys(id.phys) : '', hair = identityHairText(c,id), face = faceNoMarks(fp.replace(/(?:^|;\s*)hair:[^;]*/i, '').replace(/^;\s*/, '').trim());
   if(mine) head.push('Written by the owner, this wins over anything below: {U}');
   if(hair) head.push('Hair: ' + hair);
   if(face) head.push('Face: ' + face);
@@ -1297,12 +1305,12 @@ function idText(c, id, shot){
   { const mk = (id ? marksFor(c, id, shot) : []).filter(m => !faceMarkTxt(m)); if(mk.length) tail.push('permanent marks, always in the same place when visible: ' + mk.join('; ')); }   // 10.0 (F7)   // 14.0: fără cele de pe față
   if(id && id.plain && id.plain.length) tail.push('keep plain: ' + id.plain.join('; '));   // 9.99 (4)
   const fixed = head.join('. ').replace('{U}', '').length + tail.join('. ').length + 8;
-  const u = idCut(userRaw, Math.max(280, IDT_MAX - fixed));
+  const u = idCut(mine ? userRaw : String(userRaw || '').replace(/(?:^|[.;]\s*)Hair:\s*[^;.]+/gi, ''), Math.max(280, IDT_MAX - fixed));
   const t = head.map(x => x.replace('{U}', u)).filter(x => x.replace(/^[^:]*:\s*$/, '').trim()).concat(tail).join('. ');
   return {t:t.replace(/\.\s*\./g, '.').replace(/\s+/g, ' ').trim(), src:B.src};
 }
 // 10.2: părul, spus și la începutul descrierii pentru generator (nu doar la coadă, unde se pierdea)
-const hairLead = (c, id) => { const h = hairOf(id); return h ? `${c.name}'s hair: ${idCut(h, 220)}; the same color, length, volume and texture as in the reference, only the styling may follow the scene. ` : ''; };
+const hairLead = (c, id) => { const h = identityHairText(c,id); return h ? `${c.name}'s hair: ${idCut(h, 220)}; the same color, length, volume and texture as in the reference, only the styling may follow the scene. ` : ''; };
 const bodyOnly = (c, id) => { const B = bodySrc(c, id); if(B.t) return B.t; if(B.src === 'creator'){ const m = String(c.physEn || '').match(EN_BODY_RE); return m ? m[1].trim() : ''; } return B.src === 'tu' ? c.physEn : ''; };
 const BODY_SRC_RO = {tu:'ce ai scris tu la „Cum arată”', intreaga:'poza întreagă', creator:'alegerile din creator (din ele s-a făcut și poza întreagă)', portret:'portret (ghicit, nu există poză întreagă)', '':'nicio sursă'};
 // pătrat în jurul feței, lărgit cât să prindă părul și puțin gâtul; fără față găsită: partea de sus, la mijloc
@@ -1449,7 +1457,7 @@ function ageEstimateInfo(sig,ref,c){
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
 function ageReviewNeeded(r){return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
 function photoReferenceThumbs(m){const refs=m?.photoDiagnostic?.runware?.referenceManifest||[];return refs.length?`<div><small>Repere Runware efective (miniaturi locale)</small><div style="display:flex;flex-wrap:wrap;gap:8px">${refs.map(r=>`<div><small>Reper ${esc(String(r.index))}</small>${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.thumbnail||'')?`<img style="display:block;width:96px;height:auto" src="${esc(r.thumbnail)}" alt="Reper ${esc(String(r.index))}">`:'<small>Miniatură indisponibilă</small>'}</div>`).join('')}</div></div>`:'';}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
@@ -2718,11 +2726,11 @@ const pfbW = (c, k) => 1 + .2 * Math.min(3, pfbGet(c)[k] || 0);   // greutatea l
 const idMax = c => ID_MAX - .03 * Math.min(2, pfbGet(c).face);        // „altă față” mai strict când respingi des fața
 const bodyMax = c => (bodyTol(c) ?? .14) - .02 * Math.min(3, pfbGet(c).body);   // 9.89 (c): calibrat pe personaj         // silueta (9.85: măsurătoarea mai fină, prag mai strict): refacere mai devreme când respingi des corpul
 function pfbCorr(c, id, miss){
-  const hairT = String(id && id.phys || '').match(/(?:^|; )hair: ([^;]+)/), P = pfbGet(c), out = [];
+  const hairT = canonicalHair(c,id), P = pfbGet(c), out = [];
   const L = {
     face:'the face must be exactly the face of the reference: the same facial geometry, eyes, eyebrows, nose, lips, jaw and skin; not a more generic or prettier face',
     body:`the body must match the reference exactly${bodyOnly(c, id) ? ': ' + bodyOnly(c, id) : ''}`,
-    hair:`the hair must match the reference exactly${hairT ? ': ' + hairT[1].trim() : ' (color, length, texture, parting)'}`,
+    hair:`the hair must match the reference exactly${hairT ? ': ' + hairT : ' (color, length, texture, parting)'}`,
     age:'the same apparent age as in the reference, not older and not younger',
     scene:'follow the requested scene, place, pose and clothing exactly'};
   if(miss && L[miss]) out.push(L[miss]);
@@ -4797,8 +4805,8 @@ async function facePass(c, blob, signal, model = 'eco', shot = '', why = 'retus'
   if(hair && !src){ const dt = detailOf(c), b = dt && dt.hair ? await DB.get(dt.hair).catch(() => null) : null; if(b){ extra.push(b); xk.push('hair'); } }   // 11.0 (A2): părul de aproape
   const xTxt = xk.length && xk.some(k => k !== 'hair') ? ' (' + xk.map((k, i) => `image ${i + 3} ${k === 'ang' ? 'shows the same face from another angle' : k === 'eyes' ? 'is a close-up of the same eyes and eyebrows' : 'is a close-up of the same mouth and lips'}`).join('; ') + ')' : '';
   const faceMarks = id && id.marks ? id.marks.filter(m => /face|cheek|lip|nose|eye|brow|forehead|chin|jaw|temple|ear|mole|freckle|dimple/i.test(m)) : [];
-  const hairT = String(id && id.phys || '').match(/(?:^|; )hair: ([^;]+)/);
-  const prompt = hair ? `Edit image 1. Change ONLY the hair of the person in image 1 so that it matches the hair of the person in image 2 exactly${hairT ? ': ' + hairT[1].trim() : ': the same color, length, texture, volume, parting and hairline'}.${xk.includes('hair') ? ' Image 3 is a close-up of the same hair: match its texture, curl pattern and color exactly.' : ''} Keep the face, facial features, expression, head position and angle, skin, clothing, background, light and photo grain of image 1 exactly as they are. One seamless, photorealistic, unretouched phone photo.` : `Edit image 1. Replace ONLY the face of the person in image 1 with the exact face of the person in image 2${xTxt}: the same individual, with identical facial geometry, eye shape and spacing, eye color, eyebrows, nose, lips, jaw and chin, skin tone and skin texture${faceMarks.length ? ', and these marks in exactly the same place: ' + faceMarks.join('; ') : ''}${id && id.glasses ? ', wearing ' + id.glasses : ''}. ${extra0 ? extra0 + ' ' : ''}Keep everything else from image 1 exactly as it is: head position and angle, gaze direction, facial expression, the light direction and color on the face, hair, background, framing${small ? '' : ', sharpness'} and photo grain.${small ? ' Image 1 is an enlarged low-resolution crop: render the face crisp and detailed, with natural photo sharpness, taking the fine facial details from image 2.' : ''} One seamless, photorealistic, unretouched phone photo.`;
+  const hairT = canonicalHair(c,id);
+  const prompt = hair ? `Edit image 1. Change ONLY the hair of the person in image 1 so that it matches the hair of the person in image 2 exactly${hairT ? ': ' + hairT : ': the same color, length, texture, volume, parting and hairline'}.${xk.includes('hair') ? ' Image 3 is a close-up of the same hair: match its texture, curl pattern and color exactly.' : ''} Keep the face, facial features, expression, head position and angle, skin, clothing, background, light and photo grain of image 1 exactly as they are. One seamless, photorealistic, unretouched phone photo.` : `Edit image 1. Replace ONLY the face of the person in image 1 with the exact face of the person in image 2${xTxt}: the same individual, with identical facial geometry, eye shape and spacing, eye color, eyebrows, nose, lips, jaw and chin, skin tone and skin texture${faceMarks.length ? ', and these marks in exactly the same place: ' + faceMarks.join('; ') : ''}${id && id.glasses ? ', wearing ' + id.glasses : ''}. ${extra0 ? extra0 + ' ' : ''}Keep everything else from image 1 exactly as it is: head position and angle, gaze direction, facial expression, the light direction and color on the face, hair, background, framing${small ? '' : ', sharpness'} and photo grain.${small ? ' Image 1 is an enlarged low-resolution crop: render the face crisp and detailed, with natural photo sharpness, taking the fine facial details from image 2.' : ''} One seamless, photorealistic, unretouched phone photo.`;
   const ed = await genImage(prompt, crop, signal, pface, {model, force:{two:true}, size:K + 'x' + K, extra, quiet:true, why});
   const ue = URL.createObjectURL(ed); let ei;
   try{ ei = await loadImgEl(ue); } finally { URL.revokeObjectURL(ue); }
@@ -5703,9 +5711,9 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
     S.rwLast = {usd:cost, ms:Math.round(performance.now() - t0), w, h, refs:refs.length}; saveSettings();
   }
   rwFails = 0; rwLastMdl = mdl;   // 13.3: fiecare cerere, cu timpul ei
-  rwCalls.push({i:++rwCallN, ms:Math.round(performance.now() - t0), mdl, w, h, n:its.length, refs:refs.length}); if(rwCalls.length > 60) rwCalls.shift();
+  rwCalls.push({i:++rwCallN, ms:Math.round(performance.now() - t0), mdl, w, h, n:its.length, refs:refs.length, taskUUID:task.taskUUID, lane:signal?'foreground':'background'}); if(rwCalls.length > 60) rwCalls.shift();
   const blobs = its.map(x => x.__blob || b64ToBlob(x.imageBase64Data || String(x.imageDataURI).split(',')[1], 'image/jpeg'));
-  for(const b of blobs) rwImageMeta.set(b,{model:mdl,refs:task.inputs?.referenceImages?.length || 0,w,h,referenceManifest,prompt:task.positivePrompt,params:{seed:task.seed,numberResults:task.numberResults,outputFormat:task.outputFormat,outputQuality:task.outputQuality,settings:task.settings,acceleration:task.acceleration}});
+  for(const b of blobs) rwImageMeta.set(b,{taskUUID:task.taskUUID,model:mdl,refs:task.inputs?.referenceImages?.length || 0,w,h,referenceManifest,prompt:task.positivePrompt,params:{seed:task.seed,numberResults:task.numberResults,outputFormat:task.outputFormat,outputQuality:task.outputQuality,settings:task.settings,acceleration:task.acceleration}});
   return n > 1 ? blobs : blobs[0];
 }
 /* 13.3: ce rămâne din total după pașii numiți (salvare, pregătirea reperelor, raportul pozei) */
@@ -7740,7 +7748,7 @@ function showCharacterAlbum(c, items, initial){
     preview.innerHTML = `<header><button type="button" class="ib" data-prevback aria-label="Înapoi la album">‹</button><b>${heading}</b></header>
       <div class="mediaCanvas">${it.kind === 'video' ? '<video controls playsinline preload="metadata"></video>' : `<img data-k="${esc(it.key)}" alt="Fotografie">`}</div>
       <footer>${it.mid ? '<button type="button" class="btn" data-origin>Vezi mesajul</button>' : ''} <button type="button" class="btn" data-media-save>Salvează</button>
-      ${it.m ? `<details><summary>Detalii</summary><p>${esc(it.kind === 'video' ? (vidInfo(it.m) || 'Fidelitate neverificată.') : [warnLine(it.m), photoDetails62(it.m), it.m.scene].filter(Boolean).join('\n') || 'Fără detalii de generare.')}</p>${photoReferenceThumbs(it.m)}</details>` : ''}</footer>`;
+      ${it.m ? `<details><summary>Detalii</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-width:100%">${esc(it.kind === 'video' ? (vidInfo(it.m) || 'Fidelitate neverificată.') : [warnLine(it.m), photoDetails62(it.m), it.m.scene].filter(Boolean).join('\n') || 'Fără detalii de generare.')}</p>${photoReferenceThumbs(it.m)}</details>` : ''}</footer>`;
     preview.hidden = false;
     preview.querySelector('[data-prevback]').focus({preventScroll:true});
     if(it.kind === 'photo'){ hydrate(preview); return; }
@@ -9786,7 +9794,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
   let inner, cls = me ? 'me' : 'ai';
   if(m.pendingImg){ const stg = live && live.ch === chat && live.stage || {t:'✨ Se pregătește', p:8, pv:0}, pcx = duoOn(cur) && m.who != null ? duoChar(cur, m.who) || cur : cur;   // 14.3
     inner = `<div class="picload">${pcx.photo ? `<img class="plbg" data-k="${esc(photoNow(pcx))}" alt="">` : ''}<div class="plgrain"></div><div class="plin"><span class="shut"><i></i></span><b>${esc(m.duoBoth ? duoNm(cur, 0) + ' și ' + duoNm(cur, 1) + ' îți fac' : pcx.name + ' îți face')} o poză</b><small>${esc(whereIn(chat.where) || 'se aranjează…')}</small><span class="plst">${esc(stg.t)}</span><span class="plbar"><i style="width:${stg.pv || 0}%"></i></span><span class="plpct">${Math.floor(stg.pv || 0)}%</span></div></div>`; cls += ' picm'; }
-  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><details><summary>Diagnostic complet</summary><p style="white-space:pre-wrap">${esc(photoDetails62(m))}</p>${photoReferenceThumbs(m)}</details><button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
+  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><details><summary>Diagnostic complet</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-width:100%">${esc(photoDetails62(m))}</p>${photoReferenceThumbs(m)}</details><button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
   else if(m.img && !me){
     cls += ' picm';
     const fresh = !devDone.has(m.img) && m.ts && Date.now() - m.ts < 3 * 60e3;   // poza abia sosită „se developează”
