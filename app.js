@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.8';
+const APP_VER = '16.0.7.9';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1639,7 +1639,8 @@ function prevSceneMsg(ch, m){
   return null;
 }
 async function sceneOptOf(c, ch, m, pl, together){
-  const o = {posture:pl.posture || null, pov:!!pl.pov};
+  const o = {posture:pl.posture || null, pov:!!pl.pov, faceOnly:!!pl.faceOnly};
+  if(pl.faceOnly) return o;
   try{
     if(sceneRefOn(c, {together}) && pl.samePlace && !(pl.people && pl.people.length)){
       const pm = prevSceneMsg(ch, m), b = pm ? await DB.get(pm.img).catch(() => null) : null;
@@ -1825,7 +1826,21 @@ async function photoWeather(c){
     return await Promise.race([weatherOf(c).catch(() => null), new Promise(resolve => { timer = setTimeout(() => resolve(null), 1200); })]);
   }finally{ clearTimeout(timer); }
 }
+// 16.0.7.9: narrow explicit portrait intent; never inherit previous props.
+function plainFaceIntent(text){
+  const t=String(text||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z ]/g,' ').replace(/ +/g,' ').trim();
+  return /^(?:(?:vreau|doresc|trimite mi|trimite|fa mi|fa|arata mi|da mi|send me|give me|take) )?(?:(?:doar|numai|strict|only|just) )?(?:(?:un|o|a) )?(?:portret facial|portret al fetei|portret cu fata|poza cu fata|poza doar cu fata|prim plan facial|face only portrait|facial portrait|face portrait|headshot|face only)(?: (?:doar|numai|only|te rog|please))*$/.test(t);
+}
+function latestFaceIntent(ch, exclude){
+  const m=ch.msgs.filter(x=>x!==exclude && x.role==='user' && x.text && !x.err && !x.pending && !x.pendingImg).slice(-1)[0];
+  return !!m && plainFaceIntent(m.text);
+}
+function isolatedFacePlan(ch){
+  const shot='Close-up headshot, face only portrait. Eye-level camera, frontal relaxed expression, entire face and hairline visible, soft even daylight, neutral blurred background, ordinary clothing at neckline only. No hands, props, cup, steam or phone in frame.';
+  return {faceOnly:true,requestedExposure:'clothed',pov:false,cam:'close',posture:null,ro:{camera:'Portret facial',loc:'Fundal neutru',pozitie:'Fața spre cameră',tinuta:'Îmbrăcat',maini:'În afara cadrului'},samePlace:false,sameOutfit:false,people:[],self:true,planned:shot,asked:['Face only portrait, unobstructed face, no visible props or hands'],shot,where:ch.where,together:false};
+}
 async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = '', requestedExposure = ''} = {}){
+  if(!together && !camForce && (fix ? plainFaceIntent(fix) : latestFaceIntent(ch,exclude))) return isolatedFacePlan(ch);
   pstage(signal, '🎬 Își alege locul și cadrul', 22);
   const u = S.userName.trim() || 'User';
   const hist = ch.msgs.filter(x => x !== exclude && x.text && !x.err && !x.pending);
@@ -2398,7 +2413,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   if(!bodyRef && exposure === 'clothed' && st === 'photo' && fr.k !== 'close'){ try{ clothedBody = await bodyRefFor(c, shot, opt); if(opt.bounded && clothedBody) clothedBody = {...clothedBody, full2:null}; }catch(e){ clothedBody = null; } }
   // 9.83 (2): scena cere un unghi pe care portretul nu-l arată (profil, zâmbet larg) → și unghiul din fișa de identitate
   let angRef = null, angName = '', angTxt = '', angLbl = '', ang2 = null;   // 10.6 (B) + 11.0 (C2): după scor; fără corp în cadru, două
-  if(!bodyRef && st === 'photo'){ const wantS = !!(opt.sref && sceneRefOn(c, opt)), room = clothedBody ? 2 + (clothedBody.full2 ? 1 : 0) + (wantS ? 1 : 0) < 4 : true;
+  if(!opt.faceOnly && !bodyRef && st === 'photo'){ const wantS = !!(opt.sref && sceneRefOn(c, opt)), room = clothedBody ? 2 + (clothedBody.full2 ? 1 : 0) + (wantS ? 1 : 0) < 4 : true;
     try{ const as = await angleRefsFor(c, shot, room, clothedBody || opt.bounded ? 1 : 2, !!opt.idLeg); if(as[0]){ angRef = as[0].img; angName = as[0].name; angTxt = as[0].txt; angLbl = as[0].lbl; } if(as[1]) ang2 = as[1]; }catch(e){} }
   let ratioTxt = ''; if(clothedBody){ try{ ratioTxt = bodyRatioText(await refBodySig(c)); }catch(e){} }   // 9.89 (a)
   const faceInstruction = clothedBody
@@ -2423,9 +2438,9 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
     const body = fr.k === 'close' ? bodyRef : bodyRef || clothedBody?.blob || (fb ? await headHide(await fullBodyRef(fb, c.fullBox), 'hx:' + c.photoFull) : null);   // 13.6: capul estompat
     const face2 = face;   // 10.3
-    const p3 = `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair exactly as shown (the same color, length, texture, volume and parting); preserve eyewear only if present in the reference.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
+    const p3 = opt.faceOnly ? closeScenePrompt(c,shot,fr,asked,fix,st) : `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair exactly as shown (the same color, length, texture, volume and parting); preserve eyewear only if present in the reference.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
-    const angles = st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
+    const angles = !opt.faceOnly && st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
     const refs3 = [face2, body].filter(Boolean);
     let p3Final = p3;
     for(const a of angles){ refs3.push(a.img); p3Final += ` Image ${refs3.length} is ${a.txt} Use this angle only for facial geometry, not the scene or outfit.`; }
@@ -12586,7 +12601,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     else { const tS = performance.now(); let pl = await planShot(c, ch, {promised, exclude:m, signal:busy.signal, together, requestedExposure:spont ? '' : latestPhotoExposure(ch, m)}); tm.s.scena = performance.now() - tS;
       { const tC = performance.now(); pl = await framePreview(c, ch, m, pl, {spont, target, mode, promised, together, signal:busy.signal}); const dC = performance.now() - tC; if(dC > 300) tm.s.cadru = dC; }   // 13.3: confirmarea cadrului, separat   // 10.1 (S4): confirmi sau corectezi cadrul
       sceneOpt = await sceneOptOf(c, ch, m, pl, pl.together);   // 10.1 (S5, S8)
-      shot = pl.shot; where = pl.where; together = pl.together; asked = pl.asked || []; shot = giftDetail(c, shot, where);
+      shot = pl.shot; where = pl.where; together = pl.together; asked = pl.asked || []; if(!pl.faceOnly) shot = giftDetail(c, shot, where);
       // 9.56: leagă cererea explicită de expunere din ultimele mesaje de fotografia generată, chiar dacă planificatorul a omis-o.
       const requestedExposure = pl.requestedExposure || 'clothed';
       if(pl.requestedExposure) sceneOpt.requestedExposure = requestedExposure;
