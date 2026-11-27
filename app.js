@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.5';
+const APP_VER = '16.0.6';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -176,7 +176,7 @@ async function delImg(k){ if(!k) return; DB.del(thKey('g', k)).catch(() => {}); 
 // șterge tot ce ține de un mesaj: poza, variantele ei și înregistrările vocale (fără poza de profil)
 async function purgeMsg(m, c){
   const keep = c && c.photo;
-  for(const k of new Set([m.img, ...(m.imgAlts || [])])) if(k && k !== keep) await delImg(k).catch(() => {});
+  for(const k of new Set([m.img, m.reviewImg, ...(m.imgAlts || [])])) if(k && k !== keep) await delImg(k).catch(() => {});
   for(let a = 0; a < Math.max(1, (m.alts || []).length); a++) DB.del('aud:' + m.id + ':' + a).catch(() => {});
   if(m.vid && !/^u:/.test(m.vid)) await delImg(m.vid).catch(() => {});   // 13.5
 }
@@ -906,7 +906,7 @@ function unpState(gc,ms,now=Date.now()){
  return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),commitments:unpCommitments(gc,c,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===(p.from===c.id?p.to:p.from))?.name||'—',category:p.category,check:unpConflict(gc,ms,p,now)}))};});
 }
 function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Recent elapsed simulated social slots (not proof of attendance): '+(gc.living15?.journal||[]).filter(e=>e.from===c.id||e.to===c.id).slice(-2).map(e=>e.category+' '+new Date(e.ts).toLocaleDateString('ro-RO')).join('; ')+'. Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
-function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.5</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
+function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.6</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
 // 15.1: derived, bounded group-only behavioral tendencies; no mutation of canon.
 function deep151Profile(gc,c,now=Date.now()){
  const rows=(gc.social17?.events||[]).filter(e=>e.from===c.id&&Number.isFinite(e.ts)&&e.ts<=now&&now-e.ts<=30*86400000);
@@ -2621,7 +2621,7 @@ function sheetPick(c, shot, n = 2){
   return v.slice().sort((a, b) => (sc[b.ang] || 0) - (sc[a.ang] || 0)).slice(0, n).map(x => ({...x, sc:sc[x.ang] || 0}));   // 10.6 (B): cât se potrivește scenei
 }
 // reperele 3 și 4 (fețe decupate): ale tale întâi, apoi fișa (după scenă), apoi unghiurile automate
-// 16.0.5 — explicit visual reference approval; legacy references remain compatible.
+// 16.0.6 — explicit visual reference approval; legacy references remain compatible.
 const VI_ROLES = {front:'Frontal',three:'Trei sferturi',side:'Profil lateral',body:'Corp întreg',other:'Alt unghi'};
 function viProfile(c){ return c.visualIdentity ||= {v:1, locked:false, refs:[], permanent:'', variable:''}; }
 function viSceneRole(shot){
@@ -4612,7 +4612,7 @@ async function faceDescs0x(blob){
 // fața de referință: poza de profil + pozele de referință în plus (o dată, ținută pe personaj)
 async function refDescs(c){
   if(!c.photo) return [];
-  const k = [await fdMode(), c.photo, ...(c.refs || []).slice(0, 2).filter(x => !refOut(c, x))].join('|');   // 10.5 (R3): o poză în plus ieșită din grup nu mai intră   // 14.0: și judecătorul
+  const k = [await fdMode(), ...new Set([c.photo, ...(c.refs || []).slice(0, 2).filter(x => !refOut(c, x)), ...viApproved(c, '').map(r=>r.key)])].join('|');   // 10.5 (R3): o poză în plus ieșită din grup nu mai intră   // 14.0: și judecătorul
   if(c.faceEmb?.v === 2 && c.faceEmb.k === k && c.faceEmb.d.length) return c.faceEmb.d;
   const d = [];
   for(const key of k.split('|').slice(1)){
@@ -5213,7 +5213,7 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
 }
 async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const diagnostic = {};
-  const failure = message => Object.assign(new Error(message), {photoKind:'local',photoDiagnostic:diagnostic});
+  const failure = message => Object.assign(new Error(message), {photoKind:'local',photoDiagnostic:diagnostic, reviewBlob:blob});
   const bodyVisible = !opt.together && !!(opt.usePortraitBody ? c.photo : c.photoFull) && framingOf(shot).k !== 'close';
   const [faceResult, body] = await Promise.all([
     localFace(blob,c),
@@ -5223,12 +5223,12 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const faceLimit = idMax(c);
   Object.assign(diagnostic,{face,faceLimit,body,bodyLimit:bodyVisible && body != null ? bodyGate(c) : null,reference:!bodyVisible ? 'fără comparație corp' : opt.usePortraitBody ? 'portret' : 'poza întreagă / fișa de corp',spontaneous:!!opt.spontaneous});
   const faceMismatch = face != null && face > faceLimit;
-  const borderlineFace = faceMismatch && opt.sceneWardrobe && face - faceLimit <= (opt.spontaneous ? .06 : .03);
-  if(faceMismatch && !borderlineFace) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
+  const borderlineFace = faceMismatch && opt.sceneWardrobe && (viSceneRole(shot) !== 'front' || face - faceLimit <= .10);
+  if(faceMismatch && (!borderlineFace || S.imgCheck === 'off')) throw failure('Poza a rămas nepublicată: fața diferă de portretul de referință. Poți reîncerca într-un cadru cu fața clar vizibilă.');
   const bodyUnknown = bodyVisible && body == null;
   const limit = diagnostic.bodyLimit;
   const bodyMismatch = bodyVisible && body != null && body > limit;
-  const borderlineBody = bodyMismatch && opt.sceneWardrobe && body - limit <= (opt.spontaneous ? .06 : .04);
+  const borderlineBody = bodyMismatch && opt.sceneWardrobe && body - limit <= .06 && S.imgCheck !== 'off';
   if(bodyMismatch && !borderlineBody) throw failure('Poza a rămas nepublicată: diferență clară la măsurarea proporțiilor față de reperul de corp.');
   const dressedShot = identityOutfit(c,shot,opt), fixed = dressedShot !== shot;
   const compareBust = opt.compareBust && bodyVisible;
@@ -5240,7 +5240,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     diagnostic.visualFace = checked?.face ?? null;
     diagnostic.visualBody = checked?.body ?? null;
     diagnostic.visualBust = checked?.bust ?? null;
-    if((face == null || borderlineFace) && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
+    if((face == null || borderlineFace) && (!(checked?.face >= 9) || (faceMismatch && face - faceLimit > .10))) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
     if(borderlineBody && (!(checked?.body >= 9) || (checked.bust != null && checked.bust < 8))) throw failure(checked?.body == null
       ? 'Poza a rămas nepublicată: măsurătoarea corpului a depășit puțin limita, iar comparația vizuală nu a putut confirma proporțiile. Încearcă un cadru mai apropiat ca poziție de reper.'
       : 'Poza a rămas nepublicată: comparația vizuală nu confirmă proporțiile reperului de corp.');
@@ -9737,7 +9737,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
   let inner, cls = me ? 'me' : 'ai';
   if(m.pendingImg){ const stg = live && live.ch === chat && live.stage || {t:'✨ Se pregătește', p:8, pv:0}, pcx = duoOn(cur) && m.who != null ? duoChar(cur, m.who) || cur : cur;   // 14.3
     inner = `<div class="picload">${pcx.photo ? `<img class="plbg" data-k="${esc(photoNow(pcx))}" alt="">` : ''}<div class="plgrain"></div><div class="plin"><span class="shut"><i></i></span><b>${esc(m.duoBoth ? duoNm(cur, 0) + ' și ' + duoNm(cur, 1) + ' îți fac' : pcx.name + ' îți face')} o poză</b><small>${esc(whereIn(chat.where) || 'se aranjează…')}</small><span class="plst">${esc(stg.t)}</span><span class="plbar"><i style="width:${stg.pv || 0}%"></i></span><span class="plpct">${Math.floor(stg.pv || 0)}%</span></div></div>`; cls += ' picm'; }
-  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}</div>`;
+  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
   else if(m.img && !me){
     cls += ' picm';
     const fresh = !devDone.has(m.img) && m.ts && Date.now() - m.ts < 3 * 60e3;   // poza abia sosită „se developează”
@@ -12325,6 +12325,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
   $('#sugg').innerHTML = '';
   const rw0 = rwDay().usd, rwN0 = rwDay().n, rwC0 = rwCallN;   // 13.3: cererile Runware ale pozei   // 9.37: cât a costat poza asta pe Runware (toate generările ei)
   const pT = setInterval(pTick, 120);
+  let reviewScene = '';
   try{
     const promised = !target && (spont || opt.useShot) && ch.nextShot ? ch.nextShot.t : '';      // descrierea scrisă chiar de personaj când a trimis poza   // 13.8: sau scenariul video ales
     if(promised) delete ch.nextShot;
@@ -12407,6 +12408,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     const R = edited ? await finishPerson(c, edited, shot, busy.signal, {together, tm, kind:'edit', noChar:!!(peopleIn && (!peopleIn.self || peopleIn.duo))})
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont, verifyIdentity:verifyIdentity && !together && !sceneOpt.partner, sceneWardrobe:true,usePortraitBody:chatBodyKey(c) === c.photo});
     const tVerify = performance.now();
+    reviewScene = shot;
     const bodyNotice = verifyIdentity
       ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
     if(verifyIdentity) tm.s.verificare = performance.now() - tVerify;
@@ -12414,6 +12416,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
     if(gdiag){ gdiag.tm = {...tm.s, total:performance.now() - tm.t0}; gdiag.rwc = rwCalls.filter(x => x.i > rwC0).map(({i, ...x}) => x); if(gdiag.mdl === 'Klein 9B') gdiag.mdl = kleinLbl(); }   // 13.3: tot, inclusiv pașii de după (garanția, măsurarea, finisarea)
     const k = await saveImg(blob);
+    if(m.reviewImg){ await delImg(m.reviewImg).catch(()=>{}); delete m.reviewImg; delete m.reviewScene; }
     clearInterval(pT); if(live && live.stage){ live.stage.t = '✅ Gata'; live.stage.pv = 100; const st = $('#msgs .picload .plst'); if(st) st.textContent = '✅ Gata'; pDraw(100); }
     if(target){
       if(!m.imgAlts && m.img) m.imgAlts = [m.img];
@@ -12455,6 +12458,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
         + ' · corp ' + fmt(d.body) + ' (prag ' + fmt(d.bodyLimit) + ', ' + d.reference + ')'
         + (Object.hasOwn(d,'visualFace') ? ' · vizual: față ' + visual(d.visualFace) + ', corp ' + visual(d.visualBody) + ', bust ' + visual(d.visualBust) : ' · fără comparație vizuală') : '';
       m.err = failure + details;
+      if(!flag && e.reviewBlob && !m.img){ try{ const key=await saveImg(e.reviewBlob); if(m.reviewImg) await delImg(m.reviewImg).catch(()=>{}); m.reviewImg=key; m.reviewScene=reviewScene; }catch(storageError){ m.err += '\nPrevizualizarea nu a putut fi salvată.'; } }
       if(flag) m.errKind = 'flag'; else if(e.photoKind) m.errKind = e.photoKind;
     }
   }
@@ -18372,7 +18376,7 @@ function bind(){
   { let rq = 0; $('#msgs').addEventListener('scroll', () => { markBusy(900); if(rq) return; rq = requestAnimationFrame(() => { rq = 0; dayFloatSync(true); }); }, {passive:true}); }
   setInterval(() => { if(cur && chat && !$('#vChat').hidden && !(busy && live && live.ch === chat)) $('#chTag').innerHTML = statusLine(); }, 60e3);
   let tapT = null, tapI = -1;
-  $('#msgs').addEventListener('click', e => {
+  $('#msgs').addEventListener('click', async e => {
     const media = e.target.closest('[data-chat-media]');
     if(media){ const row = media.closest('.mw'); if(row) openMessageMedia(cur, chat, chat.msgs[Number(row.dataset.i)], media.dataset.chatMedia); return; }
     const v = e.target.closest('[data-view]');
@@ -18392,6 +18396,7 @@ function bind(){
     if(e.target.closest('.hero')){ charProfile(cur.id); return; }
     const w = e.target.closest('.mw'); if(!w) return;
     const i = +w.dataset.i, m = chat.msgs[i];
+    if(e.target.closest('[data-review-accept],[data-review-delete]')){ if(!busy && m?.reviewImg && m.errKind==='local'){ const ch=chat,c=cur; const accept=!!e.target.closest('[data-review-accept]'); if(accept && !confirm('Publici manual fotografia? Identitatea nu a fost confirmată automat.')) return; const k=m.reviewImg; if(accept){ m.img=k; m.scene=m.reviewScene; m.manualIdentity=true; delete m.err; delete m.errKind; } else await delImg(k).catch(()=>{}); delete m.reviewImg; delete m.reviewScene; await saveChat(c,ch); if(chat===ch) renderMsgs(); } return; }
     if(e.target.closest('[data-regen]')){ if(!busy){ if(m.eco && chat){ chat.ecoCool = Date.now(); } reply(m); } return; }   // 9.60: ai refăcut un răspuns Haiku → filtrul devine mai prudent aici   // 8.19: o singură variantă nouă; „🎰 +2” doar dacă mai vrei
     if(e.target.closest('[data-more3]')){ if(!busy) reply(m, {three:true, keep:true}); return; }
     { const rb = e.target.closest('[data-rate]'); if(rb){ rateMsg(i, +rb.dataset.rate); return; } }
