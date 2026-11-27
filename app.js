@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.18';
+const APP_VER = '16.0.7.19';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2838,30 +2838,54 @@ function viProtected(c,key){ return !!key && !!c.visualIdentity?.locked && (key 
 function viLock(c,on){ const p=viProfile(c); if(on && !c.photo) return false; p.locked=!!on; if(on){p.portrait=c.photo;p.body=c.photoFull || null;} return true; }
 function viAdd(c,key,role){ const p=viProfile(c); if(!key || !Object.hasOwn(VI_ROLES,role) || p.refs.length>=12 || p.refs.some(r=>r.key===key)) return false; p.refs.push({key,role,approved:false}); return true; }
 function viNote(c){ return c.visualIdentity?.permanent ? ' Permanent identity traits: '+c.visualIdentity.permanent+'.' : ''; }
+// 16.0.7.19: use original pixels, never a generated pending candidate.
+async function viCanonicalCrop(c){
+  const key=c.photo, b=key&&await DB.get(key).catch(()=>null);
+  if(!b)throw new Error('Portretul original lipsește.');
+  const box=await viLocalBox(b);
+  if(!box)throw new Error('Fața originală nu poate fi localizată. Alege un portret clar.');
+  return {key,blob:await cropFace(b,box)};
+}
+async function viCandidateAudit(c,blob,slot){
+  const fs=await faceDescs(blob).catch(()=>[]);
+  if(fs.length!==1)return {slot:null,d:null};
+  const f=fs[0], rows=await viScanAngles(c).catch(()=>[]);
+  const compatible=rows.filter(r=>r.key===c.photo||viPoseCompatible(viPose(f.lm),r.pose)).filter(r=>r.face.d.length===f.d.length&&(r.face.j||'f')===(f.j||'f'));
+  const ds=compatible.map(r=>fdist(f.d,r.face.d)).filter(Number.isFinite);
+  return {slot:viAtlasSlot(viPose(f.lm)),d:ds.length?Math.min(...ds):null};
+}
 const viGenerating = new WeakSet();
-async function viGenerateAngle(c,slot){
-  const p=viProfile(c); if(!VI_ATLAS_SLOTS.includes(slot)||slot==='front'||!c.photo||p.refs.length>=12||viGenerating.has(c))throw new Error('Generare indisponibilă.');
+async function viGenerateAngle(c,slot,replaceKey=null){
+  const p=viProfile(c); if(!VI_ATLAS_SLOTS.includes(slot)||slot==='front'||!c.photo||(p.refs.length>=12&&!replaceKey)||viGenerating.has(c))throw new Error('Generare indisponibilă.');
   if(!rwReady()||S.rw!=='on')throw new Error('Activează Runware în Setări → Poze.');
   viGenerating.add(c);let key=null;try{
-    const rows=await viScanAngles(c);if(rows.some(r=>viAtlasSlot(r.pose)===slot)||p.refs.some(r=>!r.approved&&r.role===slot))throw new Error('Există deja un reper sau candidat.');
-    const original=c.photo, b=await DB.get(original);if(!b)throw new Error('Portretul original lipsește.');
+    const rows=await viScanAngles(c);if(rows.some(r=>viAtlasSlot(r.pose)===slot)||p.refs.some(r=>!r.approved&&r.role===slot&&r.key!==replaceKey))throw new Error('Există deja un reper sau candidat.');
+    const original=c.photo, source=await viCanonicalCrop(c);
+    if(replaceKey&&!p.refs.some(r=>r.key===replaceKey&&!r.approved&&r.role===slot))throw new Error('Candidat indisponibil.');
     const direction=slot.endsWith('Left')?'left':'right', angle=slot.startsWith('side')?'strict side profile, one eye visible':'three-quarter view, both eyes visible';
     const prompt=ageIdentityLead(c)+`Create a fully clothed neutral head-and-shoulders portrait of the same fictional character as the reference. ${angle}, nose pointing toward image ${direction}. Preserve facial geometry, hair pigmentation, skin texture and age appearance. Plain background, neutral light, no accessories added, one person only.`;
-    const blob=await rwRun(prompt,[await toJpeg(b,1024,.94)],768,1024,new AbortController().signal,rwKlein(),1);
+    const blob=await rwRun(prompt,[await toJpeg(source.blob,1024,.94)],768,1024,new AbortController().signal,rwKlein(),1);
+    const audit=await viCandidateAudit(c,blob,slot);
     if(c.photo!==original)throw new Error('Portretul s-a schimbat în timpul generării.');
-    key=await saveImg(blob);if(!viAdd(c,key,slot))throw new Error('Nu se poate salva candidatul.');
-    try{await saveChars();}catch(e){p.refs=p.refs.filter(r=>r.key!==key);throw e;}key=null;
+    key=await saveImg(blob);const old=p.refs.slice();
+    if(replaceKey)p.refs=p.refs.filter(r=>r.key!==replaceKey||r.approved);
+    if(!viAdd(c,key,slot)){p.refs=old;throw new Error('Nu se poate salva candidatul.');}
+    p.refs.find(r=>r.key===key).audit=audit;
+    try{await saveChars();}catch(e){p.refs=old;throw e;}key=null;
+    if(replaceKey)await delImg(replaceKey).catch(()=>{});
   }finally{if(key)await delImg(key).catch(()=>{});viGenerating.delete(c);}
 }
 function drawVisualIdentity(c,box){
   const p=viProfile(c);
-  box.insertAdjacentHTML('beforeend', `<div class="refbox" id="viCore"><b>🔒 Visual Identity Studio</b><small>Protejează reperele aprobate. Nu garantează reproducerea identică de către model.</small><label><input id="viLock" type="checkbox" ${p.locked?'checked':''}> Protejează portretul și corpul actual</label><div class="vi-cards">${p.refs.map((r,i)=>`<figure><button type="button" class="vi-preview" data-vipreview="${i}" aria-label="Compară cu originalul"><img data-k="${esc(r.key)}" alt="Reper facial"></button><figcaption>${esc(VI_ROLES[r.role]||r.role)} · ${r.approved?'Aprobat':'În așteptare · unghi solicitat, verifică vizual'}</figcaption><button class="btn sm" data-viapprove="${i}">${r.approved?'Retrage':'Aprobă'}</button><button class="btn sm" data-viremove="${i}" ${p.locked&&r.approved?'disabled':''}>Șterge</button></figure>`).join('')}</div><select id="viRole">${Object.entries(VI_ROLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="viFile" type="file" accept="image/*"><small>Maximum 12 repere; Runware: reperele aprobate sunt selectate după unghiul scenei, în limita locurilor disponibile (maximum două suplimentare).</small><label>Trăsături permanente (preferabil engleză)<textarea id="viPermanent" maxlength="700">${esc(p.permanent)}</textarea></label><label>Elemente variabile / notițe de scenă<textarea id="viVariable" maxlength="700">${esc(p.variable)}</textarea></label><button class="btn pri" id="viSave">Salvează profilul vizual</button></div>`);
+  box.insertAdjacentHTML('beforeend', `<div class="refbox" id="viCore"><b>🔒 Visual Identity Studio</b><small>Protejează reperele aprobate. Nu garantează reproducerea identică de către model.</small><label><input id="viLock" type="checkbox" ${p.locked?'checked':''}> Protejează portretul și corpul actual</label><div class="vi-cards">${p.refs.map((r,i)=>`<figure><button type="button" class="vi-preview" data-vipreview="${i}" aria-label="Compară cu originalul"><img data-k="${esc(r.key)}" alt="Reper facial"></button><figcaption>${esc(VI_ROLES[r.role]||r.role)} · ${r.approved?'Aprobat':'În așteptare · unghi solicitat, verifică vizual'}${r.audit?` · unghi detectat: ${esc(VI_ROLES[r.audit.slot]||'necunoscut')} · distanță: ${r.audit.d==null?'—':r.audit.d.toFixed(3)}`:''}</figcaption>${!r.approved&&VI_ATLAS_SLOTS.includes(r.role)&&r.role!=='front'?`<button class="btn sm" data-viregen="${i}">Regenerează</button>`:''}<button class="btn sm" data-viapprove="${i}">${r.approved?'Retrage':'Aprobă'}</button><button class="btn sm" data-viremove="${i}" ${p.locked&&r.approved?'disabled':''}>Șterge</button></figure>`).join('')}</div><select id="viRole">${Object.entries(VI_ROLES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select><input id="viFile" type="file" accept="image/*"><small>Maximum 12 repere; Runware: reperele aprobate sunt selectate după unghiul scenei, în limita locurilor disponibile (maximum două suplimentare).</small><label>Trăsături permanente (preferabil engleză)<textarea id="viPermanent" maxlength="700">${esc(p.permanent)}</textarea></label><label>Elemente variabile / notițe de scenă<textarea id="viVariable" maxlength="700">${esc(p.variable)}</textarea></label><button class="btn pri" id="viSave">Salvează profilul vizual</button></div>`);
   const root=box.querySelector('#viCore'); hydrate(root);
-  root.querySelectorAll('[data-vipreview]').forEach(b=>b.onclick=()=>{
+  root.querySelectorAll('[data-vipreview]').forEach(b=>b.onclick=async()=>{
     const r=p.refs[+b.dataset.vipreview];if(!r)return;
     const d=document.createElement('dialog');d.className='vi-compare';
     d.innerHTML=`<div class="vi-compare-grid"><figure><img data-k="${esc(c.photo||'')}" alt="Original"><figcaption>Original</figcaption></figure><figure><img data-k="${esc(r.key)}" alt="Candidat"><figcaption>${esc(VI_ROLES[r.role]||r.role)}</figcaption></figure></div><button class="btn" type="button">Închide</button>`;
     document.body.append(d);d.addEventListener('close',()=>d.remove(),{once:true});d.querySelector('button').onclick=()=>d.close();d.showModal();hydrate(d);
+    const urls=[];d.addEventListener('close',()=>urls.forEach(u=>URL.revokeObjectURL(u)),{once:true});
+    try{const source=await viCanonicalCrop(c), cb=await DB.get(r.key), box=await viLocalBox(cb);if(!box||!d.open)return;const crop=await cropFace(cb,box);if(!d.open)return;for(const [i,blob] of [source.blob,crop].entries()){const u=URL.createObjectURL(blob);urls.push(u);d.querySelectorAll('img')[i].src=u;}d.querySelector('figcaption').textContent='Original · față decupată';}catch(e){if(d.open)toast('Decupare indisponibilă; se afișează originalele.');}
   });
   root.insertAdjacentHTML('afterbegin', `<div style="min-width:0;overflow-wrap:anywhere"><b>Atlas facial · 5 orientări · Studio 2.0</b><div id="viAtlasStatus" aria-live="polite">Scanare…</div><button class="btn sm" id="viAtlasScan">Scanează reperele aprobate (local)</button><small>Generează individual unghiurile lipsă prin Runware (cost API). Verifică și aprobă manual fiecare candidat. Originalele nu sunt înlocuite.</small></div>`);
   const status=root.querySelector('#viAtlasStatus'), scan=root.querySelector('#viAtlasScan');
@@ -2870,7 +2894,8 @@ function drawVisualIdentity(c,box){
   root.querySelector('#viLock').onchange=async e=>{if(!viLock(c,e.target.checked)){e.target.checked=false;toast('Adaugă întâi un portret.');return;} await saveChars();drawPics(c);};
   root.querySelector('#viSave').onclick=async()=>{p.permanent=root.querySelector('#viPermanent').value.trim();p.variable=root.querySelector('#viVariable').value.trim();await saveChars();toast('Profil vizual salvat');};
   root.querySelector('#viFile').onchange=async e=>{const f=e.target.files[0];if(!f||p.refs.length>=12)return;try{const k=await saveImg(await toJpeg(f,2048,.94));if(!viAdd(c,k,root.querySelector('#viRole').value)){await delImg(k);return;}await saveChars();drawPics(c);}catch(err){toast('Nu pot importa reperul.');}};
-  root.querySelectorAll('[data-viapprove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viapprove];if(!r)return;if(p.locked&&r.approved){toast('Deblochează întâi identitatea.');return;}if(!r.approved&&!confirm('Ai comparat candidatul cu originalul și confirmi identitatea și orientarea?'))return;r.approved=!r.approved;await saveChars();drawPics(c);});
+  root.querySelectorAll('[data-viregen]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viregen];if(!r||r.approved||!confirm('Regenerezi acest candidat? Cost Runware.'))return;b.disabled=true;try{await viGenerateAngle(c,r.role,r.key);drawPics(c);}catch(e){toast(String(e.message||e));b.disabled=false;}});
+  root.querySelectorAll('[data-viapprove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viapprove];if(!r)return;if(p.locked&&r.approved){toast('Deblochează întâi identitatea.');return;}if(!r.approved&&r.audit&&r.audit.slot!==r.role){toast('Orientarea detectată nu corespunde. Regenerează sau importă un reper corect.');return;}if(!r.approved&&!confirm('Ai comparat candidatul cu originalul și confirmi identitatea și orientarea?'))return;r.approved=!r.approved;await saveChars();drawPics(c);});
   root.querySelectorAll('[data-viremove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viremove];if(!r||viProtected(c,r.key))return;p.refs.splice(+b.dataset.viremove,1);await saveChars();await delImg(r.key);drawPics(c);});
 }
 async function extraRefs(c, shot, noBox){
