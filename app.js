@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.6.3';
+const APP_VER = '16.0.6.4';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -906,7 +906,7 @@ function unpState(gc,ms,now=Date.now()){
  return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),commitments:unpCommitments(gc,c,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===(p.from===c.id?p.to:p.from))?.name||'—',category:p.category,check:unpConflict(gc,ms,p,now)}))};});
 }
 function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Recent elapsed simulated social slots (not proof of attendance): '+(gc.living15?.journal||[]).filter(e=>e.from===c.id||e.to===c.id).slice(-2).map(e=>e.category+' '+new Date(e.ts).toLocaleDateString('ro-RO')).join('; ')+'. Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
-function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.6.3</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
+function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.6.4</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
 // 15.1: derived, bounded group-only behavioral tendencies; no mutation of canon.
 function deep151Profile(gc,c,now=Date.now()){
  const rows=(gc.social17?.events||[]).filter(e=>e.from===c.id&&Number.isFinite(e.ts)&&e.ts<=now&&now-e.ts<=30*86400000);
@@ -1425,19 +1425,31 @@ const nineFits = () => rwFor('ancorat') || !Number.isFinite(capLeft()) || capLef
 const sceneModel = (opt = {}) => { const m = isAuto(opt) && S.autoModel === 'eco' ? 'eco' : (S.wkChat || 'eco'); return m === 'ancorat' && S.imgProv === 'worker' && !nineFits() ? 'eco' : m; };
 const BUST_FIDELITY = 'Preserve the established bust volume, projection and width relative to this character’s ribcage, shoulders and waist, including under the requested clothes. A prominent bust stays equally prominent. Let the garment fit the same body naturally. Do not shrink, average out, flatten or exaggerate the reference proportions.';
 const CHAT_PHOTO_CONTINUITY = 'The reference portrait fixes facial identity, apparent age, hair and distinguishing marks. The body reference fixes the same build, proportions and silhouette with or without clothing. Take clothing and coverage only from the current scene. Keep lower-body clothing for a topless scene and preserve the requested framing. Do not transfer the reference outfit or change anatomy when clothing changes.';
-// 16.0.6.3: explicit canonical age, never inferred from unrelated numbers.
-function canonicalPhotoAge(c){
-  const fields=[c?.persona,c?.aspect,c?.look,c?.physEn];
-  for(const field of fields){
+// 16.0.6.4: explicit canonical age, never inferred from unrelated numbers.
+function photoAgeSource(c){
+  const fields=[['vârstă explicită în profil',c?.photoAgeManual?`Age: ${c.photoAgeManual}`:null],['descriere manuală',c?.physAuto===false?c.physUser:null],['aspect',c?.aspect],['persona',c?.persona],['look',c?.look],['physEn',c?.physEn]];
+  const ranges=[];
+  for(const [source,field] of fields){
     const t=String(field||'');
-    const m=t.match(/(?:^|\n)\s*(?:age|vârsta|varsta)\s*[:=]\s*(\d{1,3})\b/i)||t.match(/\b(\d{1,3})[ -](?:year[ -]old|years? old|(?:de )?ani)\b/i);
-    if(m){const a=Number(m[1]);if(a>=18&&a<=110)return a;}
+    const range=/\b(\d{1,3})\s*[-–—]\s*(\d{1,3})\s*(?:de ani|ani|years? old|year-old)\b/i;
+    const labelled=/(?:^|\n)\s*(?:age|vârsta|varsta|vârstă)\s*[:=]\s*(\d{1,3})\s*[-–—]\s*(\d{1,3})\b/i;
+    const rr=t.match(range)||t.match(labelled); if(rr){ranges.push({source,min:+rr[1],max:+rr[2]});}
+    const clean=t.replace(new RegExp(range.source,'gi'),'').replace(new RegExp(labelled.source,'gi'),'');
+    const m=clean.match(/(?:^|\n)\s*(?:age|vârsta|varsta|vârstă)\s*[:=]\s*(\d{1,3})\b/i)||clean.match(/\b(\d{1,3})[ -](?:year[ -]old|years? old|(?:de )?ani)\b/i);
+    if(m){const age=+m[1];if(age>=18&&age<=110)return {age,source};}
   }
-  return null;
+  const r=ranges.find(x=>x.min>=18&&x.max<=110&&x.min<=x.max);return r?{...r,age:null}:{age:null,source:'nespecificată'};
+}
+function canonicalPhotoAge(c){return photoAgeSource(c).age;}
+function ageEstimateInfo(sig,ref,c){
+  const generated=sig?.age, reference=ref?.age, declared=canonicalPhotoAge(c);
+  const valid=x=>Number.isFinite(x)&&x>=18&&x<=110;
+  const reliable=valid(generated)&&valid(reference)&&(declared==null||Math.abs(reference-declared)<=10);
+  return {generated,reference,declared,reliable,delta:reliable?Math.round((generated-reference)*10)/10:null};
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
-function ageReviewNeeded(r){return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(n):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.3')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere estimată: '+f(d.ageDelta),'Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function ageReviewNeeded(r){return !!(r?.lk?.ageInfo?.reliable===false || r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
   const requestedBodyChange = !opt.sceneWardrobe && /(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)[^.!?]{0,45}(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)|(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)[^.!?]{0,45}(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)/i.test(String(shot || ''));
@@ -2644,7 +2656,7 @@ function sheetPick(c, shot, n = 2){
   return v.slice().sort((a, b) => (sc[b.ang] || 0) - (sc[a.ang] || 0)).slice(0, n).map(x => ({...x, sc:sc[x.ang] || 0}));   // 10.6 (B): cât se potrivește scenei
 }
 // reperele 3 și 4 (fețe decupate): ale tale întâi, apoi fișa (după scenă), apoi unghiurile automate
-// 16.0.6.3 — explicit visual reference approval; legacy references remain compatible.
+// 16.0.6.4 — explicit visual reference approval; legacy references remain compatible.
 const VI_ROLES = {front:'Frontal',three:'Trei sferturi',side:'Profil lateral',body:'Corp întreg',other:'Alt unghi'};
 function viProfile(c){ return c.visualIdentity ||= {v:1, locked:false, refs:[], permanent:'', variable:''}; }
 function viSceneRole(shot){
@@ -3792,7 +3804,7 @@ async function skinLock(c, blob){
    (F4) PĂRUL: cât coboară sub bărbie (în „înălțimi de față”), cu precizie medie (hainele de culoarea părului se exclud).
    Totul intră în alegerea schiței, în „🔍 De ce arată așa”, în avertismentul de sub poză și în statistica personajului.
    Toleranțele se calibrează singure pe pachetul de identitate (portret, poza întreagă, unghiurile din fișă). Cost: zero. */
-const LOOK_V = 1;
+const LOOK_V = 2;
 const LOOK_TOL = {hair:16, eye:16, skin:16, hl:.6, geo:.09};   // implicite; se calibrează pe personaj între 75% și 150% din ele
 const LOOK_RO = {hair:'culoarea părului', eye:'culoarea ochilor', skin:'tenul', geo:'proporțiile feței', hl:'lungimea părului', age:'vârsta aparentă'};
 function rgb2lab(r, g, b){
@@ -3992,7 +4004,7 @@ function lookRaw(sig, ref, shot){
 // distanțele + cât pierde poza la alegere (pen) + ce e clar în afara toleranței (bad)
 function lookCmp(sig, ref, shot, c){
   if(!sig || !ref) return null;
-  const q = lookRaw(sig, ref, shot), T = {...LOOK_TOL, ...(ref.tol || {})}, bad = [];
+  const q = lookRaw(sig, ref, shot), ageInfo=ageEstimateInfo(sig,ref,c); q.age=ageInfo.delta; q.ageInfo=ageInfo; const T = {...LOOK_TOL, ...(ref.tol || {})}, bad = [];
   const ex = (d, t) => d == null ? 0 : Math.max(0, Math.min(1.5, (d - t) / t));
   const wH = c ? pfbW(c, 'hair') : 1, wA = c ? pfbW(c, 'age') : 1, wF = c ? pfbW(c, 'face') : 1;
   let pen = .05 * ex(q.hair, T.hair) * wH + .03 * ex(q.eye, T.eye) + .03 * ex(q.skin, T.skin) + .03 * ex(q.hl, T.hl) * wH;
@@ -12448,10 +12460,10 @@ async function askPhoto0(spont, target, mode, opt = {}){
     const studioDiagnostic = {};
     const bodyNotice = verifyIdentity
       ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,diagnosticOut:studioDiagnostic,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
-    const ageDiag = {...studioDiagnostic,version:APP_VER,status:'acceptată automat',age:canonicalPhotoAge(c),ageDelta:R.lk?.age??null,face:R.fd??null,faceLimit:idMax(c),body:R.bd??null,bodyLimit:bodyGate(c),runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,reference:studioDiagnostic.reference || 'corp neverificat',visualStatus:studioDiagnostic.visualStatus === 'evaluat' || R.check ? 'evaluat' : studioDiagnostic.visualStatus && studioDiagnostic.visualStatus !== 'neapelat' ? studioDiagnostic.visualStatus : S.imgCheck === 'off' ? 'dezactivat' : !aiReady() ? 'API vizual Anthropic indisponibil' : 'neapelat pentru acest cadru',calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
+    const ageDiag = {...studioDiagnostic,version:APP_VER,status:'acceptată automat',age:canonicalPhotoAge(c),ageDelta:R.lk?.age??null,ageInfo:R.lk?.ageInfo??null,ageSource:photoAgeSource(c),face:R.fd??null,faceLimit:idMax(c),body:R.bd??null,bodyLimit:bodyGate(c),runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,reference:studioDiagnostic.reference || 'corp neverificat',visualStatus:studioDiagnostic.visualStatus === 'evaluat' || R.check ? 'evaluat' : studioDiagnostic.visualStatus && studioDiagnostic.visualStatus !== 'neapelat' ? studioDiagnostic.visualStatus : S.imgCheck === 'off' ? 'dezactivat' : !aiReady() ? 'API vizual Anthropic indisponibil' : 'neapelat pentru acest cadru',calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
     if(!together && !duoBoth && !peopleIn && c.photo && ageReviewNeeded(R)){
-      ageDiag.status='nepublicată — vârstă aparentă';
-      throw Object.assign(new Error('Poza a rămas nepublicată: vârsta aparentă diferă. Verifică manual fotografia.'),{photoKind:'local',photoDiagnostic:ageDiag,reviewBlob:R.blob});
+      ageDiag.status=R.lk?.ageInfo?.reliable===false?'nepublicată — estimare vârstă incertă':'nepublicată — vârstă aparentă';
+      throw Object.assign(new Error(R.lk?.ageInfo?.reliable===false?'Poza a rămas nepublicată: estimarea vârstei este nesigură. Verifică manual fotografia.':'Poza a rămas nepublicată: vârsta aparentă diferă. Verifică manual fotografia.'),{photoKind:'local',photoDiagnostic:ageDiag,reviewBlob:R.blob});
     }
     m.photoDiagnostic=ageDiag;
     if(verifyIdentity) tm.s.verificare = performance.now() - tVerify;
@@ -17743,6 +17755,8 @@ async function saveEditorNow(){
     }   // 11.0 (C4): fișa feței veche nu se mai șterge: la completarea pachetului se compară cu portretul nou și rămân unghiurile care se potrivesc
   await crSave(c);   // 9.24: poza întreagă, corpul, unghiurile, descrierea ta
   const oldGreet = c.greet;
+  const editedAspect=$('#edAspect').value.trim();
+  if(editedAspect!==String(c.aspect||'')){const a=photoAgeSource({aspect:editedAspect}); if(a.age!=null)c.photoAgeManual=a.age; else delete c.photoAgeManual;}
   Object.assign(c, {name, tag:$('#edTag').value.trim(), aspect:$('#edAspect').value.trim(), persona:$('#edPersona').value.trim(),
     outfitLock:$('#edOutfit').value.trim(), strictIdentity:$('#edStrict').checked, callLang:$('#edCallLang').value, speech:$('#edSpeech').value.trim(), greet:$('#edGreet').value.trim(), look:$('#edLook').value.trim(), stil:$('#edStil').value,
     accent:ed.accent || '', bg:ed.bg || 'clar'});
