@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.4';
+const APP_VER = '16.0.7.5';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -965,6 +965,7 @@ function geWords(t){return new Set(pnorm(String(t||'')).split(/\s+/).filter(w=>w
 function geSimilarity(a,b){const x=geWords(a),y=geWords(b);return [...x].filter(w=>y.has(w)).length/Math.max(1,new Set([...x,...y]).size);}
 function geDuplicate(t,gc){return geWords(t).size>=8 && gc.msgs.filter(m=>m.role==='ai'&&!m.err).slice(-8).some(m=>geSimilarity(t,m.text)>=.68);}
 function geSheet(){const gc=gchat, a=gc?.economyLast||{}, live=gSpect?.g===grp?gSpect:null, t=live?.stats||a; openSheet(`<h4>AI Economy · Spectator</h4><div class="pad"><p>Buget estimat: $0.25 / sesiune</p><p>Cost raportat estimat: $${Number(live?.spent??a.spent??0).toFixed(4)}</p><p>Intrare: ${t.inp||0} · Ieșire: ${t.out||0}<br>Cache citit: ${t.cr||0} · Cache scris: ${t.cw||0}<br>Cereri procesate: ${t.calls||0} · încercate: ${t.attempted||0} · respinse HTTP: ${t.rejected||0}</p><p>Sesiune: ${esc(live?.id||a.sessionId||"anterioară")} · ${live?"activă":"salvată"}<br>Răspunsuri fără text: ${t.empty||0} · personaje: ${t.characterEmpty??'—'} · regizor: ${t.directorEmpty??'—'} · cost rezervat (usage incomplet): ${t.uncertain||0}</p><h4>Cost pe rol</h4>${Object.entries(t.breakdown||{}).map(([k,v])=>`<p>${esc(k.startsWith("personaj:")?(charById(k.slice('personaj:'.length))?.name||k):k)}: $${v.cost.toFixed(4)} · ${v.calls} cereri</p>`).join('')||'—'}<p>Ultima estimare: ${t.next? '$'+Number(t.next.estimate).toFixed(4)+' · '+esc(t.next.model)+' · '+t.next.tokens+' tokeni intrare · disponibil înainte: $'+Number(t.next.remaining).toFixed(4):'—'}</p><p>${esc(live?.reason||a.reason||'Tarifele sunt cele configurate în aplicație.')}</p><p>Cache prefix static la replici Spectator; regizor fără cache. Confirmare prin contoarele furnizorului. Context recent comprimat · protecție credit activă.</p></div>`);}
+function visualThinking(model){return {type:/^claude-(?:sonnet|opus|haiku)-5-5(?:$|-)/i.test(String(model))?'between_tools':'disabled'};}
 async function streamOnce(sys, msgs, {max = 700, signal, onText, cid, aux, meta, tag, cold, conv, eco, hist, uc, groupSession} = {}){
   let model = eco ? modelFor(true) : modelFor(aux);   // 9.49: eco = mesaj simplu → modelul mic, cu tot contextul personajului
   // 8.17: conversația rămâne în cache 1 oră (nu 5 minute): la pauze mai lungi istoricul se recitește la 5-10% din preț
@@ -982,7 +983,7 @@ async function streamOnce(sys, msgs, {max = 700, signal, onText, cid, aux, meta,
     groupSession.stats.context={system:giBytes(payload.system),history:giBytes(payload.messages),blocks:payload.system.map(b=>giBytes(b.text)),model,max,cache:!!conv};
   }
   if(groupSession) giThinking(payload);
-  if(tag==='pozeai') payload.thinking={type:'disabled'};
+  if(tag==='pozeai') payload.thinking=visualThinking(model);
   const reservation=groupSession?geReserve(groupSession,payload.system,payload.messages,max,model,!!conv):0;
   if(groupSession) groupSession.stats.attempted=(groupSession.stats.attempted||0)+1;
   let res; try{ res = await fetch(apiUrl('anthropic', '/v1/messages'), {method:'POST', signal, headers:apiHeaders('anthropic', {
@@ -1470,6 +1471,7 @@ function cleanPhotoScene(shot,opt={}){
   const explicit=(opt.asked||[]).join('; ')||t;
   const direct=/\bselfie\b/i.test(explicit)&&!/mirror|oglind|tripod|timer|trepied/i.test(explicit);
   const close=/close[- ]?up|close selfie|headshot|prim[- ]plan|de aproape|chest up|head and shoulders/i.test(explicit);
+  if(direct && !/\bselfie\b/i.test(t))t='Direct selfie. '+t;
   if(direct)t=t.replace(/\b(?:in|with|using) both hands\b/gi,'in one hand');
   if(close){
     t=t.replace(/\b(?:from (?:the )?head (?:down )?to (?:the )?(?:thighs|knees|feet|toe)|full[- ]body|whole body|wide shot)\b/gi,'head and shoulders');
@@ -2467,7 +2469,9 @@ function ordinaryQualityReview(check){
   if(!check) return '';
   if(check.limbIntegrity === 'bad') return 'membre suplimentare sau anatomie incoerentă';
   if(Number.isFinite(check.hands) && check.hands <= 4) return 'anatomia mâinilor';
-  if(Number.isFinite(check.framing) && check.framing <= 3) return 'încadrare incorectă';
+  if(Number.isFinite(check.framing) && check.framing < 6) return 'încadrare incorectă';
+  if(Number.isFinite(check.scene) && check.scene < 6) return 'scena solicitată nu este respectată';
+  if(Number.isFinite(check.asked) && check.asked < 8) return 'detalii solicitate lipsă';
   return '';
 }
 async function scenePhoto(c, shot, signal, fix, opt = {}){
@@ -5145,7 +5149,7 @@ function visualScore(value){
 }
 function parseVisualResult(out){
   const text=String(out||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
-  let raw; try{ raw=JSON.parse(text); }catch(e){ throw new Error('JSON vizual invalid sau absent'); }
+  let raw; try{ raw=JSON.parse(text); }catch(e){ const start=text.indexOf('{'), end=text.lastIndexOf('}'); try{ if(start<0||end<=start)throw e; raw=JSON.parse(text.slice(start,end+1)); }catch(_){throw new Error('JSON vizual invalid sau absent');} }
   if(!raw || typeof raw!=='object' || Array.isArray(raw)) throw new Error('JSON vizual: obiect obligatoriu');
   const j=raw.scores && typeof raw.scores==='object' ? {...raw,...raw.scores} : raw;
   if(['face','scene','framing'].some(k=>visualScore(j[k])==null)) throw new Error('JSON vizual: scoruri obligatorii lipsă');
@@ -5160,7 +5164,7 @@ async function checkPhoto(c, blob, shot, signal, together, asked, opt = {}){
     catch(e){
       if(e.name==='AbortError') throw e;
       attempts.push({...meta,error:String(e.message||e).slice(0,160)});
-      if(i===1 || !/json|răspuns|max_tokens|thinking/i.test(String(e.message))){ e.visualAttempts=attempts; throw e; }
+      if(i===1 || !/json|răspuns|max_tokens|thinking|model|overloaded|529/i.test(String(e.message))){ e.visualAttempts=attempts; throw e; }
     }
   }
 }
@@ -5178,7 +5182,7 @@ async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
   const marks = id && !id.none ? marksFor(c, id, shot).slice(0, 6) : [];   // 10.0 (F7): doar semnele din zonele care intră în cadru
   const must = together ? [] : mustOf(c);   // 10.0 (F6)
   const meta=opt.visualMeta||{};
-  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
+  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Judge requested pose and objects as part of scene. ${asked?.length ? `Also score asked (0–10) and list missing requested details: ${asked.join("; ")}. Include asked and missing keys.` : ""} Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
   const out = await stream(opt.visualRetry ? 'Return one complete JSON object only. No markdown. Required numeric keys: face, scene, framing. Use null for unknown optional scores.' : 'You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:opt.visualRetry ? compact :
 `${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${cleanPhotoScene(shot,{asked})}". Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
 Score strictly from 0 to 10:
@@ -5363,7 +5367,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const compareBust = opt.compareBust && bodyVisible;
   const ordinary = !opt.together && !opt.partner && (opt.requestedExposure || exposureMode(shot)) === 'clothed';
   if(S.imgCheck !== 'off' && (ordinary || face == null || borderlineFace || bodyUnknown || borderlineBody || fixed || compareBust)){
-    const checked = await checkPhoto(c,blob,dressedShot,signal,!!opt.together,fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : [],opt).catch(error => {
+    const checked = await checkPhoto(c,blob,dressedShot,signal,!!opt.together,[...(opt.asked||[]), ...(fixed ? ['The visible parts of this fixed outfit match: ' + c.outfitLock] : [])],opt).catch(error => {
       if(error.name === 'AbortError') throw error;
       diagnostic.visualStatus = !aiReady() ? 'API vizual indisponibil' : /credit|balance|payment/i.test(String(error.message)) ? 'credit API vizual insuficient' : /json|răspuns/i.test(String(error.message)) ? 'răspuns vizual invalid' : 'eroare API vizual / procesare';
       diagnostic.visualError = String(error.message || error).slice(0,240);
@@ -5377,6 +5381,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     diagnostic.visualLimbIntegrity = checked?.limbIntegrity ?? 'unknown';
     diagnostic.visualHands = checked?.hands ?? null;
     diagnostic.visualFraming = checked?.framing ?? null;
+    if(!checked && ordinary) throw failure('Poza a rămas nepublicată: evaluatorul vizual indisponibil'+(hardFace?' și distanța facială depășește pragul':'')+'. Reevaluează fotografia fără regenerare.');
     if(hardFace) rejectFace();
     if(hardBody) throw failure('Poza a rămas nepublicată: diferență clară la măsurarea proporțiilor față de reperul de corp.');
     const quality = ordinary ? ordinaryQualityReview(checked) : '';
@@ -5430,6 +5435,7 @@ async function boundedScene(c, shot, signal, opt){
   }catch(e){ if(stopPhotoRetry(e)) throw e; return result; }
 }
 async function makeScenePhoto0(c, shot, signal, opt = {}){
+  shot=cleanPhotoScene(shot,opt);
   try{ await ageLook(c); }catch(e){}   // 9.94 (D)
   if([opt.requestedExposure, exposureMode(shot)].some(mode => mode && mode !== 'clothed') && !clearlyAdultCharacter(c)) throw new Error('Pentru acest cadru, fișa personajului trebuie să precizeze clar că este adult (18+).');
   if(looksYoung(c) && (exposureMode(shot) !== 'clothed' || /lingerie|underwear|bikini|thong|swimsuit|bra\b|panties|sexy|seductive|sensual|provocative|lenjerie|chilo[țt]i|sutien|costum de baie|tanga|sexi|seduc[ăa]t|senzual|provocat/i.test(String(shot || '')))) throw new Error('Personajul nu pare clar adult, așa că pozele de felul ăsta sunt oprite pentru el.');
@@ -12570,7 +12576,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     const studioDiagnostic = {};
     const diagnosticBase = {version:APP_VER,age:canonicalPhotoAge(c),ageSource:photoAgeSource(c),ageDelta:R.lk?.age??null,ageInfo:R.lk?.ageInfo??null,runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
     const bodyNotice = verifyIdentity
-      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,diagnosticOut:studioDiagnostic,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}).catch(e=>{ if(e.photoDiagnostic) e.photoDiagnostic={...diagnosticBase,...e.photoDiagnostic,runware:e.photoDiagnostic.runware||diagnosticBase.runware,status:'nepublicată'}; throw e; }) : '';
+      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,asked,diagnosticOut:studioDiagnostic,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}).catch(e=>{ if(e.photoDiagnostic) e.photoDiagnostic={...diagnosticBase,...e.photoDiagnostic,runware:e.photoDiagnostic.runware||diagnosticBase.runware,status:'nepublicată'}; throw e; }) : '';
     const ageDiag = {...studioDiagnostic,version:APP_VER,status:'acceptată automat',age:canonicalPhotoAge(c),ageDelta:R.lk?.age??null,ageInfo:R.lk?.ageInfo??null,ageSource:photoAgeSource(c),face:R.fd??null,faceLimit:idMax(c),body:R.bd??null,bodyLimit:bodyGate(c),runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,reference:studioDiagnostic.reference || 'corp neverificat',visualStatus:studioDiagnostic.visualStatus && studioDiagnostic.visualStatus !== 'neapelat' ? studioDiagnostic.visualStatus : R.check ? 'evaluat anterior' : S.imgCheck === 'off' ? 'dezactivat' : !aiReady() ? 'API vizual Anthropic indisponibil' : 'neapelat pentru acest cadru',calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
     if(!together && !duoBoth && !peopleIn && c.photo && ageReviewNeeded(R)){
       ageDiag.status='nepublicată — vârstă aparentă';
