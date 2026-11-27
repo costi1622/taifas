@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.9';
+const APP_VER = '16.0.7.10';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1799,8 +1799,9 @@ function photoAsk(ch, exclude){
   const ms = ch.msgs.filter(x => x !== exclude && !x.err && !x.pending && !x.pendingImg);
   let i = ms.length - 1; while(i >= 0 && !(ms[i].role === 'ai' && ms[i].img)) i--;
   const us = ms.slice(i + 1).filter(x => x.role === 'user' && x.text).slice(-5);
-  if(!us.some(x => PHOTO_ASK.test(x.text))) return '';
-  return us.map(x => (x.reply ? '(replying to: „' + x.reply.text + '”) ' : '') + x.text.trim()).join(' / ').slice(0, 900);
+  if(!us.some(x => PHOTO_ASK.test(x.text) || plainFaceIntent(x.text))) return '';
+  const latest = us.filter(x => PHOTO_ASK.test(x.text) || plainFaceIntent(x.text)).slice(-1)[0];
+  return latest ? latest.text.trim().slice(0, 900) : '';
 }
 function photoExposureRequest(text){
   const mode = exposureMode(text);
@@ -1858,13 +1859,13 @@ Now: ${todEn()}.${wx ? ` Real weather right now in ${wx.city}, where the charact
 ${ch.scene ? 'Scene set by the user (has priority, translate to English): ' + ch.scene + '\n' : ''}${ch.where ? 'Last known state of the character (from earlier photos): ' + JSON.stringify(ch.where) + '\n' : ''}${frameLine(c, ch, exclude)}${ch.plot ? 'Ongoing activity noted by the character (Romanian, "activity › current step"): ' + ch.plot.t + '\n' : ''}${home ? `Rooms of ${c.name}'s home (reuse these details EXACTLY when the photo is in one of them, so the home always looks the same):\n${home}\n` : ''}
 Conversation, oldest first (the Romanian text is the source of truth):
 ${recent || '(just started)'}
-${ask ? `\n${u.toUpperCase()}'S PHOTO REQUEST, verbatim (Romanian), HIGHEST PRIORITY: «${ask}»\nTreat colloquial requests to see/show/send a body part or a nude image as explicit requests for an image, not merely conversation. Every concrete detail in the request must be reflected in the image. Preserve requested place, scene, pose, camera angle and framing. If nudity is explicitly requested for a clearly adult character, change only the clothing state; do not invent a new room, pose or camera setup. The request overrides clothing continuity and in-character dialogue, but not safety rules. Fill in only what the request leaves open, from the conversation.\n` : ''}${S.userPhoto ? (together ? `\nThis photo is of ${c.name} and ${u} TOGETHER (${u} asked for it): describe both of them in the scene (where each one is, how they stand or sit together, what each wears). Photos together are ordinary everyday couple photos, both fully clothed and natural (like a selfie at a café or on a walk).\n` : `\n${u} has a profile photo, so a photo of the two of them together is possible: set "together": true only if they are physically together in the scene right now AND the photo is clearly of both of them (a selfie together, ${u} asks for a photo together). Then describe both of them. Photos together are ordinary everyday couple photos, both fully clothed and natural.\n`) : ''}${promised ? `\n${c.name} just sent the photo and described it like this: "${promised}". Use it as the base, but correct anything that contradicts the conversation.\n` : ''}${prevShots ? `\nPhotos already sent (vary pose or framing unless the conversation says the same place and moment):\n${prevShots}\n` : ''}${planFixBlock(u, fix, camForce)}
+${ask ? `\n${u.toUpperCase()}'S PHOTO REQUEST, verbatim (Romanian), HIGHEST PRIORITY: «${ask}»\nTreat colloquial requests to see/show/send a body part or a nude image as explicit requests for an image, not merely conversation. Every concrete detail in the request must be reflected in the image. Preserve requested place, scene, pose, camera angle and framing. If nudity is explicitly requested for a clearly adult character, change only the clothing state; do not invent a new room, pose or camera setup. The request overrides clothing continuity and in-character dialogue, but not safety rules. Treat earlier photo requests as superseded, not cumulative. Do not inherit props, activities, camera angles or expressions that conflict with this request. A standalone portrait or pose request does not require the previous activity or its objects. Fill in only compatible unspecified details from the conversation.\n` : ''}${S.userPhoto ? (together ? `\nThis photo is of ${c.name} and ${u} TOGETHER (${u} asked for it): describe both of them in the scene (where each one is, how they stand or sit together, what each wears). Photos together are ordinary everyday couple photos, both fully clothed and natural (like a selfie at a café or on a walk).\n` : `\n${u} has a profile photo, so a photo of the two of them together is possible: set "together": true only if they are physically together in the scene right now AND the photo is clearly of both of them (a selfie together, ${u} asks for a photo together). Then describe both of them. Photos together are ordinary everyday couple photos, both fully clothed and natural.\n`) : ''}${promised ? `\n${c.name} just sent the photo and described it like this: "${promised}". Use it only for details compatible with the latest explicit photo request; discard conflicting details.\n` : ''}${prevShots ? `\nPhotos already sent (vary pose or framing unless the conversation says the same place and moment):\n${prevShots}\n` : ''}${planFixBlock(u, fix, camForce)}
 Rules:
 ${clothingRule}1. If ${u} asked for a specific photo (place, pose, outfit, activity, angle), that is the photo, with every requested detail.
 2. Otherwise: where ${c.name} is RIGHT NOW according to the most recent messages (room, what she/he sits/lies/stands on, what the hands do, what is worn). The latest statement wins over older ones; if the latest messages say nothing, keep the last known state.
 3. Clothing continuity: keep the last known outfit unless the conversation changes it. Use the latest scene or explicit outfit request as the source of wardrobe; keep the last established outfit only when the scene leaves it unchanged. Preserve permanent facial and body proportions when the wardrobe changes. For a clearly adult (18+) fictional character, follow a direct request for toplessness or nudity precisely. If explicit anatomical nudity is requested, describe visible external adult anatomy plainly and non-graphically only when the selected image provider permits it; do not substitute underwear, towels, strategically placed objects, or clothing. Never depict nudity for minors or characters whose age is ambiguous. Do not bypass provider moderation or retry a blocked sexual request through another provider.
 4. The character is alone unless the conversation says someone is with them, so the camera is: "selfie", "mirror selfie", or "phone propped up with timer" (for full-body shots without a mirror). Never "photo taken by someone" when alone, unless ${u} asks for it.
-4b. The photo must show EXACTLY the current moment of the latest messages: the same place and room, the same piece of furniture the character is on (e.g. on the sofa, in bed, at the kitchen table), the same body position, the same activity and the objects in the hands. The camera must fit that position: sitting or lying (sofa, bed, armchair, chair, floor) = "selfie" taken from arm's length (or "phone propped up with timer" for the whole body), never "mirror selfie"; "mirror selfie" only when the character is standing and a mirror fits the place.${povRule(c, u, together)}
+4b. ONLY for details not specified by the current photo request, use the current moment of the latest messages: the same place and room, the same piece of furniture the character is on (e.g. on the sofa, in bed, at the kitchen table), the same body position, the same activity and the objects in the hands. The camera must fit that position: sitting or lying (sofa, bed, armchair, chair, floor) = "selfie" taken from arm's length (or "phone propped up with timer" for the whole body), never "mirror selfie"; "mirror selfie" only when the character is standing and a mirror fits the place.${povRule(c, u, together)}
 5. Default to showing the body (selfie down to the thighs, timer shot, or a mirror selfie when standing); "close-up selfie" only if the face is asked for.
 6. Light must match the time of day and the place (at night indoors: lamps, warm and a bit dim).
 7. Make it look like a real, ordinary moment: real furniture and objects, a bit of everyday mess, nothing staged.
@@ -2364,7 +2365,7 @@ async function etalonToRef(c, k){
 // 16.0.7.7: canonical source, native pixels, no generated close-reference substitution.
 async function canonicalSceneHead(c, full, id, fr, variant=0){
   const box = await viLocalBox(full);
-  if(!box) return toJpegC(full, 1280, .96);
+  if(!box) return headRefOf(c, full, id);
   const u = URL.createObjectURL(full);
   try{
     const im = await loadImgEl(u), W=im.naturalWidth,H=im.naturalHeight;
@@ -2515,10 +2516,11 @@ function photoCameraMode(shot){
 function anatomyIssue(check, shot){
   if(!check) return '';
   const a=check.anatomy;
-  if(check.limbIntegrity==='bad') return 'membre suplimentare sau anatomie incoerentă';
+  if(check.limbIntegrity==='bad' && (!a || a.extraLimbs===true || a.arms>2 || a.hands>2)) return 'membre suplimentare sau anatomie incoerentă';
   if(!a) return 'geometrie anatomică neverificată';
   if(a.extraLimbs===true || a.arms>2 || a.hands>2) return 'membre suplimentare sau anatomie incoerentă';
   if(photoCameraMode(shot)==='direct' && (a.cameraConflict===true || a.visiblePhones>0 || a.objectHands>1)) return 'geometrie selfie incoerentă — telefon sau mâini suplimentare';
+  if(check.limbIntegrity==='bad') return 'anatomie neconfirmată — evaluare contradictorie';
   if(a.extraLimbs!==false || (photoCameraMode(shot)==='direct' && a.cameraConflict!==false)) return 'geometrie anatomică neconfirmată';
   return '';
 }
