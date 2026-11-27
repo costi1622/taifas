@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.7';
+const APP_VER = '16.0.7.8';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2347,13 +2347,13 @@ async function etalonToRef(c, k){
   return {ok:true, done};
 }
 // 16.0.7.7: canonical source, native pixels, no generated close-reference substitution.
-async function canonicalSceneHead(c, full, id, fr){
+async function canonicalSceneHead(c, full, id, fr, variant=0){
   const box = await viLocalBox(full);
   if(!box) return toJpegC(full, 1280, .96);
   const u = URL.createObjectURL(full);
   try{
     const im = await loadImgEl(u), W=im.naturalWidth,H=im.naturalHeight;
-    const side=Math.min(W,H,Math.max(box.w*W,box.h*H)*(fr.k==='close'?1.85:2.3));
+    const side=Math.min(W,H,Math.max(box.w*W,box.h*H)*(fr.k==='close'?(variant===1?2.35:1.85):2.3));
     const x=Math.max(0,Math.min(W-side,(box.x+box.w/2)*W-side/2));
     const y=Math.max(0,Math.min(H-side,(box.y+box.h/2)*H-side/2));
     const cv=document.createElement('canvas'); cv.width=cv.height=Math.max(1,Math.min(1024,Math.round(side)));
@@ -2361,14 +2361,20 @@ async function canonicalSceneHead(c, full, id, fr){
     return await new Promise(r=>cv.toBlob(r,'image/jpeg',.96)) || full;
   } finally {URL.revokeObjectURL(u);}
 }
+// 16.0.7.8: only ordinary direct selfies; explicit drinking/face coverage wins.
+function clearFaceSelfie(shot){
+  const t=String(shot||'');
+  if(photoCameraMode(t)!=='direct' || !/\b(?:cup|mug|tea|coffee)\b/i.test(t) || /\b(?:sipping|drinking|sip|drinks|at (?:her |the )?lips|cover(?:ing)? (?:her |the )?face)\b/i.test(t)) return '';
+  return 'Hold the cup below the chin, with the entire face unobstructed; steam drifts away from the face.';
+}
 function closeScenePrompt(c, shot, fr, asked, fix, st){
   const age=canonicalPhotoAge(c);
-  return [ 'Image 1 is the canonical face reference. Preserve its facial geometry, skin texture, hair color and distinguishing marks.'+(age==null?'':` The adult character is ${age} years old.`), fr.p, asked.length?'Required: '+asked.join('; '):'', shot, fix?'Correct only these defects: '+fix:'', STIL_TAG[st]].filter(Boolean).join('. ');
+  return [ 'Image 1 is the canonical face reference. Preserve its facial geometry, skin texture, hair color and distinguishing marks.'+(age==null?'':` The adult character is ${age} years old.`), fr.p, asked.length?'Required: '+asked.join('; '):'', shot, clearFaceSelfie(shot), fix?'Correct only these defects: '+fix:'', STIL_TAG[st]].filter(Boolean).join('. ');
 }
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
   const asked = photoRequestDetails(opt.asked || []);
-  const face = await canonicalSceneHead(c, full, id, fr);   // 10.3: capul întreg (fața, părul, ochelarii), nu doar fața
+  const face = await canonicalSceneHead(c, full, id, fr, opt.faceRefVariant);   // 10.3: capul întreg (fața, părul, ochelarii), nu doar fața
   const exposure = opt.requestedExposure || exposureMode(shot);
   const nude = exposure === 'explicit' ? ' The fictional character is clearly an adult (18+), fully nude with visible external genital anatomy as requested; anatomically plausible and non-graphic, not a sexual act. Generate only if the selected image provider permits it.' : exposure === 'full' ? ' The character is clearly an adult (18+); natural, non-explicit artistic nudity, not a sexual act.' : exposure === 'topless' ? ' The character is clearly an adult (18+) and is topless as requested; bare breasts visible, no shirt or bra, lower-body clothing stays as described. Do not turn this into full nudity.' : '';
   // 9.53: pentru cereri explicite de bust gol/nuditate, adaugă un reper separat de corp.
@@ -5289,7 +5295,7 @@ async function bestScene(c, shot, signal, corr, opt = {}){
         rs = okp.flatMap(r0 => (r0.blobs || [r0.blob]).map(b => ({status:'fulfilled', value:{...r0, blob:b, blobs:undefined}}))).slice(0, m);
         if(rs.length < m) rs = rs.concat(await Promise.allSettled(Array.from({length:m - rs.length}, () => scenePhoto(c, shot, signal, cr, {...o2, why:'variante'})))); }
       catch(e){ if(stopPhotoRetry(e)) throw e; rs = null; } }
-    return rs || await Promise.allSettled(Array.from({length:Math.min(m, 4)}, (_, k) => scenePhoto(c, shot, signal, cr, k ? {...o2, why:'variante'} : o2)));
+    return rs || await Promise.allSettled(Array.from({length:Math.min(m, 4)}, (_, k) => scenePhoto(c, shot, signal, cr, {...o2, ...(k ? {why:'variante'} : {}), ...(opt.bounded && !opt.partner && !opt.together && framingOf(shot).k==='close' && (opt.requestedExposure || exposureMode(shot))==='clothed' ? {faceRefVariant:k%2} : {})})));
   };
   const rs = await batch(corr, n);
   tmAdd(opt, dr ? 'schite' : 'variante', tG);
@@ -5319,7 +5325,7 @@ async function bestScene(c, shot, signal, corr, opt = {}){
       ok.push(...ok2); opt.bodyRound = true;
     }catch(e){ if(stopPhotoRetry(e)) throw e; } }
   const tot = x => (x.fd ?? .9) * pfbW(c, 'face') + (x.bd != null ? Math.min(.5, x.bd) : (rb ? .08 : 0)) * pfbW(c, 'body') + sharpPen(x, shMax()) + lookPen(x) + posePen(x) + crowdPen(x) - (x.adh != null ? x.adh * .03 * pfbW(c, 'scene') : 0);   // 9.85 (4): corpul cântărește cât fața   // 9.83 (8): ce respingi des cântărește mai mult
-  ok.sort((a, b) => (opt.bounded ? identityRank(c, a, !!rb) - identityRank(c, b, !!rb) : 0) || tot(a) - tot(b));
+  ok.sort((a, b) => (opt.bounded ? identityRank(c, a, !!rb) - identityRank(c, b, !!rb) : 0) || (opt.bounded && !rb && framingOf(shot).k==='close' && (opt.requestedExposure || exposureMode(shot))==='clothed' ? (a.fd ?? Infinity) - (b.fd ?? Infinity) : 0) || tot(a) - tot(b));
   if(ok.length > 1) addUsage(c.id, imgPrice() * (ok.length - 1), 'img', null, opt.tag || 'poze');   // prima e numărată de cine a cerut poza
   let best = ok[0]; best.cands = ok.map(x => x.fd); best.shCands = ok.map(x => x.sh); if(rb) best.bodyCands = ok.map(x => x.bd); if(ok.some(x => x.adh != null)) best.adhCands = ok.map(x => x.adh); if(ok.some(x => x.lk)) best.lkCands = ok.map(x => x.lk ? x.lk.pen : null); if(ok.some(x => x.ps)) best.psCands = ok.map(x => x.ps ? x.ps.pen : null);   // 10.1
   tmAdd(opt, 'alegere', tP);
