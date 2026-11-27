@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7';
+const APP_VER = '16.0.7.1';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1457,7 +1457,7 @@ function ageEstimateInfo(sig,ref,c){
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
 function ageReviewNeeded(r){if(r?.lk?.ageInfo?.reliable===false)return false;return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return [d.visualAttempts?.length?'Încercări evaluator: '+JSON.stringify(d.visualAttempts):'','Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
 function photoReferenceThumbs(m){const refs=m?.photoDiagnostic?.runware?.referenceManifest||[];return refs.length?`<div><small>Repere Runware efective (miniaturi locale)</small><div style="display:flex;flex-wrap:wrap;gap:8px">${refs.map(r=>`<div><small>Reper ${esc(String(r.index))}</small>${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.thumbnail||'')?`<img style="display:block;width:96px;height:auto" src="${esc(r.thumbnail)}" alt="Reper ${esc(String(r.index))}">`:'<small>Miniatură indisponibilă</small>'}</div>`).join('')}</div></div>`:'';}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
@@ -3695,8 +3695,8 @@ function faceRepairThreshold(c, opt){
   return opt.verifyIdentity ? Math.min(fRet(opt), idMax(c)) : fRet(opt);
 }
 async function finishPerson(c, r, shot, signal, opt = {}){
-  r.runwareMeta = rwImageMeta.get(r.blob) || null;
   if(!r || !r.blob) return r;
+  r.runwareMeta = rwImageMeta.get(r.blob) || r.runwareMeta || null;
   const photo = (c.stil || 'photo') === 'photo', tm = opt.tm, t0 = performance.now(), m0 = tm && tm.s ? tm.s.masurare || 0 : 0, f0 = tm && tm.s ? tm.s.finisare || 0 : 0;
   if(photo && !opt.noChar && S.imgProv === 'worker'){
     if(r.fd === undefined || opt.together){ try{ r.fd = (await localFace(r.blob, c)).d; }catch(e){} }   // împreună: fața ei, dintre cele două
@@ -3724,8 +3724,8 @@ async function finishPerson(c, r, shot, signal, opt = {}){
     r.faceWarn = r.fd != null && r.fd > idMax(c) ? idPct(r.fd) : null;
     r.bodyWarn = r.bd != null && r.bd > bodyGate(c) && !opt.together ? bodyPct(r.bd) : null;
   }
-  try{ if(r.blob.type === 'image/png') r.blob = await toJpeg(r.blob, 2048, .92); }catch(e){}
-  if(photo && !opt.noChar && !opt.together && S.imgProv === 'worker'){ const sk = await skinLock(c, r.blob).catch(() => null); if(sk){ r.blob = sk; r.skin = true; if(r.gen) r.gen.skin = true; } }   // 9.94 (C): tenul din portret
+  try{ if(r.blob.type === 'image/png') r.blob = inheritPhotoMeta(r.blob, await toJpeg(r.blob, 2048, .92)); }catch(e){}
+  if(photo && !opt.noChar && !opt.together && S.imgProv === 'worker'){ const sk = await skinLock(c, r.blob).catch(() => null); if(sk){ r.blob = inheritPhotoMeta(r.blob, sk); r.skin = true; if(r.gen) r.gen.skin = true; } }   // 9.94 (C): tenul din portret
   if(photo && S.imgProv === 'worker' && lookOn(c, opt)){ const tL = performance.now();   // 10.0: culorile, proporțiile feței, vârsta aparentă și părul, pe poza finală
     try{ r.lk = await lookOf(c, r.blob, shot, opt); }catch(e){} if(tm && tm.s) tm.s.masurare = (tm.s.masurare || 0) + performance.now() - tL;
     // 13.6 (5): vârsta aparentă la ±8 ani de portret → un retuș pe vârsta din portret; păstrat doar dacă e mai aproape și fața nu pierde
@@ -3736,7 +3736,7 @@ async function finishPerson(c, r, shot, signal, opt = {}){
       catch(e){ if(e.name === 'AbortError') throw e; } }
     const lb = lookBadOf(r.lk); r.lookWarn = lb ? lb.map(k => LOOK_RO[k]) : null; }
   r.runwareMeta = rwImageMeta.get(r.blob) || r.runwareMeta || null;
-  if(photo && S.photoFinish !== 'off' && !opt.noFinish){ const tF = performance.now(); const f2 = await photoFinish(r.blob); if(f2 && f2 !== r.blob){ r.blob = f2; r.fin = true; } if(tm && tm.s) tm.s.finisare = (tm.s.finisare || 0) + performance.now() - tF; }
+  if(photo && S.photoFinish !== 'off' && !opt.noFinish){ const tF = performance.now(); const f2 = await photoFinish(r.blob); if(f2 && f2 !== r.blob){ r.blob = inheritPhotoMeta(r.blob, f2); r.fin = true; } if(tm && tm.s) tm.s.finisare = (tm.s.finisare || 0) + performance.now() - tF; }
   if(photo && !opt.noChar && S.imgProv === 'worker' && opt.kind !== 'edit'){   // 10.1 (S8): poziția, și când n-au fost schițe
     try{ if(r.ps === undefined) r.ps = await poseOfDraft(c, r, shot, opt); }catch(e){}
     if(r.ps && r.ps.bad) r.lookWarn = (r.lookWarn || []).concat('poziția');
@@ -4848,7 +4848,10 @@ async function facePass(c, blob, signal, model = 'eco', shot = '', why = 'retus'
     g1.globalCompositeOperation = 'destination-out'; ell(fx, fy, rx * .92, ry * .92, .55); }   // fața rămâne exact cea din poză
   const out = document.createElement('canvas'); out.width = W; out.height = H; const go = out.getContext('2d');
   go.drawImage(im, 0, 0); go.imageSmoothingQuality = 'high'; go.drawImage(cv1, 0, 0, K, K, x0, y0, side, side);
-  return await toBlob(out, .93);
+  const result = inheritPhotoMeta(blob, await toBlob(out, .93));
+  const edit = rwImageMeta.get(ed), base = rwImageMeta.get(result);
+  if(edit && base) rwImageMeta.set(result,{...base,edits:[...(base.edits||[]),edit.taskUUID]});
+  return result;
 }
 // poziția exactă a feței în poza de profil, găsită de detectorul din telefon (o dată per poză)
 async function profFaceBox(c, prof){
@@ -5113,10 +5116,24 @@ function visualScore(value){
   if(value == null || typeof value === 'boolean' || (typeof value !== 'number' && typeof value !== 'string') || String(value).trim() === '') return null;
   const n=Number(value); return Number.isFinite(n) && n>=0 && n<=10 ? Math.round(n) : null;
 }
+function parseVisualResult(out){
+  const text=String(out||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
+  let raw; try{ raw=JSON.parse(text); }catch(e){ throw new Error('JSON vizual invalid sau absent'); }
+  if(!raw || typeof raw!=='object' || Array.isArray(raw)) throw new Error('JSON vizual: obiect obligatoriu');
+  const j=raw.scores && typeof raw.scores==='object' ? {...raw,...raw.scores} : raw;
+  if(['face','scene','framing'].some(k=>visualScore(j[k])==null)) throw new Error('JSON vizual: scoruri obligatorii lipsă');
+  return j;
+}
 async function checkPhoto(c, blob, shot, signal, together, asked, opt = {}){
-  try { return await checkPhotoOnce(c,blob,shot,signal,together,asked,opt); } catch(e) {
-    if(e.name==='AbortError' || !/json|răspuns/i.test(String(e.message))) throw e;
-    return await checkPhotoOnce(c,blob,shot,signal,together,asked,{...opt,visualRetry:true});
+  const attempts=[];
+  for(let i=0;i<2;i++){
+    const meta={};
+    try{ const result=await checkPhotoOnce(c,blob,shot,signal,together,asked,{...opt,visualRetry:i===1,visualMeta:meta}); return {...result,visualAttempts:[...attempts,meta]}; }
+    catch(e){
+      if(e.name==='AbortError') throw e;
+      attempts.push({...meta,error:String(e.message||e).slice(0,160)});
+      if(i===1 || !/json|răspuns/i.test(String(e.message))){ e.visualAttempts=attempts; throw e; }
+    }
   }
 }
 async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
@@ -5132,7 +5149,9 @@ async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
   ]);
   const marks = id && !id.none ? marksFor(c, id, shot).slice(0, 6) : [];   // 10.0 (F7): doar semnele din zonele care intră în cadru
   const must = together ? [] : mustOf(c);   // 10.0 (F6)
-  const out = await stream(opt.visualRetry ? 'Return one complete JSON object only. No markdown. Required numeric keys: face, scene, framing. Use null for unknown optional scores.' : 'You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:
+  const meta=opt.visualMeta||{};
+  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${shot}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
+  const out = await stream(opt.visualRetry ? 'Return one complete JSON object only. No markdown. Required numeric keys: face, scene, framing. Use null for unknown optional scores.' : 'You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:opt.visualRetry ? compact :
 `${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${shot}". Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
 Score strictly from 0 to 10:
 - "face": is this unmistakably the same person, not merely a similar-looking person? 10 = strong match, 5 = noticeable identity drift, 0 = different person.
@@ -5147,8 +5166,9 @@ ${fb ? '- "bust": compare visible bust volume and projection relative to shoulde
 - "asked": the user explicitly asked for these details: ${asked.map(a => '"' + a + '"').join(', ')}. 10 = every one is clearly visible in image 2, 0 = none; list the ones that are missing or wrong in "missing".` : ''}${must.length ? `
 - "must": this character's mandatory traits, numbered: ${must.map((x, i) => (i + 1) + '. ' + x.en).join('; ')}. Give a list with one answer per trait, in order: true = clearly matches in image 2; false = that part is visible in image 2 and it does NOT match; null = that part is not visible or too small to judge. Judge each one on its own, strictly, ignoring the light of the scene.` : ''}
 "fix": if face is below 8 or scene below 6 or framing below 5 or body below 7 or hair below 6${marks.length ? ' or marks below 6' : ''}${asked && asked.length ? ' or asked below 8' : ''}, give ONE short concrete English correction prioritizing identity first (face, then body: say exactly what differs, e.g. "fuller bust and wider hips as in the reference"), then hair${asked && asked.length ? ', then the missing requested details' : ''}, then scene; otherwise "".
-JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown","skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`}], {max:Math.min(1200, 650 + must.length * 12), signal, cid:c.id, aux:true, tag:'pozeai'});
-  const raw = parseJSON(out), j = raw.scores && typeof raw.scores === 'object' ? {...raw,...raw.scores} : raw, n = k => visualScore(j[k]);
+JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown","skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`}], {max:Math.min(1200, 650 + must.length * 12), signal, cid:c.id, aux:!opt.visualRetry, meta, tag:'pozeai'});
+  meta.textLength=String(out||'').length;
+  const j = parseVisualResult(out), n = k => visualScore(j[k]);
   if(n('face') == null || n('scene') == null || n('framing') == null) throw new Error('Răspuns vizual fără scoruri obligatorii valide.');
   const r = {face:n('face'), scene:n('scene'), framing:n('framing'), fix:String(j.fix || '').slice(0, 300)};
   const nn = n;
@@ -5318,9 +5338,10 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
       if(error.name === 'AbortError') throw error;
       diagnostic.visualStatus = !aiReady() ? 'API vizual indisponibil' : /credit|balance|payment/i.test(String(error.message)) ? 'credit API vizual insuficient' : /json|răspuns/i.test(String(error.message)) ? 'răspuns vizual invalid' : 'eroare API vizual / procesare';
       diagnostic.visualError = String(error.message || error).slice(0,240);
+      diagnostic.visualAttempts=error.visualAttempts||[];
       return null;
     });
-    if(checked) diagnostic.visualStatus = 'evaluat'; else if(diagnostic.visualStatus === 'neapelat') diagnostic.visualStatus = 'răspuns fără rezultat';
+    if(checked){ diagnostic.visualStatus = 'evaluat'; diagnostic.visualAttempts=checked.visualAttempts||[]; } else if(diagnostic.visualStatus === 'neapelat') diagnostic.visualStatus = 'răspuns fără rezultat';
     diagnostic.visualFace = checked?.face ?? null;
     diagnostic.visualBody = checked?.body ?? null;
     diagnostic.visualBust = checked?.bust ?? null;
@@ -5330,6 +5351,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     if(hardFace) rejectFace();
     if(hardBody) throw failure('Poza a rămas nepublicată: diferență clară la măsurarea proporțiilor față de reperul de corp.');
     const quality = ordinary ? ordinaryQualityReview(checked) : '';
+    if(ordinary && !checked) throw failure('Poza a rămas nepublicată: evaluatorul vizual nu a putut verifica fotografia. Verifică manual fotografia.');
     if(quality) throw failure('Poza a rămas nepublicată: '+quality+'. Verifică manual fotografia.');
     if((face == null || borderlineFace) && (!(checked?.face >= 9) || (faceMismatch && face - faceLimit > .10))) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
     if(borderlineBody && (!(checked?.body >= 9) || (checked.bust != null && checked.bust < 8))) throw failure(checked?.body == null
@@ -5675,6 +5697,12 @@ async function rwRun(...a){
   } finally { if(fg){ rwFg = Math.max(0, rwFg - 1); rwFgEnd = Date.now(); } }
 }
 const rwImageMeta = new WeakMap();
+function inheritPhotoMeta(source, target){
+  if(!target) return source;
+  const meta = rwImageMeta.get(source);
+  if(meta && !rwImageMeta.has(target)) rwImageMeta.set(target,meta);
+  return target;
+}
 const rwStats = {busy:0}; let rwLastMdl = '', rwCallN = 0; const rwCalls = [];
 /* 13.4: rezultatul unei cereri „async”: întreabă Runware (getResponse) până e gata. Timpul în care telefonul a ținut aplicația
    pe pauză nu se numără (cel mult 5 s pe pas); o întrerupere a rețelei doar amână întrebarea, nu retrimite (și nu replătește) poza. */
