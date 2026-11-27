@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.28';
+const APP_VER = '16.0.7.29';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1487,7 +1487,7 @@ function cleanPhotoScene(shot,opt={}){
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
 function ageReviewNeeded(r){if(r?.lk?.ageInfo?.reliable===false)return false;return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return [d.visualAttempts?.length?'Încercări evaluator: '+JSON.stringify(d.visualAttempts):'','Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),d.faceReason?'Comparator local: '+d.faceReason:'',d.pose?'Poziție facială estimată: '+d.pose.role+' · indice yaw '+f(d.pose.yaw)+' · repere compatibile '+(d.poseRefs??0)+' · comparație '+(d.faceVia||'standard')+(d.poseRefs===0?' · fără reper compatibil confirmat':''):'',rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, rezoluție, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',Object.hasOwn(d,'visualAsked')?'Respectarea cererii: '+f(d.visualAsked)+' / 10':'',d.visualMissing?.length?'Detalii neîndeplinite: '+d.visualMissing.join('; '):'',d.visualFix?'Corecție evaluator: '+d.visualFix:'',d.visualAnatomy?'Audit anatomie: '+JSON.stringify(d.visualAnatomy):'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return [d.visualAttempts?.length?'Încercări evaluator: '+JSON.stringify(d.visualAttempts):'','Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),d.faceReason?'Comparator local: '+d.faceReason:'',d.pose?'Poziție facială estimată: '+d.pose.role+' · indice yaw '+f(d.pose.yaw)+' · repere compatibile '+(d.poseRefs??0)+' · comparație '+(d.faceVia||'standard')+(d.poseRefs===0?' · fără reper compatibil confirmat':''):'',d.poseAudit?.length?'Audit repere comparator: '+JSON.stringify(d.poseAudit):'',rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, rezoluție, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',Object.hasOwn(d,'visualAsked')?'Respectarea cererii: '+f(d.visualAsked)+' / 10':'',d.visualMissing?.length?'Detalii neîndeplinite: '+d.visualMissing.join('; '):'',d.visualFix?'Corecție evaluator: '+d.visualFix:'',d.visualAnatomy?'Audit anatomie: '+JSON.stringify(d.visualAnatomy):'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
 function photoReferenceThumbs(m){const refs=m?.photoDiagnostic?.runware?.referenceManifest||[];return refs.length?`<div><small>Repere Runware efective (miniaturi locale)</small><div style="display:flex;flex-wrap:wrap;gap:8px">${refs.map(r=>`<div><small>Reper ${esc(String(r.index))}</small>${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.thumbnail||'')?`<img style="display:block;width:96px;height:auto" src="${esc(r.thumbnail)}" alt="Reper ${esc(String(r.index))}">`:'<small>Miniatură indisponibilă</small>'}</div>`).join('')}</div></div>`:'';}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
@@ -2830,7 +2830,7 @@ async function viScanAngles(c){
   const out=[];
   for(const key of keys){const blob=await DB.get(key).catch(()=>null);if(!blob)continue;
     const fs=await faceDescs(blob).catch(()=>[]);if(fs.length!==1)continue;
-    const pose=viPose(fs[0].lm);const ref=c.visualIdentity?.refs?.find(r=>r.key===key&&r.approved);if(ref?.manualOrientation===ref?.role&&VI_ATLAS_SLOTS.includes(ref.role))pose.confirmedSlot=ref.role;if(pose.role!=='unknown'||pose.confirmedSlot)out.push({key,pose,face:fs[0]});
+    const pose=viPose(fs[0].lm);const ref=c.visualIdentity?.refs?.find(r=>r.key===key&&r.approved);if(ref && VI_ATLAS_SLOTS.includes(ref.role))pose.confirmedSlot=ref.role;if(pose.role!=='unknown'||pose.confirmedSlot)out.push({key,pose,face:fs[0]});
   }return out;
 }
 function viExplicitAngle(shot){const t=String(shot||'').toLowerCase();
@@ -4962,17 +4962,26 @@ async function idDistance(c, blob){
       break;
     }
   }
-  let poseRefs=0;
+  let poseRefs=0, poseAudit=[];
   if(got.length===1 && pose.role!=='unknown'){
-    const g=got[0];
-    for(const r of await viScanAngles(c).catch(e=>{errors.push(String(e.message||e));return [];})){
-      if(!viPoseCompatible(pose,r.pose))continue;
-      const h=r.face; if(g.d.length!==h.d.length || (g.j||'f')!==(h.j||'f'))continue;
-      poseRefs++;const d=fdist(g.d,h.d);
-      if(Number.isFinite(d)&&(best==null||d<best)){best=d;via='reper aprobat '+VI_ROLES[r.pose.role];}
+    const g=got[0], rows=await viScanAngles(c).catch(e=>{errors.push(String(e.message||e));return [];});
+    const target=viAtlasSlot(pose);
+    let matched=null;
+    for(const r of rows){
+      const slot=viAtlasSlot(r.pose), h=r.face;
+      const entry={slot,detectedYaw:r.pose.yaw,approvedSlot:r.pose.confirmedSlot||null};
+      if(!viPoseCompatible(pose,r.pose)){poseAudit.push({...entry,status:'orientation'});continue;}
+      const pairs=[[g.d,h.d],[g.fa,h.fa],[g.fa,h.j==='a'?null:h.d],[g.j==='a'?null:g.d,h.fa]];
+      const pair=pairs.find(([a,b],i)=>a&&b&&a.length===b.length&&(i!==0||(g.j||'f')===(h.j||'f')));
+      if(!pair){poseAudit.push({...entry,status:'descriptor'});continue;}
+      const d=fdist(...pair);if(!Number.isFinite(d)){poseAudit.push({...entry,status:'invalid'});continue;}
+      poseRefs++;poseAudit.push({...entry,status:'compared',d:Math.round(d*1000)/1000});
+      if(!matched||d<matched.d)matched={d,slot};
     }
+    if(matched){best=matched.d;via='reper aprobat '+VI_ROLES[matched.slot];}
+    else if(target!=='front'){best=null;via=null;errors.push('fără descriptor comparabil pentru '+target);}
   }
-  return {d:best == null ? null : Math.round(best * 1000) / 1000, n:got.length, via, pose, poseRefs, j:got[0]?.j || 'f', reason:best==null?('niciun descriptor compatibil; repere principale '+ref.length+'; '+errors.join('; ')):null};
+  return {d:best == null ? null : Math.round(best * 1000) / 1000, n:got.length, via, pose, poseRefs, poseAudit, j:got[0]?.j || 'f', reason:best==null?('niciun descriptor compatibil; repere principale '+ref.length+'; '+errors.join('; ')):null};
 }
 const ID_MAX = .5;
 const idPct = d => Math.round(100 * Math.max(0, Math.min(1, (.9 - d) / .55)));
@@ -5601,7 +5610,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   ]);
   const face = faceResult.d;
   const faceLimit = idMax(c);
-  Object.assign(diagnostic,{face,faceLimit,pose:faceResult.pose,poseRefs:faceResult.poseRefs,faceVia:faceResult.via,faceReason:faceResult.reason||null,body,bodyLimit:bodyVisible && body != null ? bodyGate(c) : null,reference:!bodyVisible ? 'fără comparație corp' : opt.usePortraitBody ? 'portret' : 'poza întreagă / fișa de corp',spontaneous:!!opt.spontaneous});
+  Object.assign(diagnostic,{face,faceLimit,pose:faceResult.pose,poseRefs:faceResult.poseRefs,poseAudit:faceResult.poseAudit,faceVia:faceResult.via,faceReason:faceResult.reason||null,body,bodyLimit:bodyVisible && body != null ? bodyGate(c) : null,reference:!bodyVisible ? 'fără comparație corp' : opt.usePortraitBody ? 'portret' : 'poza întreagă / fișa de corp',spontaneous:!!opt.spontaneous});
   const faceMismatch = face != null && face > faceLimit;
   const borderlineFace = faceMismatch && opt.sceneWardrobe && (viSceneRole(shot) !== 'front' || face - faceLimit <= .10);
   const hardFace = faceMismatch && (!borderlineFace || S.imgCheck === 'off');
