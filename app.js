@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.6.6';
+const APP_VER = '16.0.6.7';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2425,8 +2425,23 @@ function identityOutfit(c, shot, opt = {}){
   if(opt.sceneWardrobe || !c.outfitLock || opt.requestedExposure && opt.requestedExposure !== 'clothed' || exposureMode(shot) !== 'clothed') return shot;
   return shot + '. Fixed wardrobe: ' + c.outfitLock + '. Keep this outfit across locations and poses, including its colors, layers and cut. Preserve the character’s baseline chest volume, waist, hips and build under the fabric; change only the pose, lighting and setting described.';
 }
+// 16.0.6.7: ordinary photo camera geometry, independent of identity.
+function ordinarySceneGeometry(shot, opt = {}){
+  const text = String(shot || '');
+  if(opt.together || opt.partner || (opt.requestedExposure || exposureMode(text)) !== 'clothed') return text;
+  if(text.includes('CAMERA GEOMETRY 16067:')) return text;
+  const selfie = /\bselfie\b/i.test(text), mirror = /\bmirror\b|oglind[ăa]/i.test(text);
+  const camera = selfie && !mirror ? 'Direct front-camera viewpoint; the capturing phone is outside the frame. One arm may extend toward the lens; the other rests naturally. No mirror or second camera viewpoint.' : selfie && mirror ? 'Mirror selfie: one consistent reflection and one phone held naturally; no duplicated reflected limbs.' : 'One coherent camera viewpoint.';
+  return text + ' CAMERA GEOMETRY 16067: ' + camera + ' Natural human anatomy: two arms and two hands per person, five fingers per hand when fully visible; respect occlusion and cropping. Keep each requested object in a physically consistent position; do not duplicate it accidentally.';
+}
+function ordinaryQualityReview(check){
+  if(!check) return '';
+  if(Number.isFinite(check.hands) && check.hands <= 4) return 'anatomia mâinilor';
+  if(Number.isFinite(check.framing) && check.framing <= 3) return 'încadrare incorectă';
+  return '';
+}
 async function scenePhoto(c, shot, signal, fix, opt = {}){
-  shot = identityOutfit(c, shot, opt);
+  shot = ordinarySceneGeometry(identityOutfit(c, shot, opt), opt);
   if(c.strictIdentity && c.photoFull){
     fix = [fix, 'Keep the same visible body proportions from the character references, including chest volume relative to shoulders and ribcage, waist, hips, build and limb proportions. Preserve the requested framing while adapting the pose and perspective.'].filter(Boolean).join('. ');
   }
@@ -12475,6 +12490,11 @@ async function askPhoto0(spont, target, mode, opt = {}){
       throw Object.assign(new Error('Poza a rămas nepublicată: vârsta aparentă diferă. Verifică manual fotografia.'),{photoKind:'local',photoDiagnostic:ageDiag,reviewBlob:R.blob});
     }
     if(R.lk?.ageInfo?.reliable===false){ ageDiag.status='acceptată automat — estimare vârstă nesigură (avertisment)'; R.lookWarn=[...(R.lookWarn||[]),'estimare vârstă nesigură']; }
+    const qualityIssue = !together && !duoBoth && !peopleIn && (sceneOpt.requestedExposure || exposureMode(shot)) === 'clothed' ? ordinaryQualityReview(R.check) : '';
+    if(qualityIssue){
+      ageDiag.status='nepublicată — '+qualityIssue;
+      throw Object.assign(new Error('Poza a rămas nepublicată: '+qualityIssue+'. Verifică manual fotografia.'),{photoKind:'local',photoDiagnostic:ageDiag,reviewBlob:R.blob});
+    }
     m.photoDiagnostic=ageDiag;
     if(verifyIdentity) tm.s.verificare = performance.now() - tVerify;
     if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
