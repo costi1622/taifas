@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.3';
+const APP_VER = '16.0.7.4';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1461,14 +1461,23 @@ function canonicalAgeText(c,text){
   const a=canonicalPhotoAge(c); if(a==null)return String(text||'');
   return String(text||'').replace(/\b(?:in (?:her|his|their) (?:early |mid[- ]?|late )?\d{2}s|(?:early |mid[- ]?|late )?\d{2}s[- ]aged)\b/gi,`aged ${a}`).replace(/\b\d{1,3}[- ](?:years?[- ]old|year[- ]old)\b/gi,`${a} years old`);
 }
+// 16.0.7.4: resolve ordinary scene conflicts before assembling identity instructions.
+function photoRequestDetails(asked=[]){
+  return [...new Set(asked.filter(Boolean).map(x=>String(x).trim().replace(/^(?:close[- ]?up[. :,;-]+)+/i,'')).filter(Boolean))];
+}
 function cleanPhotoScene(shot,opt={}){
   let t=String(shot||'').replace(/^CAMERA PRIORITY: .*? Scene: /s,'').split(' CAMERA GEOMETRY 16067:')[0];
-  const asked=(opt.asked||[]).join('; '), explicit=asked||t;
+  const explicit=(opt.asked||[]).join('; ')||t;
   const direct=/\bselfie\b/i.test(explicit)&&!/mirror|oglind|tripod|timer|trepied/i.test(explicit);
+  const close=/close[- ]?up|close selfie|headshot|prim[- ]plan|de aproape|chest up|head and shoulders/i.test(explicit);
   if(direct)t=t.replace(/\b(?:in|with|using) both hands\b/gi,'in one hand');
-  if(/close[- ]?up|close selfie|headshot|prim[- ]plan|de aproape/i.test(explicit)){
+  if(close){
     t=t.replace(/\b(?:from (?:the )?head (?:down )?to (?:the )?(?:thighs|knees|feet|toe)|full[- ]body|whole body|wide shot)\b/gi,'head and shoulders');
+    t=t.replace(/,?\s*(?:thick |warm |woollen |wool )*(?:wool |knitted )?(?:socks|stockings|shoes|slippers|boots) visible (?:at the bottom(?: of (?:the )?frame)?|in (?:the )?frame)/gi,'');
     if(!/close[- ]?up|close selfie|headshot|prim[- ]plan|de aproape/i.test(t))t='Close-up. '+t;
+  }
+  if(/hold(?:s|ing)?[^.;]{0,100}\b(?:mug|cup)\b/i.test(t)&&!/second|another|two (?:cups|mugs)/i.test(explicit)){
+    t=t.replace(/\s+and (?:a|the) (?:ceramic )?(?:mug|cup) resting on the bench beside (?:her|him|them)/gi,'');
   }
   return t.trim();
 }
@@ -2335,7 +2344,7 @@ async function etalonToRef(c, k){
 }
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
-  const asked = (opt.asked || []).filter(Boolean).map(x=>cleanPhotoScene(x,opt));
+  const asked = photoRequestDetails(opt.asked || []);
   const face = await headRefOf(c, full, id);   // 10.3: capul întreg (fața, părul, ochelarii), nu doar fața
   const exposure = opt.requestedExposure || exposureMode(shot);
   const nude = exposure === 'explicit' ? ' The fictional character is clearly an adult (18+), fully nude with visible external genital anatomy as requested; anatomically plausible and non-graphic, not a sexual act. Generate only if the selected image provider permits it.' : exposure === 'full' ? ' The character is clearly an adult (18+); natural, non-explicit artistic nudity, not a sexual act.' : exposure === 'topless' ? ' The character is clearly an adult (18+) and is topless as requested; bare breasts visible, no shirt or bra, lower-body clothing stays as described. Do not turn this into full nudity.' : '';
@@ -2379,12 +2388,12 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const fiS = !sref ? faceInstruction : (srefN === 2 ? 'Image 1 is a close-up of this person’s head: keep exactly this face and identity (' + HEAD_KEEP + ').' : faceInstruction) + srefText(srefN);
   const continuity = opt.sceneWardrobe ? CHAT_PHOTO_CONTINUITY + (opt.usePortraitBody ? ' The selected portrait body reference takes precedence over any conflicting written body traits. ' : ' ') : '';
   const bustLock = !bustChange && fr.k !== 'close' && (clothedBody || bodyRef || c.photoFull) ? BUST_FIDELITY + ' ' : '';
-  const prompt = `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
+  const prompt = `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
   if(useF3()){   // 9.43/9.53: FLUX 3 folosește fața + reperul de corp și prioritizează proporțiile bustului la cereri topless/nud
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
     const body = fr.k === 'close' ? bodyRef : bodyRef || clothedBody?.blob || (fb ? await headHide(await fullBodyRef(fb, c.fullBox), 'hx:' + c.photoFull) : null);   // 13.6: capul estompat
     const face2 = await headRefOf(c, full, id);   // 10.3
-    const p3 = `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair exactly as shown (the same color, length, texture, volume and parting); preserve eyewear only if present in the reference.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
+    const p3 = `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair exactly as shown (the same color, length, texture, volume and parting); preserve eyewear only if present in the reference.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
     const angles = st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
     const refs3 = [face2, body].filter(Boolean);
@@ -5169,9 +5178,9 @@ async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
   const marks = id && !id.none ? marksFor(c, id, shot).slice(0, 6) : [];   // 10.0 (F7): doar semnele din zonele care intră în cadru
   const must = together ? [] : mustOf(c);   // 10.0 (F6)
   const meta=opt.visualMeta||{};
-  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
+  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
   const out = await stream(opt.visualRetry ? 'Return one complete JSON object only. No markdown. Required numeric keys: face, scene, framing. Use null for unknown optional scores.' : 'You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:opt.visualRetry ? compact :
-`${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${shot}". Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
+`${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${cleanPhotoScene(shot,{asked})}". Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
 Score strictly from 0 to 10:
 - "face": is this unmistakably the same person, not merely a similar-looking person? 10 = strong match, 5 = noticeable identity drift, 0 = different person.
 - "scene": does the generated photo match the requested place, activity, clothing and pose?
