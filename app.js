@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.2';
+const APP_VER = '16.0.7.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1308,7 +1308,7 @@ function idText(c, id, shot){
   const fixed = head.join('. ').replace('{U}', '').length + tail.join('. ').length + 8;
   const u = idCut(mine ? userRaw : String(userRaw || '').replace(/(?:^|[.;]\s*)Hair:\s*[^;.]+/gi, ''), Math.max(280, IDT_MAX - fixed));
   const t = head.map(x => x.replace('{U}', u)).filter(x => x.replace(/^[^:]*:\s*$/, '').trim()).concat(tail).join('. ');
-  return {t:t.replace(/\.\s*\./g, '.').replace(/\s+/g, ' ').trim(), src:B.src};
+  return {t:canonicalAgeText(c,t).replace(/\.\s*\./g, '.').replace(/\s+/g, ' ').trim(), src:B.src};
 }
 // 10.2: părul, spus și la începutul descrierii pentru generator (nu doar la coadă, unde se pierdea)
 const hairLead = (c, id) => { const h = identityHairText(c,id); return h ? `${c.name}'s hair: ${idCut(h, 220)}; the same color, length, volume and texture as in the reference, only the styling may follow the scene. ` : ''; };
@@ -1433,7 +1433,7 @@ const ECO_RESERVE = 600;
 const nineFits = () => rwFor('ancorat') || !Number.isFinite(capLeft()) || capLeft() >= (neurPerPhoto('ancorat') || 1455) + ECO_RESERVE;
 const sceneModel = (opt = {}) => { const m = isAuto(opt) && S.autoModel === 'eco' ? 'eco' : (S.wkChat || 'eco'); return m === 'ancorat' && S.imgProv === 'worker' && !nineFits() ? 'eco' : m; };
 const BUST_FIDELITY = 'Preserve the established bust volume, projection and width relative to this character’s ribcage, shoulders and waist, including under the requested clothes. A prominent bust stays equally prominent. Let the garment fit the same body naturally. Do not shrink, average out, flatten or exaggerate the reference proportions.';
-const CHAT_PHOTO_CONTINUITY = 'The reference portrait fixes facial identity, apparent age, hair and distinguishing marks. The body reference fixes the same build, proportions and silhouette with or without clothing. Take clothing and coverage only from the current scene. Keep lower-body clothing for a topless scene and preserve the requested framing. Do not transfer the reference outfit or change anatomy when clothing changes.';
+const CHAT_PHOTO_CONTINUITY = 'The reference portrait fixes facial identity, apparent age, hair and distinguishing marks. The body reference fixes the same build, proportions and silhouette with or without clothing. Take clothing and coverage only from the current scene. Preserve the requested framing. Do not transfer the reference outfit or change anatomy when clothing changes.';
 // 16.0.6.4: explicit canonical age, never inferred from unrelated numbers.
 function photoAgeSource(c){
   const fields=[['vârstă explicită în profil',c?.photoAgeManual?`Age: ${c.photoAgeManual}`:null],['descriere manuală',c?.physAuto===false?c.physUser:null],['aspect',c?.aspect],['persona',c?.persona],['look',c?.look],['physEn',c?.physEn]];
@@ -1455,6 +1455,22 @@ function ageEstimateInfo(sig,ref,c){
   const valid=x=>Number.isFinite(x)&&x>=18&&x<=110;
   const reliable=valid(generated)&&valid(reference)&&(declared==null||Math.abs(reference-declared)<=10);
   return {generated,reference,declared,reliable,delta:reliable?Math.round((generated-reference)*10)/10:null};
+}
+// 16.0.7.3: explicit profile age overrides inferred age prose, without changing stored identity.
+function canonicalAgeText(c,text){
+  const a=canonicalPhotoAge(c); if(a==null)return String(text||'');
+  return String(text||'').replace(/\b(?:in (?:her|his|their) (?:early |mid[- ]?|late )?\d{2}s|(?:early |mid[- ]?|late )?\d{2}s[- ]aged)\b/gi,`aged ${a}`).replace(/\b\d{1,3}[- ](?:years?[- ]old|year[- ]old)\b/gi,`${a} years old`);
+}
+function cleanPhotoScene(shot,opt={}){
+  let t=String(shot||'').replace(/^CAMERA PRIORITY: .*? Scene: /s,'').split(' CAMERA GEOMETRY 16067:')[0];
+  const asked=(opt.asked||[]).join('; '), explicit=asked||t;
+  const direct=/\bselfie\b/i.test(explicit)&&!/mirror|oglind|tripod|timer|trepied/i.test(explicit);
+  if(direct)t=t.replace(/\b(?:in|with|using) both hands\b/gi,'in one hand');
+  if(/close[- ]?up|close selfie|headshot|prim[- ]plan|de aproape/i.test(explicit)){
+    t=t.replace(/\b(?:from (?:the )?head (?:down )?to (?:the )?(?:thighs|knees|feet|toe)|full[- ]body|whole body|wide shot)\b/gi,'head and shoulders');
+    if(!/close[- ]?up|close selfie|headshot|prim[- ]plan|de aproape/i.test(t))t='Close-up. '+t;
+  }
+  return t.trim();
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
 function ageReviewNeeded(r){if(r?.lk?.ageInfo?.reliable===false)return false;return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
@@ -1701,7 +1717,7 @@ function poseLineRo(ps){
   return a.join(' · ');
 }
 function framingOf(shot){
-  const t = String(shot || '').split(' CAMERA GEOMETRY 16067:')[0].replace(/^CAMERA PRIORITY: .*? Scene: /s,'').toLowerCase();
+  const t = cleanPhotoScene(shot).toLowerCase();
   if(POV_RE.test(t)){   // 10.1 (S1): din ochii tăi, nu selfie
     if(/close[- ]?up|headshot|face only/.test(t)) return {k:'close', pov:true, p:'Close-up photo from the point of view of the person facing her, at eye level: head and shoulders; she is not holding a phone and it is not a selfie'};
     if(/full[- ]?body|head to (toe|feet)|whole body|wide shot|from the doorway|from across the room|from afar|walking|dancing/.test(t)) return {k:'full', pov:true, p:'Full-body photo from the point of view of the person who is with her in the room, seen from where he is, at eye level: her entire body visible from head to toe, the room around clearly visible; she is not holding a phone, no selfie arm, no mirror'};
@@ -1710,11 +1726,11 @@ function framingOf(shot){
   if(/close[- ]?up|close selfie|headshot|face only|portrait of (her|his) face|prim[- ]plan|selfie de aproape|chest up|head and shoulders/.test(t)) return {k:'close', p:/mirror|oglind/.test(t) ? 'Close-up mirror photo, one reflection' : 'Close-up photo, head and shoulders; for a direct selfie the camera is outside the frame'};
   // 9.27: stă jos sau e întinsă (canapea, pat, fotoliu, scaun): selfie de aproape, cu locul pe care stă bine vizibil, nu oglindă
   const seated = /\b(sitting|seated|lying|lies|reclining|curled up|on the (sofa|couch|bed|armchair|chair|floor)|in bed)\b/.test(t);
-  if(seated && !/propped|timer|tripod|self-timer/.test(t)) return {k:'mid', p:'Direct arm\'s-length selfie from a camera outside the frame, the character sitting or lying exactly as described, framed from the head down to the thighs, the sofa, bed or chair she is on and the room around clearly visible'};
+  if(seated && !/propped|timer|tripod|self-timer/.test(t)) return {k:'mid', p:'Direct arm\'s-length selfie from a camera outside the frame, the character sitting or lying exactly as described, framed from the head down to the thighs, the supporting surface and surroundings clearly visible'};
   if(/mirror/.test(t)) return {k:'full', p:'Full-body mirror selfie: the whole body visible from head to feet in the mirror, the phone in her hand visible in the mirror, the room visible around'};
   if(/propped|timer|tripod|self-timer/.test(t)) return {k:'full', p:'Photo taken with the phone propped up on a shelf with the self-timer: the whole body visible from head to feet, the room around clearly visible, natural candid pose'};
   if(/full[- ]?body|head to (toe|feet)|whole body|wide shot|photo taken by someone|from afar|lying|kneeling|walking|dancing/.test(t)) return {k:'full', p:'Full-body photo: the entire body visible from head to toe, camera far enough to show the surroundings'};
-  if(/selfie/.test(t)) return {k:'mid', p:'Direct arm\'s-length selfie from a camera outside the frame, framed from the head down to the thighs, the body and the room visible behind'};
+  if(/selfie/.test(t)) return {k:'mid', p:'Direct arm\'s-length selfie from a camera outside the frame, framed from the head down to the thighs, the surroundings visible behind'};
   return {k:'mid', p:'Medium-wide photo: the body visible from head to knees, the surroundings clearly visible'};
 }
 // 2+3. planificatorul de scenă: conversația → starea personajului + descrierea pozei (+ camere noi ale casei)
@@ -1923,7 +1939,7 @@ async function headRefOf(c, full, id){
   headCache.set(key, p); p.catch(() => headCache.delete(key));
   return p;
 }
-const HEAD_KEEP = 'face shape, eyes, eyebrows, nose, lips, skin tone and texture, age, and the hair and glasses exactly as shown: the same color, length, curls, volume and parting, the same frames';
+const HEAD_KEEP = 'face shape, eyes, eyebrows, nose, lips, skin tone and texture, age, and the hair exactly as shown: the same color, length, texture, volume and parting; preserve eyewear only if present in the reference';
 const glassLead = (c, id) => id && !id.none && id.glasses ? `${c.name} always wears ${idCut(id.glasses, 100)}: the same frames as in the reference, never other glasses and never without them. ` : '';
 let bodySigWhy = '';
 /* ═════════ 🧿 10.6 ═════════
@@ -2319,7 +2335,7 @@ async function etalonToRef(c, k){
 }
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
-  const asked = (opt.asked || []).filter(Boolean);
+  const asked = (opt.asked || []).filter(Boolean).map(x=>cleanPhotoScene(x,opt));
   const face = await headRefOf(c, full, id);   // 10.3: capul întreg (fața, părul, ochelarii), nu doar fața
   const exposure = opt.requestedExposure || exposureMode(shot);
   const nude = exposure === 'explicit' ? ' The fictional character is clearly an adult (18+), fully nude with visible external genital anatomy as requested; anatomically plausible and non-graphic, not a sexual act. Generate only if the selected image provider permits it.' : exposure === 'full' ? ' The character is clearly an adult (18+); natural, non-explicit artistic nudity, not a sexual act.' : exposure === 'topless' ? ' The character is clearly an adult (18+) and is topless as requested; bare breasts visible, no shirt or bra, lower-body clothing stays as described. Do not turn this into full nudity.' : '';
@@ -2368,7 +2384,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
     const body = fr.k === 'close' ? bodyRef : bodyRef || clothedBody?.blob || (fb ? await headHide(await fullBodyRef(fb, c.fullBox), 'hx:' + c.photoFull) : null);   // 13.6: capul estompat
     const face2 = await headRefOf(c, full, id);   // 10.3
-    const p3 = `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair and glasses exactly as shown (the same color, length, curls, volume, parting and frames).${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
+    const p3 = `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${hairLead(c, id)}${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair exactly as shown (the same color, length, texture, volume and parting); preserve eyewear only if present in the reference.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
     const angles = st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
     const refs3 = [face2, body].filter(Boolean);
@@ -2430,13 +2446,13 @@ function identityOutfit(c, shot, opt = {}){
 }
 // 16.0.6.7: ordinary photo camera geometry, independent of identity.
 function ordinarySceneGeometry(shot, opt = {}){
-  let text = String(shot || '');
+  let text = cleanPhotoScene(shot,opt);
   if(opt.together || opt.partner || (opt.requestedExposure || exposureMode(text)) !== 'clothed') return text;
-  if(text.includes('CAMERA GEOMETRY 16067:')) return text;
+  if(/\b(?:tripod|self-timer|propped|timer)\b/i.test(text)) return text;
   const selfie = /\bselfie\b/i.test(text), mirror = /\bmirror\b|oglind[ăa]/i.test(text); 
   if(selfie && !mirror) text=text.replace(/\bin both hands\b|\bwith both hands\b/gi,'in one hand');
   const camera = selfie && !mirror ? 'Direct front-camera viewpoint; the capturing phone is outside the frame. One arm holds the camera outside the frame; only the other hand may hold a cup or other object. Never show two hands holding an object plus a camera arm. No mirror or second camera viewpoint.' : selfie && mirror ? 'Mirror selfie: one consistent reflection and one phone held naturally; no duplicated reflected limbs.' : 'One coherent camera viewpoint.';
-  return 'CAMERA PRIORITY: ' + camera + ' Scene: ' + text + ' CAMERA GEOMETRY 16067: ' + camera + ' Natural human anatomy: two arms and two hands per person, five fingers per hand when fully visible; respect occlusion and cropping. Keep each requested object in a physically consistent position; do not duplicate it accidentally.';
+  return text + ' CAMERA GEOMETRY 16067: ' + camera + ' Natural human anatomy: two arms and two hands per person, five fingers per hand when fully visible; respect occlusion and cropping. Keep each requested object in a physically consistent position; do not duplicate it accidentally.';
 }
 function ordinaryQualityReview(check){
   if(!check) return '';
@@ -2446,7 +2462,7 @@ function ordinaryQualityReview(check){
   return '';
 }
 async function scenePhoto(c, shot, signal, fix, opt = {}){
-  shot = ordinarySceneGeometry(identityOutfit(c, shot, opt), opt);
+  shot = ordinarySceneGeometry(identityOutfit(c, cleanPhotoScene(shot,opt), opt), opt);
   if(c.strictIdentity && c.photoFull){
     fix = [fix, 'Keep the same visible body proportions from the character references, including chest volume relative to shoulders and ribcage, waist, hips, build and limb proportions. Preserve the requested framing while adapting the pose and perspective.'].filter(Boolean).join('. ');
   }
@@ -4105,7 +4121,7 @@ function marksFor(c, id, shot){
   if(!mp || !mp.length) return id && Array.isArray(id.marks) ? id.marks : [];
   const live = mp.filter(m => !m.off && m.en);
   if(!shot) return live.map(m => m.en).slice(0, 10);
-  const fr = framingOf(shot).k, t = String(shot).toLowerCase(), back = /\b(from behind|from the back|back view|rear view|seen from behind|(her|his) back to the camera)\b/.test(t);
+  const fr = framingOf(shot).k, t = cleanPhotoScene(shot).toLowerCase(), back = /\b(from behind|from the back|back view|rear view|seen from behind|(her|his) back to the camera)\b/.test(t);
   return live.filter(m => m.zone === 'back' ? back : (MARK_IN[fr] || MARK_IN.full).includes(m.zone)).map(m => m.en).slice(0, 8);
 }
 function bodyAuditEvidence(conflict, description, bodyImage){
@@ -5124,6 +5140,7 @@ function parseVisualResult(out){
   if(!raw || typeof raw!=='object' || Array.isArray(raw)) throw new Error('JSON vizual: obiect obligatoriu');
   const j=raw.scores && typeof raw.scores==='object' ? {...raw,...raw.scores} : raw;
   if(['face','scene','framing'].some(k=>visualScore(j[k])==null)) throw new Error('JSON vizual: scoruri obligatorii lipsă');
+  if(!['ok','bad','unknown'].includes(j.limbIntegrity)||!Object.hasOwn(j,'hands')) throw new Error('JSON vizual: câmpuri anatomice lipsă');
   return j;
 }
 async function checkPhoto(c, blob, shot, signal, together, asked, opt = {}){
@@ -5152,7 +5169,7 @@ async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
   const marks = id && !id.none ? marksFor(c, id, shot).slice(0, 6) : [];   // 10.0 (F7): doar semnele din zonele care intră în cadru
   const must = together ? [] : mustOf(c);   // 10.0 (F6)
   const meta=opt.visualMeta||{};
-  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${shot}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
+  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
   const out = await stream(opt.visualRetry ? 'Return one complete JSON object only. No markdown. Required numeric keys: face, scene, framing. Use null for unknown optional scores.' : 'You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:opt.visualRetry ? compact :
 `${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${shot}". Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
 Score strictly from 0 to 10:
