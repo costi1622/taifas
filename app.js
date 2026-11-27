@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.10';
+const APP_VER = '16.0.7.11';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1828,20 +1828,29 @@ async function photoWeather(c){
   }finally{ clearTimeout(timer); }
 }
 // 16.0.7.9: narrow explicit portrait intent; never inherit previous props.
-function plainFaceIntent(text){
-  const t=String(text||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z ]/g,' ').replace(/ +/g,' ').trim();
-  return /^(?:(?:vreau|doresc|trimite mi|trimite|fa mi|fa|arata mi|da mi|send me|give me|take) )?(?:(?:doar|numai|strict|only|just) )?(?:(?:un|o|a) )?(?:portret facial|portret al fetei|portret cu fata|poza cu fata|poza doar cu fata|prim plan facial|face only portrait|facial portrait|face portrait|headshot|face only)(?: (?:doar|numai|only|te rog|please))*$/.test(t);
+function portraitIntent(text){
+  const t=String(text||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/ +/g,' ').trim();
+  if(!/^(?:(?:vreau|doresc|trimite mi|trimite|fa mi|fa|arata mi|da mi|send me|give me|take) )?(?:(?:doar|numai|strict|only|just) )?(?:(?:un|o|a) )?(?:portret facial|portret al fetei|portret cu fata|poza cu fata|poza doar cu fata|prim plan facial|face only portrait|facial portrait|face portrait|headshot|face only)\b/.test(t)) return null;
+  // Only isolate supported standalone portraits; complex requests retain the general planner.
+  let rest=t.replace(/^.*?(?:portret facial|portret al fetei|portret cu fata|poza cu fata|poza doar cu fata|prim plan facial|face only portrait|facial portrait|face portrait|headshot|face only)\b/,'').trim();
+  const angle=/trei sferturi|three quarter|3 4/.test(rest)?'three-quarter view, head turned about 40 degrees':/din profil|side profile/.test(rest)?'side profile': 'frontal view';
+  const expression=/zambet|smil/.test(rest)?'natural smile':'relaxed expression';
+  rest=rest.replace(/din trei sferturi|three quarter(?: view)?|3 4|din profil|side profile|din fata|frontal|cu un zambet natural|cu zambet natural|zambet natural|natural smile|with a natural smile|fara cana sau alte obiecte in cadru|fara cana|fara obiecte(?: in cadru)?|fara maini(?: in cadru)?|no (?:cup|mug|props|objects|hands)(?: in frame)?|doar|numai|only|te rog|please/g,'').trim();
+  if(rest) return null;
+  return {angle,expression};
 }
+function plainFaceIntent(text){return !!portraitIntent(text);}
 function latestFaceIntent(ch, exclude){
   const m=ch.msgs.filter(x=>x!==exclude && x.role==='user' && x.text && !x.err && !x.pending && !x.pendingImg).slice(-1)[0];
-  return !!m && plainFaceIntent(m.text);
+  return m ? portraitIntent(m.text) : null;
 }
-function isolatedFacePlan(ch){
-  const shot='Close-up headshot, face only portrait. Eye-level camera, frontal relaxed expression, entire face and hairline visible, soft even daylight, neutral blurred background, ordinary clothing at neckline only. No hands, props, cup, steam or phone in frame.';
-  return {faceOnly:true,requestedExposure:'clothed',pov:false,cam:'close',posture:null,ro:{camera:'Portret facial',loc:'Fundal neutru',pozitie:'Fața spre cameră',tinuta:'Îmbrăcat',maini:'În afara cadrului'},samePlace:false,sameOutfit:false,people:[],self:true,planned:shot,asked:['Face only portrait, unobstructed face, no visible props or hands'],shot,where:ch.where,together:false};
+function isolatedFacePlan(ch, intent){
+  const shot='Close-up headshot, face only portrait. Eye-level stationary camera, '+intent.angle+', '+intent.expression+', entire face and hairline visible, soft even daylight, neutral blurred background, ordinary clothing at neckline only. No hands, props, cup, steam or phone in frame.';
+  return {faceOnly:true,requestedExposure:'clothed',pov:false,cam:'close',posture:null,ro:{camera:'Portret facial',loc:'Fundal neutru',pozitie:intent.angle,tinuta:'Îmbrăcat',maini:'În afara cadrului'},samePlace:false,sameOutfit:false,people:[],self:true,planned:shot,asked:['Face only portrait, unobstructed face, no visible props or hands',intent.angle,intent.expression],shot,where:ch.where,together:false};
 }
 async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = '', requestedExposure = ''} = {}){
-  if(!together && !camForce && (fix ? plainFaceIntent(fix) : latestFaceIntent(ch,exclude))) return isolatedFacePlan(ch);
+  const portrait = !together && !camForce && (fix ? portraitIntent(fix) : latestFaceIntent(ch,exclude));
+  if(portrait) return isolatedFacePlan(ch,portrait);
   pstage(signal, '🎬 Își alege locul și cadrul', 22);
   const u = S.userName.trim() || 'User';
   const hist = ch.msgs.filter(x => x !== exclude && x.text && !x.err && !x.pending);
@@ -2519,13 +2528,15 @@ function anatomyIssue(check, shot){
   if(check.limbIntegrity==='bad' && (!a || a.extraLimbs===true || a.arms>2 || a.hands>2)) return 'membre suplimentare sau anatomie incoerentă';
   if(!a) return 'geometrie anatomică neverificată';
   if(a.extraLimbs===true || a.arms>2 || a.hands>2) return 'membre suplimentare sau anatomie incoerentă';
-  if(photoCameraMode(shot)==='direct' && (a.cameraConflict===true || a.visiblePhones>0 || a.objectHands>1)) return 'geometrie selfie incoerentă — telefon sau mâini suplimentare';
+  if(photoCameraMode(shot)==='direct' && (a.visiblePhones>0 || a.objectHands>1)) return 'geometrie selfie incoerentă — telefon sau mâini suplimentare';
+  if(photoCameraMode(shot)==='direct' && a.cameraConflict===true) return 'geometrie selfie neconfirmată — verificare manuală';
   if(check.limbIntegrity==='bad') return 'anatomie neconfirmată — evaluare contradictorie';
   if(a.extraLimbs!==false || (photoCameraMode(shot)==='direct' && a.cameraConflict!==false)) return 'geometrie anatomică neconfirmată';
   return '';
 }
 function ordinaryQualityReview(check, shot){
   if(!check) return '';
+  if(Number.isFinite(check.asked) && check.asked < 8 && check.anatomy?.extraLimbs===false && check.anatomy?.arms<=2 && check.anatomy?.hands<=2 && check.anatomy?.visiblePhones===0 && check.anatomy?.objectHands<=1 && check.limbIntegrity==='ok') return 'detalii solicitate lipsă';
   const issue=anatomyIssue(check,shot); if(issue)return issue;
   if(Number.isFinite(check.hands) && check.hands <= 4) return 'anatomia mâinilor';
   if(Number.isFinite(check.framing) && check.framing < 6) return 'încadrare incorectă';
@@ -5242,7 +5253,7 @@ async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
   const must = together ? [] : mustOf(c);   // 10.0 (F6)
   const meta=opt.visualMeta||{};
   const anatomyRequired = !together && !opt.partner && (opt.requestedExposure || exposureMode(shot)) === 'clothed';
-  const anatomyPrompt = anatomyRequired ? `Independent anatomy audit of image 2 only. Camera mode: ${photoCameraMode(shot)}. Count visible arms (including partial camera arm), hands, phones and hands holding non-camera objects. Trace every hand to its arm; count disconnected hands too. A direct selfie has no visible phone and at most one object-holding hand. Do not let aesthetic quality override anatomy. Report anatomy: {"arms":null,"hands":null,"visiblePhones":null,"objectHands":null,"extraLimbs":null,"cameraConflict":null,"evidence":""}. Counts are integers or null if uncertain; flags true/false/null. Evidence briefly describes actual visible geometry.` : '';
+  const anatomyPrompt = anatomyRequired ? `Independent anatomy audit of image 2 only. Camera mode: ${photoCameraMode(shot)}. Count visible arms (including partial camera arm), hands, phones and hands holding non-camera objects. Trace every hand to its arm; count disconnected hands too. A direct selfie has no visible phone and at most one object-holding hand. Do not let aesthetic quality override anatomy. A forbidden prop or wrong framing is request noncompliance, not a camera conflict. One camera arm and one object-holding hand are physically compatible. Report anatomy: {"arms":null,"hands":null,"visiblePhones":null,"objectHands":null,"extraLimbs":null,"cameraConflict":null,"evidence":""}. Counts are integers or null if uncertain; flags true/false/null. Evidence briefly describes actual visible geometry.` : '';
   const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Judge requested pose and objects as part of scene. ${asked?.length ? `Also score asked (0–10) and list missing requested details: ${asked.join("; ")}. Include asked and missing keys.` : ""} Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
   const out = await stream(opt.visualRetry ? 'Return one complete JSON object only. No markdown. Required numeric keys: face, scene, framing. Use null for unknown optional scores.' : 'You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:(opt.visualRetry ? compact :
 `${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${cleanPhotoScene(shot,{asked})}". Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
