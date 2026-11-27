@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.19';
+const APP_VER = '16.0.7.20';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2854,6 +2854,9 @@ async function viCandidateAudit(c,blob,slot){
   const ds=compatible.map(r=>fdist(f.d,r.face.d)).filter(Number.isFinite);
   return {slot:viAtlasSlot(viPose(f.lm)),d:ds.length?Math.min(...ds):null};
 }
+function viRotationPrompt(c,angle,direction){
+  return `Edit the original fictional character photograph, not a new casting or a redesign. Image 1 is the canonical face crop; Image 2 is the original photograph of the same character and provides hair and clothing context. Change only the viewing angle to ${angle}, nose pointing toward image ${direction}. Keep the original expression, dry or wet hair state, hairstyle, braid placement, hairline, eyebrow shape, nose, lips, freckles, skin texture and apparent age. Do not invent a new hairstyle or change facial proportions. Fully clothed head-and-shoulders portrait, soft natural light, simple background, one person. `+ageIdentityLead(c);
+}
 const viGenerating = new WeakSet();
 async function viGenerateAngle(c,slot,replaceKey=null){
   const p=viProfile(c); if(!VI_ATLAS_SLOTS.includes(slot)||slot==='front'||!c.photo||(p.refs.length>=12&&!replaceKey)||viGenerating.has(c))throw new Error('Generare indisponibilă.');
@@ -2863,8 +2866,10 @@ async function viGenerateAngle(c,slot,replaceKey=null){
     const original=c.photo, source=await viCanonicalCrop(c);
     if(replaceKey&&!p.refs.some(r=>r.key===replaceKey&&!r.approved&&r.role===slot))throw new Error('Candidat indisponibil.');
     const direction=slot.endsWith('Left')?'left':'right', angle=slot.startsWith('side')?'strict side profile, one eye visible':'three-quarter view, both eyes visible';
-    const prompt=ageIdentityLead(c)+`Create a fully clothed neutral head-and-shoulders portrait of the same fictional character as the reference. ${angle}, nose pointing toward image ${direction}. Preserve facial geometry, hair pigmentation, skin texture and age appearance. Plain background, neutral light, no accessories added, one person only.`;
-    const blob=await rwRun(prompt,[await toJpeg(source.blob,1024,.94)],768,1024,new AbortController().signal,rwKlein(),1);
+    const prompt=viRotationPrompt(c,angle,direction);
+    const originalBlob=await DB.get(original);
+    if(!originalBlob)throw new Error('Originalul lipsește.');
+    const blob=await rwRun(prompt,[await toJpeg(source.blob,1024,.94),await toJpeg(originalBlob,1024,.94)],768,1024,new AbortController().signal,rwKlein(),1);
     const audit=await viCandidateAudit(c,blob,slot);
     if(c.photo!==original)throw new Error('Portretul s-a schimbat în timpul generării.');
     key=await saveImg(blob);const old=p.refs.slice();
