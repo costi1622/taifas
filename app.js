@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.25';
+const APP_VER = '16.0.7.26';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -5613,6 +5613,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     diagnostic.visualAnatomy = checked?.anatomy ?? null;
     diagnostic.visualHands = checked?.hands ?? null;
     diagnostic.visualFraming = checked?.framing ?? null;
+    diagnostic.visualScene = checked?.scene ?? null;
     diagnostic.visualAsked = checked?.asked ?? null;
     diagnostic.visualMissing = checked?.missing ?? [];
     diagnostic.visualFix = checked?.fix ?? '';
@@ -18835,9 +18836,15 @@ function bind(){
       const ch=chat,c=cur,btn=e.target.closest('[data-review-reeval]');
       if(m._reevaluating) return; m._reevaluating=true; btn.disabled=true;
       try{ const blob=await DB.get(m.reviewImg); if(!blob) throw Error('Fotografia nu mai este disponibilă.');
-        const r=await checkPhoto(c,blob,m.reviewScene||'',undefined,false,[]);
-        m.photoDiagnostic={...m.photoDiagnostic,version:APP_VER,visualAttempts:r.visualAttempts,visualStatus:'evaluat din nou — verificare manuală',visualError:'',visualFace:r.face,visualBody:r.body,visualBust:r.bust,visualHands:r.hands,visualFraming:r.framing,visualLimbIntegrity:r.limbIntegrity,visualAnatomy:r.anatomy};
-        m.err='Reevaluare finalizată: față '+r.face+'/10, scenă '+r.scene+'/10, încadrare '+r.framing+'/10. Fotografia rămâne nepublicată până la decizia manuală.';
+        const shot=m.reviewScene||'';
+        if(!shot) throw Error('Scena originală lipsește; verificare manuală necesară.');
+        const fresh={}; let reason='';
+        try{ reason=await verifyStudioPhoto(c,blob,shot,undefined,{diagnosticOut:fresh,sceneWardrobe:true,allowBodyUnknown:true,usePortraitBody:chatBodyKey(c)===c.photo,asked:m.reviewAsked||[]})||''; }
+        catch(e){ if(!e.photoDiagnostic)throw e; Object.assign(fresh,e.photoDiagnostic); reason=String(e.message||e); }
+        const previous=m.photoDiagnostic||{};
+        m.photoDiagnostic={...previous,...fresh,runware:previous.runware,calls:previous.calls,version:APP_VER,status:'nepublicată',visualError:fresh.visualError||''};
+        const score=n=>Number.isFinite(n)?n+'/10':'—';
+        m.err='Reevaluare finalizată: față '+score(fresh.visualFace)+', scenă '+score(fresh.visualScene)+', încadrare '+score(fresh.visualFraming)+'. '+(reason||'Verificarea curentă a trecut; publicarea necesită confirmare manuală pentru fotografia reținută anterior.');
       }catch(err){m.photoDiagnostic={...m.photoDiagnostic,version:APP_VER,visualStatus:'reevaluare eșuată',visualError:String(err.message||err),visualAttempts:err.visualAttempts||[]}; m.err='Reevaluare eșuată: '+String(err.message||err);}
       finally{delete m._reevaluating;btn.disabled=false;await saveChat(c,ch);if(chat===ch)renderMsgs();} return;
     }
