@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.13';
+const APP_VER = '16.0.7.14';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1487,7 +1487,7 @@ function cleanPhotoScene(shot,opt={}){
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
 function ageReviewNeeded(r){if(r?.lk?.ageInfo?.reliable===false)return false;return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return [d.visualAttempts?.length?'Încercări evaluator: '+JSON.stringify(d.visualAttempts):'','Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, rezoluție, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',Object.hasOwn(d,'visualAsked')?'Respectarea cererii: '+f(d.visualAsked)+' / 10':'',d.visualMissing?.length?'Detalii neîndeplinite: '+d.visualMissing.join('; '):'',d.visualFix?'Corecție evaluator: '+d.visualFix:'',d.visualAnatomy?'Audit anatomie: '+JSON.stringify(d.visualAnatomy):'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return [d.visualAttempts?.length?'Încercări evaluator: '+JSON.stringify(d.visualAttempts):'','Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),d.pose?'Poziție facială estimată: '+d.pose.role+' · indice yaw '+f(d.pose.yaw)+' · repere compatibile '+(d.poseRefs??0)+' · comparație '+(d.faceVia||'standard'):'',rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, rezoluție, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',Object.hasOwn(d,'visualAsked')?'Respectarea cererii: '+f(d.visualAsked)+' / 10':'',d.visualMissing?.length?'Detalii neîndeplinite: '+d.visualMissing.join('; '):'',d.visualFix?'Corecție evaluator: '+d.visualFix:'',d.visualAnatomy?'Audit anatomie: '+JSON.stringify(d.visualAnatomy):'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
 function photoReferenceThumbs(m){const refs=m?.photoDiagnostic?.runware?.referenceManifest||[];return refs.length?`<div><small>Repere Runware efective (miniaturi locale)</small><div style="display:flex;flex-wrap:wrap;gap:8px">${refs.map(r=>`<div><small>Reper ${esc(String(r.index))}</small>${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.thumbnail||'')?`<img style="display:block;width:96px;height:auto" src="${esc(r.thumbnail)}" alt="Reper ${esc(String(r.index))}">`:'<small>Miniatură indisponibilă</small>'}</div>`).join('')}</div></div>`:'';}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
@@ -2423,7 +2423,8 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   let clothedBody = null;
   if(!bodyRef && exposure === 'clothed' && st === 'photo' && fr.k !== 'close'){ try{ clothedBody = await bodyRefFor(c, shot, opt); if(opt.bounded && clothedBody) clothedBody = {...clothedBody, full2:null}; }catch(e){ clothedBody = null; } }
   // 9.83 (2): scena cere un unghi pe care portretul nu-l arată (profil, zâmbet larg) → și unghiul din fișa de identitate
-  let angRef = null, angName = '', angTxt = '', angLbl = '', ang2 = null;   // 10.6 (B) + 11.0 (C2): după scor; fără corp în cadru, două
+  let angRef = null, angName = '', angTxt = '', angLbl = '', ang2 = null;
+  if(opt.faceOnly && exposure==='clothed' && st==='photo'){const a=await viPortraitAngle(c,shot).catch(()=>null);if(a){angRef=a.img;angName=a.name;angTxt=a.txt;angLbl=a.lbl;}}   // 10.6 (B) + 11.0 (C2): după scor; fără corp în cadru, două
   if(!opt.faceOnly && !bodyRef && st === 'photo'){ const wantS = !!(opt.sref && sceneRefOn(c, opt)), room = clothedBody ? 2 + (clothedBody.full2 ? 1 : 0) + (wantS ? 1 : 0) < 4 : true;
     try{ const as = await angleRefsFor(c, shot, room, clothedBody || opt.bounded ? 1 : 2, !!opt.idLeg); if(as[0]){ angRef = as[0].img; angName = as[0].name; angTxt = as[0].txt; angLbl = as[0].lbl; } if(as[1]) ang2 = as[1]; }catch(e){} }
   let ratioTxt = ''; if(clothedBody){ try{ ratioTxt = bodyRatioText(await refBodySig(c)); }catch(e){} }   // 9.89 (a)
@@ -2444,14 +2445,14 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const continuity = opt.sceneWardrobe ? CHAT_PHOTO_CONTINUITY + (opt.usePortraitBody ? ' The selected portrait body reference takes precedence over any conflicting written body traits. ' : ' ') : '';
   const bustLock = !bustChange && fr.k !== 'close' && (clothedBody || bodyRef || c.photoFull) ? BUST_FIDELITY + ' ' : '';
   let prompt = `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude}${faceInstruction}${bodyLock} The person, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in the reference'}. ${NO_BEAUTY} ${STIL_TAG[st]}`;
-  if(fr.k==='close' && exposure==='clothed' && !angRef && !sref) prompt=closeScenePrompt(c,shot,fr,asked,fix,st);
+  if(fr.k==='close' && exposure==='clothed' && !sref && (!angRef || opt.faceOnly)) prompt=closeScenePrompt(c,shot,fr,asked,fix,st)+(angRef?' Image 2 is '+angTxt:'');
   if(useF3()){   // 9.43/9.53: FLUX 3 folosește fața + reperul de corp și prioritizează proporțiile bustului la cereri topless/nud
     const fb = c.photoFull ? await DB.get(c.photoFull).catch(() => null) : null;
     const body = fr.k === 'close' ? bodyRef : bodyRef || clothedBody?.blob || (fb ? await headHide(await fullBodyRef(fb, c.fullBox), 'hx:' + c.photoFull) : null);   // 13.6: capul estompat
     const face2 = face;   // 10.3
     const p3 = opt.faceOnly ? closeScenePrompt(c,shot,fr,asked,fix,st) : `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair exactly as shown (the same color, length, texture, volume and parting); preserve eyewear only if present in the reference.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = !opt.faceOnly && opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
-    const angles = !opt.faceOnly && st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
+    const angles = opt.faceOnly ? (angRef?[{img:angRef,txt:angTxt,lbl:angLbl}]:[]) : st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
     const refs3 = [face2, body].filter(Boolean);
     let p3Final = p3;
     for(const a of angles){ refs3.push(a.img); p3Final += ` Image ${refs3.length} is ${a.txt} Use this angle only for facial geometry, not the scene or outfit.`; }
@@ -2465,7 +2466,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     return {prompt:p3Final, blob:b3, engine:'flux3', refs:(body ? 'față + corp' : 'față') + (angles.length ? ' + '+angles.map(a=>a.lbl).join(' + ') : '') + (s3 ? ' + decorul pozei dinainte' : ''), retouched:ret, sref:!!s3};
   }
   const singleInstruction = 'The single reference is the exact face and hair. Use the stated permanent body traits for proportions, with the requested pose and clothing.';
-  const singlePrompt = prompt.replace(faceInstruction, singleInstruction).replace(/Image 2 defines[^.]*\./g, '');
+  const singlePrompt = (opt.faceOnly ? closeScenePrompt(c,shot,fr,asked,fix,st) : prompt.replace(faceInstruction, singleInstruction)).replace(/Image 2 defines[^.]*\./g, '');
   const genOpt = bodyRef
     ? {model, one:face, p1:singlePrompt, why:opt.why || 'chat', size:opt.size} // încearcă față + corp; la eroare revine automat la față, nu pierde identitatea
     : {model, force:{two:false, px:1024}, p1:singlePrompt, why:opt.why || 'chat', size:opt.size};   // 9.83: size = schița, când e cazul
@@ -2788,7 +2789,7 @@ function sheetPick(c, shot, n = 2){
 }
 // reperele 3 și 4 (fețe decupate): ale tale întâi, apoi fișa (după scenă), apoi unghiurile automate
 // 16.0.6.4 — explicit visual reference approval; legacy references remain compatible.
-const VI_ROLES = {front:'Frontal',three:'Trei sferturi',side:'Profil lateral',body:'Corp întreg',other:'Alt unghi'};
+const VI_ROLES = {front:'Frontal',three:'Trei sferturi',side:'Profil lateral',threeLeft:'¾ spre stânga imaginii',threeRight:'¾ spre dreapta imaginii',sideLeft:'Profil spre stânga imaginii',sideRight:'Profil spre dreapta imaginii',body:'Corp întreg',other:'Alt unghi'};
 function viProfile(c){ return c.visualIdentity ||= {v:1, locked:false, refs:[], permanent:'', variable:''}; }
 function viSceneRole(shot){
   const t=String(shot||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -2796,10 +2797,23 @@ function viSceneRole(shot){
   if(/\b(three[- ]quarter|3\/4|trei sferturi|oblique|45 degrees)\b/.test(t)) return 'three';
   return 'front';
 }
+function viRoleFamily(role){return /^side/.test(role)?'side':/^three/.test(role)?'three':role;}
 function viApproved(c, shot){
-  const role=viSceneRole(shot), order=role==='side'?['side','three','front','other']:role==='three'?['three','front','side','other']:['front','three','side','other'];
+  const role=viSceneRole(shot), order=role==='side'?['side','three','front']:role==='three'?['three','front','side']:['front','three','side'];
   const seen=new Set([c.photo,c.photoFull]);
-  return (c.visualIdentity?.refs || []).filter(r=>r.approved && r.key && order.includes(r.role) && (r.role===role || r.role==='front' || r.role==='three') && !seen.has(r.key) && (seen.add(r.key),true)).sort((a,b)=>order.indexOf(a.role)-order.indexOf(b.role));
+  return (c.visualIdentity?.refs || []).filter(r=>r.approved && r.key && order.includes(viRoleFamily(r.role)) && !seen.has(r.key) && (seen.add(r.key),true)).sort((a,b)=>order.indexOf(viRoleFamily(a.role))-order.indexOf(viRoleFamily(b.role)));
+}
+function viPose(lm){const y=yawOfLm(lm);return Number.isFinite(y)?{yaw:y,role:Math.abs(y)>=.55?'side':Math.abs(y)>=.22?'three':'front'}:{yaw:null,role:'unknown'};}
+function viPoseCompatible(a,b){return a.role!=='unknown' && b.role!=='unknown' && a.role===b.role && Math.abs(a.yaw-b.yaw)<=.25;}
+async function viPortraitAngle(c,shot){
+  if(viSceneRole(shot)==='front')return null;
+  for(const r of viApproved(c,shot).filter(r=>viRoleFamily(r.role)===viSceneRole(shot))){
+    const b=await DB.get(r.key).catch(()=>null);if(!b)continue;
+    const fs=await faceDescs(b).catch(()=>[]);if(fs.length!==1)continue;
+    if(viPose(fs[0].lm).role!==viRoleFamily(r.role))continue;
+    const img=await refCropUp(r.key,(c.refBoxes||{})[r.key]||await faceBoxOf(b)).catch(()=>null);
+    if(img)return {img,name:'approved angle',txt:'an explicitly approved reference of the same fictional character at a similar angle. Use facial geometry only, not scene or clothing.',lbl:'reper aprobat '+VI_ROLES[r.role]};
+  }return null;
 }
 function viBodyKeys(c){return [...new Set([c.photoFull,...(c.visualIdentity?.refs||[]).filter(r=>r.approved&&r.role==='body').map(r=>r.key)].filter(Boolean))];}
 async function viBodyFallback(c){for(const k of viBodyKeys(c)){const b=await DB.get(k).catch(()=>null);if(b)return {k,b};}return null;}
@@ -4780,7 +4794,7 @@ async function faceDescs0x(blob){
 // fața de referință: poza de profil + pozele de referință în plus (o dată, ținută pe personaj)
 async function refDescs(c){
   if(!c.photo) return [];
-  const k = [await fdMode(), ...new Set([c.photo, ...(c.refs || []).slice(0, 2).filter(x => !refOut(c, x)), ...viApproved(c, '').map(r=>r.key)])].join('|');   // 10.5 (R3): o poză în plus ieșită din grup nu mai intră   // 14.0: și judecătorul
+  const k = [await fdMode(), ...new Set([c.photo, ...(c.refs || []).slice(0, 2).filter(x => !refOut(c, x)), ...viApproved(c, '').filter(r=>viRoleFamily(r.role)!=='side').map(r=>r.key)])].join('|');   // 10.5 (R3): o poză în plus ieșită din grup nu mai intră   // 14.0: și judecătorul
   if(c.faceEmb?.v === 2 && c.faceEmb.k === k && c.faceEmb.d.length) return c.faceEmb.d;
   const d = [];
   for(const key of k.split('|').slice(1)){
@@ -4802,6 +4816,7 @@ async function idDistance(c, blob){
   const got = await faceDescs(blob); if(!got.length) return {d:null, n:0};
   let rs = null; if(S.refAng !== 'off' && !(got[0] && got[0].j === 'a')){ try{ rs = await refSet(c); }catch(e){} }   // 10.5 (R1): și unghiurile verificate   // 14.0: cu ArcFace, doar portretul
   let best = null, via = null;
+  const pose=got.length===1?viPose(got[0].lm):{yaw:null,role:'unknown'};
   for(const g of got){
     for(const descriptor of [g.d,g.fa].filter(Boolean)){
       const compatible = ref.filter(r => r.length === descriptor.length);
@@ -4813,7 +4828,18 @@ async function idDistance(c, blob){
       break;
     }
   }
-  return {d:best == null ? null : Math.round(best * 1000) / 1000, n:got.length, via, j:got[0]?.j || 'f'};
+  let poseRefs=0;
+  if(got.length===1 && pose.role!=='unknown' && pose.role!=='front'){
+    const g=got[0];
+    for(const r of viApproved(c, '').filter(r=>viRoleFamily(r.role)===pose.role)){
+      const b=await DB.get(r.key).catch(()=>null);if(!b)continue;
+      const fs=await faceDescs(b).catch(()=>[]);if(fs.length!==1 || !viPoseCompatible(pose,viPose(fs[0].lm)))continue;
+      const h=fs[0]; if(g.d.length!==h.d.length || (g.j||'f')!==(h.j||'f'))continue;
+      poseRefs++;const d=fdist(g.d,h.d);
+      if(Number.isFinite(d)&&(best==null||d<best)){best=d;via='reper aprobat '+VI_ROLES[r.role];}
+    }
+  }
+  return {d:best == null ? null : Math.round(best * 1000) / 1000, n:got.length, via, pose, poseRefs, j:got[0]?.j || 'f'};
 }
 const ID_MAX = .5;
 const idPct = d => Math.round(100 * Math.max(0, Math.min(1, (.9 - d) / .55)));
@@ -5213,7 +5239,7 @@ async function retouchBest(c, blob, signal, model, shot, why){
   return {blob: better ? y : blob, used: better, d: better ? d1 : d0, before: d0, after: d1};
 }
 // doar fața, fără Haiku (gratuit): pentru a doua încercare de retuș
-async function localFace(blob, c){ let m = null; try{ m = await idDistance(c, blob); }catch(e){} return m && m.d != null ? {d:m.d, face:Math.round(idPct(m.d) / 10)} : {d:null, face:null}; }
+async function localFace(blob, c){ let m = null; try{ m = await idDistance(c, blob); }catch(e){} return m && m.d != null ? {...m, face:Math.round(idPct(m.d) / 10)} : {d:null, face:null,pose:m?.pose,poseRefs:m?.poseRefs}; }
 // verificarea: fața în telefon (gratuit) + scena, părul și semnele prin Haiku (doar poza nouă, ~jumătate din costul vechi)
 function visualScore(value){
   if(value == null || typeof value === 'boolean' || (typeof value !== 'number' && typeof value !== 'string') || String(value).trim() === '') return null;
@@ -5432,7 +5458,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
   ]);
   const face = faceResult.d;
   const faceLimit = idMax(c);
-  Object.assign(diagnostic,{face,faceLimit,body,bodyLimit:bodyVisible && body != null ? bodyGate(c) : null,reference:!bodyVisible ? 'fără comparație corp' : opt.usePortraitBody ? 'portret' : 'poza întreagă / fișa de corp',spontaneous:!!opt.spontaneous});
+  Object.assign(diagnostic,{face,faceLimit,pose:faceResult.pose,poseRefs:faceResult.poseRefs,faceVia:faceResult.via,body,bodyLimit:bodyVisible && body != null ? bodyGate(c) : null,reference:!bodyVisible ? 'fără comparație corp' : opt.usePortraitBody ? 'portret' : 'poza întreagă / fișa de corp',spontaneous:!!opt.spontaneous});
   const faceMismatch = face != null && face > faceLimit;
   const borderlineFace = faceMismatch && opt.sceneWardrobe && (viSceneRole(shot) !== 'front' || face - faceLimit <= .10);
   const hardFace = faceMismatch && (!borderlineFace || S.imgCheck === 'off');
