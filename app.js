@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.6.8';
+const APP_VER = '16.0.6.9';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1457,7 +1457,7 @@ function ageEstimateInfo(sig,ref,c){
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
 function ageReviewNeeded(r){if(r?.lk?.ageInfo?.reliable===false)return false;return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
 function photoReferenceThumbs(m){const refs=m?.photoDiagnostic?.runware?.referenceManifest||[];return refs.length?`<div><small>Repere Runware efective (miniaturi locale)</small><div style="display:flex;flex-wrap:wrap;gap:8px">${refs.map(r=>`<div><small>Reper ${esc(String(r.index))}</small>${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.thumbnail||'')?`<img style="display:block;width:96px;height:auto" src="${esc(r.thumbnail)}" alt="Reper ${esc(String(r.index))}">`:'<small>Miniatură indisponibilă</small>'}</div>`).join('')}</div></div>`:'';}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
@@ -2432,11 +2432,12 @@ function ordinarySceneGeometry(shot, opt = {}){
   if(opt.together || opt.partner || (opt.requestedExposure || exposureMode(text)) !== 'clothed') return text;
   if(text.includes('CAMERA GEOMETRY 16067:')) return text;
   const selfie = /\bselfie\b/i.test(text), mirror = /\bmirror\b|oglind[ăa]/i.test(text);
-  const camera = selfie && !mirror ? 'Direct front-camera viewpoint; the capturing phone is outside the frame. One arm may extend toward the lens; the other rests naturally. No mirror or second camera viewpoint.' : selfie && mirror ? 'Mirror selfie: one consistent reflection and one phone held naturally; no duplicated reflected limbs.' : 'One coherent camera viewpoint.';
+  const camera = selfie && !mirror ? 'Direct front-camera viewpoint; the capturing phone is outside the frame. One arm holds the camera outside the frame; only the other hand may hold a cup or other object. Never show two hands holding an object plus a camera arm. No mirror or second camera viewpoint.' : selfie && mirror ? 'Mirror selfie: one consistent reflection and one phone held naturally; no duplicated reflected limbs.' : 'One coherent camera viewpoint.';
   return text + ' CAMERA GEOMETRY 16067: ' + camera + ' Natural human anatomy: two arms and two hands per person, five fingers per hand when fully visible; respect occlusion and cropping. Keep each requested object in a physically consistent position; do not duplicate it accidentally.';
 }
 function ordinaryQualityReview(check){
   if(!check) return '';
+  if(check.limbIntegrity === 'bad') return 'membre suplimentare sau anatomie incoerentă';
   if(Number.isFinite(check.hands) && check.hands <= 4) return 'anatomia mâinilor';
   if(Number.isFinite(check.framing) && check.framing <= 3) return 'încadrare incorectă';
   return '';
@@ -5131,17 +5132,19 @@ Score strictly from 0 to 10:
 - "framing": does the camera framing match the requested selfie / mirror / full-body / close-up view?
 - "body": is the body in image 2 the same body as in ${fb ? 'image 3' : 'image 1'} (build, weight, bust size, waist, hips, proportions)? Ignore clothing and pose. Use null if too little of the body is visible in either image, or if pose, perspective, crop or clothing makes the proportions unreliable to compare. Do not count changes due to those factors as body differences.
 ${fb ? '- "bust": compare visible bust volume and projection relative to shoulders and waist in images 2 and 3. Score 0–10 for fidelity, with 5 or less only for a clear size difference. Use null if pose, crop or loose clothing prevents comparison.\n' : ''}- "hair": same hair color, length and texture as image 1 (a different hairstyle is fine only if the scene asks for it)? null if the hair is not visible.
+- "limbIntegrity": trace each visible arm to its shoulder and each hand to its arm. Count limbs per person, accounting for cropping and reflections. A direct handheld selfie with an extended camera arm and two hands holding a cup is impossible. Return "bad" for definite extra or disconnected limbs, "ok" for coherent anatomy, "unknown" if obscured. Do not infer missing limbs from cropping.
 - "hands": are the visible hands natural and anatomically correct (five fingers each, no extra, missing or fused fingers)? null if no hand is visible.
 - "skin": same skin tone and skin texture as image 1, ignoring the light of the scene? null if too little skin is visible.${marks.length ? `
 - "marks": are these permanent marks visible in the right place when that area is visible: ${marks.join('; ')}? null if none of those areas is visible.` : ''}${asked && asked.length ? `
 - "asked": the user explicitly asked for these details: ${asked.map(a => '"' + a + '"').join(', ')}. 10 = every one is clearly visible in image 2, 0 = none; list the ones that are missing or wrong in "missing".` : ''}${must.length ? `
 - "must": this character's mandatory traits, numbered: ${must.map((x, i) => (i + 1) + '. ' + x.en).join('; ')}. Give a list with one answer per trait, in order: true = clearly matches in image 2; false = that part is visible in image 2 and it does NOT match; null = that part is not visible or too small to judge. Judge each one on its own, strictly, ignoring the light of the scene.` : ''}
 "fix": if face is below 8 or scene below 6 or framing below 5 or body below 7 or hair below 6${marks.length ? ' or marks below 6' : ''}${asked && asked.length ? ' or asked below 8' : ''}, give ONE short concrete English correction prioritizing identity first (face, then body: say exactly what differs, e.g. "fuller bust and wider hips as in the reference"), then hair${asked && asked.length ? ', then the missing requested details' : ''}, then scene; otherwise "".
-JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`}], {max:Math.min(1200, 650 + must.length * 12), signal, cid:c.id, aux:true, tag:'pozeai'});
+JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown","skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`}], {max:Math.min(1200, 650 + must.length * 12), signal, cid:c.id, aux:true, tag:'pozeai'});
   const j = parseJSON(out), n = k => visualScore(j[k]);
   if(n('face') == null || n('scene') == null || n('framing') == null) throw new Error('Răspuns vizual fără scoruri obligatorii valide.');
   const r = {face:n('face'), scene:n('scene'), framing:n('framing'), fix:String(j.fix || '').slice(0, 300)};
   const nn = n;
+  r.limbIntegrity = ['ok','bad','unknown'].includes(j.limbIntegrity) ? j.limbIntegrity : 'unknown';
   r.body = nn('body'); r.hair = nn('hair'); r.hands = nn('hands'); r.skin = nn('skin'); if(marks.length) r.marks = nn('marks'); if(fb){ r.bodyRef = 'intreaga'; r.bust = nn('bust'); }
   if(must.length && Array.isArray(j.must)){ r.must = must.map((x, i) => j.must[i] === true || j.must[i] === 'true' ? true : j.must[i] === false || j.must[i] === 'false' ? false : null);
     const miss = must.filter((x, i) => r.must[i] === false).map(x => ({en:x.en, zone:x.zone}));
@@ -5313,6 +5316,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     diagnostic.visualFace = checked?.face ?? null;
     diagnostic.visualBody = checked?.body ?? null;
     diagnostic.visualBust = checked?.bust ?? null;
+    diagnostic.visualLimbIntegrity = checked?.limbIntegrity ?? 'unknown';
     diagnostic.visualHands = checked?.hands ?? null;
     diagnostic.visualFraming = checked?.framing ?? null;
     if(hardFace) rejectFace();
@@ -12499,8 +12503,9 @@ async function askPhoto0(spont, target, mode, opt = {}){
     const tVerify = performance.now();
     reviewScene = shot;
     const studioDiagnostic = {};
+    const diagnosticBase = {version:APP_VER,age:canonicalPhotoAge(c),ageSource:photoAgeSource(c),ageDelta:R.lk?.age??null,ageInfo:R.lk?.ageInfo??null,runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
     const bodyNotice = verifyIdentity
-      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,diagnosticOut:studioDiagnostic,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
+      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,diagnosticOut:studioDiagnostic,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}).catch(e=>{ if(e.photoDiagnostic) e.photoDiagnostic={...diagnosticBase,...e.photoDiagnostic,runware:e.photoDiagnostic.runware||diagnosticBase.runware,status:'nepublicată'}; throw e; }) : '';
     const ageDiag = {...studioDiagnostic,version:APP_VER,status:'acceptată automat',age:canonicalPhotoAge(c),ageDelta:R.lk?.age??null,ageInfo:R.lk?.ageInfo??null,ageSource:photoAgeSource(c),face:R.fd??null,faceLimit:idMax(c),body:R.bd??null,bodyLimit:bodyGate(c),runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,reference:studioDiagnostic.reference || 'corp neverificat',visualStatus:studioDiagnostic.visualStatus && studioDiagnostic.visualStatus !== 'neapelat' ? studioDiagnostic.visualStatus : R.check ? 'evaluat anterior' : S.imgCheck === 'off' ? 'dezactivat' : !aiReady() ? 'API vizual Anthropic indisponibil' : 'neapelat pentru acest cadru',calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
     if(!together && !duoBoth && !peopleIn && c.photo && ageReviewNeeded(R)){
       ageDiag.status='nepublicată — vârstă aparentă';
