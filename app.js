@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.12';
+const APP_VER = '16.0.7.13';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1834,9 +1834,9 @@ function portraitIntent(text){
   if(!/^(?:(?:vreau|doresc|trimite mi|trimite|fa mi|fa|arata mi|da mi|send me|give me|take) )?(?:(?:doar|numai|strict|only|just) )?(?:(?:un|o|a) )?(?:portret facial|portret al fetei|portret cu fata|poza cu fata|poza doar cu fata|prim plan facial|face only portrait|facial portrait|face portrait|headshot|face only)\b/.test(t)) return null;
   // Only isolate supported standalone portraits; complex requests retain the general planner.
   let rest=t.replace(/^.*?(?:portret facial|portret al fetei|portret cu fata|poza cu fata|poza doar cu fata|prim plan facial|face only portrait|facial portrait|face portrait|headshot|face only)\b/,'').trim();
-  const angle=/trei sferturi|three quarter|3 4/.test(rest)?'three-quarter view, head turned 40 degrees away from frontal, nose visibly off center, far cheek foreshortened':/din profil|side profile/.test(rest)?'side profile': 'frontal view';
+  const angle=/trei sferturi|three quarter|3 4/.test(rest)?'three-quarter view, head turned 40 degrees away from frontal, nose visibly off center, far cheek foreshortened':/din profil|profil lateral|side profile|90 de grade|90 degrees/.test(rest)?'strict side profile, head turned 90 degrees, only near eye visible, nose in silhouette, looking straight ahead': 'frontal view';
   const expression=/zambet|smil/.test(rest)?'natural smile':'relaxed expression';
-  rest=rest.replace(/din trei sferturi|three quarter(?: view)?|3 4|din profil|side profile|din fata|frontal|cu un zambet natural|cu zambet natural|zambet natural|natural smile|with a natural smile|fara cana sau alte obiecte in cadru|fara cana|fara obiecte(?: in cadru)?|fara maini(?: in cadru)?|no (?:cup|mug|props|objects|hands)(?: in frame)?|doar|numai|only|te rog|please/g,'').trim();
+  rest=rest.replace(/din trei sferturi|three quarter(?: view)?|3 4|din profil(?: lateral)?(?: complet)?|profil lateral(?: complet)?|side profile|la 90 de grade|at 90 degrees|90 degrees|cu expresie relaxata|cu o expresie relaxata|with a relaxed expression|relaxed expression|din fata|frontal|cu un zambet natural|cu zambet natural|zambet natural|natural smile|with a natural smile|fara cana sau alte obiecte in cadru|fara cana|fara obiecte(?: in cadru)?|fara maini(?: in cadru)?|no (?:cup|mug|props|objects|hands)(?: in frame)?|doar|numai|only|te rog|please|\bsi\b|\band\b/g,'').trim();
   if(rest) return null;
   return {angle,expression};
 }
@@ -1847,7 +1847,7 @@ function latestFaceIntent(ch, exclude){
 }
 function isolatedFacePlan(ch, intent){
   const shot='Close-up headshot, face only portrait. Tight crop from hairline to just below chin, face fills most of frame, no torso or extended arm. Eye-level stationary camera, '+intent.angle+', '+intent.expression+', entire face and hairline visible, soft even daylight, neutral blurred background, ordinary clothing at neckline only. No hands, props, cup, steam or phone in frame.';
-  return {faceOnly:true,requestedExposure:'clothed',pov:false,cam:'close',posture:null,ro:{camera:'Portret facial',loc:'Fundal neutru',pozitie:intent.angle,tinuta:'Îmbrăcat',maini:'În afara cadrului'},samePlace:false,sameOutfit:false,people:[],self:true,planned:shot,asked:['Tight facial portrait with unobstructed face','No visible hands or props',intent.angle,intent.expression],shot,where:ch.where,together:false};
+  return {faceOnly:true,requestedExposure:'clothed',pov:false,cam:'close',posture:null,ro:{camera:'Portret facial',loc:'Fundal neutru',pozitie:intent.angle,tinuta:'Îmbrăcat',maini:'În afara cadrului'},samePlace:false,sameOutfit:false,people:[],self:true,planned:shot,asked:['Tight facial portrait with unobstructed face','No visible hands or props',intent.angle,intent.expression],shot,where:null,together:false};
 }
 async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = '', requestedExposure = ''} = {}){
   const portrait = !together && !camForce && (fix ? portraitIntent(fix) : latestFaceIntent(ch,exclude));
@@ -2436,7 +2436,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     : 'The reference image is a close-up of this person’s head: keep exactly this face and identity (' + HEAD_KEEP + '); everything else comes from this text, not from the reference.';
   // 10.1 (S5): camera din poza dinainte (cu persoana acoperită) intră într-un loc de reper rămas liber; corpul și fața au prioritate
   let sref = null, srefN = 0;
-  if(opt.sref && !bodyRef && sceneRefOn(c, opt)){
+  if(!opt.faceOnly && opt.sref && !bodyRef && sceneRefOn(c, opt)){
     if(clothedBody){ const used = [angRef, clothedBody.full2].filter(Boolean).length; if(used < 2){ sref = opt.sref; srefN = 3 + used; } }
     else { sref = opt.sref; srefN = angRef ? (ang2 ? 4 : 3) : 2; }
   }
@@ -2450,7 +2450,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     const body = fr.k === 'close' ? bodyRef : bodyRef || clothedBody?.blob || (fb ? await headHide(await fullBodyRef(fb, c.fullBox), 'hx:' + c.photoFull) : null);   // 13.6: capul estompat
     const face2 = face;   // 10.3
     const p3 = opt.faceOnly ? closeScenePrompt(c,shot,fr,asked,fix,st) : `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair exactly as shown (the same color, length, texture, volume and parting); preserve eyewear only if present in the reference.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
-    const s3 = opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
+    const s3 = !opt.faceOnly && opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
     const angles = !opt.faceOnly && st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
     const refs3 = [face2, body].filter(Boolean);
     let p3Final = p3;
