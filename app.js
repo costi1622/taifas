@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.22';
+const APP_VER = '16.0.7.23';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2805,7 +2805,8 @@ function viApproved(c, shot){
 }
 function viPose(lm){const y=yawOfLm(lm);return Number.isFinite(y)?{yaw:y,role:Math.abs(y)>=.55?'side':Math.abs(y)>=.22?'three':'front'}:{yaw:null,role:'unknown'};}
 const VI_ATLAS_SLOTS=['sideLeft','threeLeft','front','threeRight','sideRight'];
-function viAtlasSlot(p){if(!p||!Number.isFinite(p.yaw)||p.role==='unknown')return null;return p.role==='front'?'front':p.role+(p.yaw<0?'Left':'Right');}
+function viAtlasSlot(p){if(p?.confirmedSlot && VI_ATLAS_SLOTS.includes(p.confirmedSlot))return p.confirmedSlot;if(!p||!Number.isFinite(p.yaw)||p.role==='unknown')return null;return p.role==='front'?'front':p.role+(p.yaw<0?'Left':'Right');}
+function viAdjacentOrientation(a,b){return [['sideLeft','threeLeft'],['sideRight','threeRight']].some(pair=>a!==b&&pair.includes(a)&&pair.includes(b));}
 function viTargetSlot(shot){const role=viExplicitAngle(shot)||viSceneRole(shot);const t=String(shot||'').toLowerCase();const left=/toward(?:s)? (?:the )?(?:image |frame )?left|looking left|spre stânga imaginii|spre stanga imaginii/.test(t),right=/toward(?:s)? (?:the )?(?:image |frame )?right|looking right|spre dreapta imaginii/.test(t);return role==='front'?'front':left!==right?role+(left?'Left':'Right'):role;}
 function viAtlasRank(rows,shot){const target=viTargetSlot(shot);return rows.filter(r=>viRoleFamily(viAtlasSlot(r.pose)||'unknown')===viRoleFamily(target)).filter(r=>target===viRoleFamily(target)||viAtlasSlot(r.pose)===target).sort((a,b)=>Math.abs(Math.abs(a.pose.yaw)-(viRoleFamily(target)==='side'?1:viRoleFamily(target)==='three'?.38:0))-Math.abs(Math.abs(b.pose.yaw)-(viRoleFamily(target)==='side'?1:viRoleFamily(target)==='three'?.38:0)));}
 function viPoseCompatible(a,b){return !!viAtlasSlot(a) && viAtlasSlot(a)===viAtlasSlot(b) && Math.abs(a.yaw-b.yaw)<=.25;}
@@ -2815,7 +2816,7 @@ async function viScanAngles(c){
   const out=[];
   for(const key of keys){const blob=await DB.get(key).catch(()=>null);if(!blob)continue;
     const fs=await faceDescs(blob).catch(()=>[]);if(fs.length!==1)continue;
-    const pose=viPose(fs[0].lm);if(pose.role!=='unknown')out.push({key,pose,face:fs[0]});
+    const pose=viPose(fs[0].lm);const ref=c.visualIdentity?.refs?.find(r=>r.key===key&&r.approved);if(ref?.manualOrientation===ref?.role&&VI_ATLAS_SLOTS.includes(ref.role))pose.confirmedSlot=ref.role;if(pose.role!=='unknown'||pose.confirmedSlot)out.push({key,pose,face:fs[0]});
   }return out;
 }
 function viExplicitAngle(shot){const t=String(shot||'').toLowerCase();
@@ -2927,7 +2928,7 @@ function drawVisualIdentity(c,box){
   root.querySelector('#viSave').onclick=async()=>{p.permanent=root.querySelector('#viPermanent').value.trim();p.variable=root.querySelector('#viVariable').value.trim();await saveChars();toast('Profil vizual salvat');};
   root.querySelector('#viFile').onchange=async e=>{const f=e.target.files[0];if(!f||p.refs.length>=12)return;try{const k=await saveImg(await toJpeg(f,2048,.94));if(!viAdd(c,k,root.querySelector('#viRole').value)){await delImg(k);return;}await saveChars();drawPics(c);}catch(err){toast('Nu pot importa reperul.');}};
   root.querySelectorAll('[data-viregen]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viregen];if(!r||r.approved||!confirm('Regenerezi acest candidat? Cost Runware.'))return;b.disabled=true;try{await viGenerateAngle(c,r.role,r.key);drawPics(c);}catch(e){reportAtlasError(e);b.disabled=false;}});
-  root.querySelectorAll('[data-viapprove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viapprove];if(!r)return;if(p.locked&&r.approved){toast('Deblochează întâi identitatea.');return;}if(!r.approved&&r.audit&&r.audit.slot!==r.role){toast('Orientarea detectată nu corespunde. Regenerează sau importă un reper corect.');return;}if(!r.approved&&!confirm('Ai comparat candidatul cu originalul și confirmi identitatea și orientarea?'))return;r.approved=!r.approved;await saveChars();drawPics(c);});
+  root.querySelectorAll('[data-viapprove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viapprove];if(!r)return;if(p.locked&&r.approved){toast('Deblochează întâi identitatea.');return;}if(!r.approved){if(r.audit&&r.audit.slot!==r.role){const detected=r.audit.slot;const adjacent=viAdjacentOrientation(detected,r.role);if(!adjacent){toast('Orientare incompatibilă. Importă sau regenerează un reper corect.');return;}if(!confirm('Detector: '+VI_ROLES[detected]+'; solicitat: '+VI_ROLES[r.role]+'. Ai verificat vizual identitatea și confirmi orientarea solicitată?'))return;r.manualOrientation=r.role;}else{if(!confirm('Ai comparat candidatul cu originalul și confirmi identitatea și orientarea?'))return;delete r.manualOrientation;}}else delete r.manualOrientation;r.approved=!r.approved;await saveChars();drawPics(c);});
   root.querySelectorAll('[data-viremove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viremove];if(!r||viProtected(c,r.key))return;p.refs.splice(+b.dataset.viremove,1);await saveChars();await delImg(r.key);drawPics(c);});
 }
 async function extraRefs(c, shot, noBox){
