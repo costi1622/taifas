@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.21';
+const APP_VER = '16.0.7.22';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2860,13 +2860,24 @@ function viRotationPrompt(c,angle,direction,mode='crop'){
 }
 function viBenchmarkConfig(p){return {model:p.atlasModel==='kv'?RW_KV:RW_KL,mode:p.atlasRefs==='dual'?'dual':'crop'};}
 function viBenchmarkSummary(a){const m=a?.request;if(!m)return '';return `${m.model} · ${m.refs} repere · ${m.w}×${m.h} · ${m.taskUUID}`;}
-const viGenerating = new WeakSet();
+const viGenerating = new Map();
+const viLastAttempt = new Map();
+function viGenerationCheck(c,p,slot,replaceKey){
+  if(!VI_ATLAS_SLOTS.includes(slot))throw new Error('Orientare invalidă: '+String(slot));
+  if(slot==='front')throw new Error('Frontalul se importă din original.');
+  if(!c.photo)throw new Error('Portretul original lipsește.');
+  if(replaceKey&&!p.refs.some(r=>r.key===replaceKey&&!r.approved&&r.role===slot))throw new Error('Candidatul nu mai este disponibil. Redeschide profilul.');
+  if(p.refs.length>=12&&!replaceKey)throw new Error('Limita de 12 repere a fost atinsă.');
+  if(viGenerating.has(c.id))throw new Error('O generare pentru acest personaj este deja activă. Așteaptă finalizarea.');
+}
 async function viGenerateAngle(c,slot,replaceKey=null){
-  const p=viProfile(c); if(!VI_ATLAS_SLOTS.includes(slot)||slot==='front'||!c.photo||(p.refs.length>=12&&!replaceKey)||viGenerating.has(c))throw new Error('Generare indisponibilă.');
-  if(!rwReady()||S.rw!=='on')throw new Error('Activează Runware în Setări → Poze.');
-  viGenerating.add(c);let key=null;try{
+  const p=viProfile(c), id=c.id; let stage='verificare locală', key=null, acquired=false;
+  try{
+    viGenerationCheck(c,p,slot,replaceKey);
+    if(!rwReady()||S.rw!=='on')throw new Error('Activează Runware în Setări → Poze.');
+    viGenerating.set(id,true);acquired=true;stage='scanare repere';
     const rows=await viScanAngles(c);if(rows.some(r=>viAtlasSlot(r.pose)===slot)||p.refs.some(r=>!r.approved&&r.role===slot&&r.key!==replaceKey))throw new Error('Există deja un reper sau candidat.');
-    const original=c.photo, source=await viCanonicalCrop(c);
+    stage='pregătire original';const original=c.photo, source=await viCanonicalCrop(c);
     if(replaceKey&&!p.refs.some(r=>r.key===replaceKey&&!r.approved&&r.role===slot))throw new Error('Candidat indisponibil.');
     const direction=slot.endsWith('Left')?'left':'right', angle=slot.startsWith('side')?'strict side profile, one eye visible':'three-quarter view, both eyes visible';
     const cfg=viBenchmarkConfig(p);
@@ -2876,7 +2887,8 @@ async function viGenerateAngle(c,slot,replaceKey=null){
     const refs=[await toJpeg(source.blob,1024,.94)];
     if(cfg.mode==='dual')refs.push(await toJpeg(originalBlob,1024,.94));
     if(rwCapLeft()<rwPer())throw new Error('Plafon Runware insuficient.');
-    const blob=await rwRun(prompt,refs,768,1024,new AbortController().signal,cfg.model,1);
+    stage='cerere Runware '+cfg.model;const blob=await rwRun(prompt,refs,768,1024,new AbortController().signal,cfg.model,1);
+    stage='evaluare și salvare';
     const audit=await viCandidateAudit(c,blob,slot);
     if(c.photo!==original)throw new Error('Portretul s-a schimbat în timpul generării.');
     key=await saveImg(blob);const old=p.refs.slice();
@@ -2886,7 +2898,9 @@ async function viGenerateAngle(c,slot,replaceKey=null){
     p.refs.find(r=>r.key===key).audit={...audit,request:meta||null,config:cfg};
     try{await saveChars();}catch(e){p.refs=old;throw e;}key=null;
     if(replaceKey)await delImg(replaceKey).catch(()=>{});
-  }finally{if(key)await delImg(key).catch(()=>{});viGenerating.delete(c);}
+    viLastAttempt.set(id,'Generare finalizată: '+slot);
+  }catch(e){const msg=stage+': '+String(e.message||e);viLastAttempt.set(id,msg);throw new Error(msg);}
+  finally{if(key)await delImg(key).catch(()=>{});if(acquired)viGenerating.delete(id);}
 }
 function drawVisualIdentity(c,box){
   const p=viProfile(c);
@@ -2905,12 +2919,14 @@ function drawVisualIdentity(c,box){
   for(const [id,prop,def] of [['viBenchModel','atlasModel','classic'],['viBenchRefs','atlasRefs','crop']]){const el=root.querySelector('#'+id);el.value=p[prop]||def;el.onchange=async()=>{p[prop]=el.value;await saveChars();};}
   root.querySelectorAll('[data-vipreview]').forEach(b=>{const r=p.refs[+b.dataset.vipreview],m=r?.audit?.request;if(!m)return;const d=document.createElement('details');const sum=document.createElement('summary');sum.textContent='Diagnostic cerere atlas';d.append(sum);const t=document.createElement('small');t.style.overflowWrap='anywhere';t.textContent=viBenchmarkSummary(r.audit)+' · '+m.prompt+' · '+JSON.stringify(m.params);d.append(t);for(const ref of m.referenceManifest||[]){const info=document.createElement('small');info.textContent=`Reper ${ref.index}: ${ref.width}×${ref.height} · ${ref.bytes} bytes · SHA-256 ${ref.sha256||'—'}`;d.append(info);if(ref.thumbnail){const im=document.createElement('img');im.src=ref.thumbnail;im.alt='Reper efectiv '+ref.index;im.style.maxWidth='100%';d.append(im);}}b.closest('figure').append(d);});
   const status=root.querySelector('#viAtlasStatus'), scan=root.querySelector('#viAtlasScan');
-  const refresh=async()=>{scan.disabled=true;try{const rows=await viScanAngles(c);if(!root.isConnected)return;const slots=VI_ATLAS_SLOTS.map(slot=>({slot,n:rows.filter(r=>viAtlasSlot(r.pose)===slot).length,pending:p.refs.some(r=>!r.approved&&r.role===slot)}));status.innerHTML=`<div>${slots.filter(x=>x.n).length}/5 orientări aprobate</div>`+slots.map(x=>`<div>${esc(VI_ROLES[x.slot])}: ${x.n||'lipsește'} ${!x.n&&!x.pending&&x.slot!=='front'?`<button class="btn sm" data-vigen="${x.slot}">Generează</button>`:x.pending?' · candidat în așteptare':''}</div>`).join('');status.querySelectorAll('[data-vigen]').forEach(b=>b.onclick=async()=>{if(!confirm('Generezi un reper Runware cu cost API?'))return;scan.disabled=true;status.querySelectorAll('button').forEach(x=>x.disabled=true);try{await viGenerateAngle(c,b.dataset.vigen);drawPics(c);}catch(e){toast(String(e.message||e));await refresh();}});}catch(e){status.textContent='Scanare indisponibilă.';}finally{scan.disabled=false;}};
+  const diag=document.createElement('small');diag.style.cssText='display:block;overflow-wrap:anywhere';diag.setAttribute('role','status');diag.textContent=viLastAttempt.get(c.id)||'Nicio încercare în această sesiune.';scan.after(diag);
+  const reportAtlasError=e=>{diag.textContent=String(e.message||e);toast(diag.textContent);};
+  const refresh=async()=>{scan.disabled=true;try{const rows=await viScanAngles(c);if(!root.isConnected)return;const slots=VI_ATLAS_SLOTS.map(slot=>({slot,n:rows.filter(r=>viAtlasSlot(r.pose)===slot).length,pending:p.refs.some(r=>!r.approved&&r.role===slot)}));status.innerHTML=`<div>${slots.filter(x=>x.n).length}/5 orientări aprobate</div>`+slots.map(x=>`<div>${esc(VI_ROLES[x.slot])}: ${x.n||'lipsește'} ${!x.n&&!x.pending&&x.slot!=='front'?`<button class="btn sm" data-vigen="${x.slot}">Generează</button>`:x.pending?' · candidat în așteptare':''}</div>`).join('');status.querySelectorAll('[data-vigen]').forEach(b=>b.onclick=async()=>{if(!confirm('Generezi un reper Runware cu cost API?'))return;scan.disabled=true;status.querySelectorAll('button').forEach(x=>x.disabled=true);try{await viGenerateAngle(c,b.dataset.vigen);drawPics(c);}catch(e){reportAtlasError(e);await refresh();}});}catch(e){status.textContent='Scanare indisponibilă.';}finally{scan.disabled=false;}};
   scan.onclick=refresh; refresh();
   root.querySelector('#viLock').onchange=async e=>{if(!viLock(c,e.target.checked)){e.target.checked=false;toast('Adaugă întâi un portret.');return;} await saveChars();drawPics(c);};
   root.querySelector('#viSave').onclick=async()=>{p.permanent=root.querySelector('#viPermanent').value.trim();p.variable=root.querySelector('#viVariable').value.trim();await saveChars();toast('Profil vizual salvat');};
   root.querySelector('#viFile').onchange=async e=>{const f=e.target.files[0];if(!f||p.refs.length>=12)return;try{const k=await saveImg(await toJpeg(f,2048,.94));if(!viAdd(c,k,root.querySelector('#viRole').value)){await delImg(k);return;}await saveChars();drawPics(c);}catch(err){toast('Nu pot importa reperul.');}};
-  root.querySelectorAll('[data-viregen]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viregen];if(!r||r.approved||!confirm('Regenerezi acest candidat? Cost Runware.'))return;b.disabled=true;try{await viGenerateAngle(c,r.role,r.key);drawPics(c);}catch(e){toast(String(e.message||e));b.disabled=false;}});
+  root.querySelectorAll('[data-viregen]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viregen];if(!r||r.approved||!confirm('Regenerezi acest candidat? Cost Runware.'))return;b.disabled=true;try{await viGenerateAngle(c,r.role,r.key);drawPics(c);}catch(e){reportAtlasError(e);b.disabled=false;}});
   root.querySelectorAll('[data-viapprove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viapprove];if(!r)return;if(p.locked&&r.approved){toast('Deblochează întâi identitatea.');return;}if(!r.approved&&r.audit&&r.audit.slot!==r.role){toast('Orientarea detectată nu corespunde. Regenerează sau importă un reper corect.');return;}if(!r.approved&&!confirm('Ai comparat candidatul cu originalul și confirmi identitatea și orientarea?'))return;r.approved=!r.approved;await saveChars();drawPics(c);});
   root.querySelectorAll('[data-viremove]').forEach(b=>b.onclick=async()=>{const r=p.refs[+b.dataset.viremove];if(!r||viProtected(c,r.key))return;p.refs.splice(+b.dataset.viremove,1);await saveChars();await delImg(r.key);drawPics(c);});
 }
