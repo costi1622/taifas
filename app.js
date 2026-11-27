@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.23';
+const APP_VER = '16.0.7.24';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1840,14 +1840,28 @@ function portraitIntent(text){
   if(rest) return null;
   return {angle,expression};
 }
+function explicitPortraitPlan(text){
+  const t=String(text||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase();
+  if(!/^(?:trimite-mi|trimite mi|fa-mi|fa mi|vreau|doresc|send me|give me)\s+(?:un |o |a )?(?:portret|fotografie de aproape|poza de aproape|close-up portrait)\b/.test(t))return null;
+  if(/\b(?:impreuna|cu mine|together|full body|corp intreg|oglinda|mirror)\b/.test(t))return null;
+  const side=/profil|90 de grade|90 degrees/.test(t), three=/trei sferturi|three.quarter|¾|3\/4|(?:35|40|45) de grade/.test(t);
+  const dir=/dreapta|right/.test(t)?'right':/stanga|left/.test(t)?'left':'';
+  if(!side&&!three&&!/frontal|din fata/.test(t))return null;
+  const angle=(side?'strict side profile, head turned 90 degrees':three?'three-quarter view, head turned 35 degrees, both eyes visible':'frontal view')+(dir?' toward the image '+dir:'');
+  const expression=/zambet|smile/.test(t)?'natural subtle smile':'relaxed expression';
+  const place=/gradina|garden/.test(t)?'in the garden, natural daylight':/fundal neutru|neutral background/.test(t)?'neutral background':null;
+  const remainder=t.replace(/^(?:trimite-mi|trimite mi|fa-mi|fa mi|vreau|doresc|send me|give me)\s+(?:un |o |a )?(?:portret|fotografie de aproape|poza de aproape|close-up portrait)/,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(?:din|de|la|cu|si|in|pe|spre|a|o|un|complet|profil|frontal|fata|intoarsa|aproximativ|grade|degrees|35|40|45|90|3|4|dreapta|stanga|imaginii|amandoi|ochii|vizibili|zambet|discret|natural|gradina|lumina|naturala|mainile|relaxate|fara|cana|telefon|alte|obiecte|maini|cadru|fundal|neutru|te|rog)\b/g,'').trim();
+  if(remainder)return null;
+  return {angle,expression,place};
+}
 function plainFaceIntent(text){return !!portraitIntent(text);}
 function latestFaceIntent(ch, exclude){
   const m=ch.msgs.filter(x=>x!==exclude && x.role==='user' && x.text && !x.err && !x.pending && !x.pendingImg).slice(-1)[0];
-  return m ? portraitIntent(m.text) : null;
+  return m ? (explicitPortraitPlan(m.text)||portraitIntent(m.text)) : null;
 }
 function isolatedFacePlan(ch, intent){
-  const shot='Close-up headshot, face only portrait. Tight crop from hairline to just below chin, face fills most of frame, no torso or extended arm. Eye-level stationary camera, '+intent.angle+', '+intent.expression+', entire face and hairline visible, soft even daylight, neutral blurred background, ordinary clothing at neckline only. No hands, props, cup, steam or phone in frame.';
-  return {faceOnly:true,requestedExposure:'clothed',pov:false,cam:'close',posture:null,ro:{camera:'Portret facial',loc:'Fundal neutru',pozitie:intent.angle,tinuta:'Îmbrăcat',maini:'În afara cadrului'},samePlace:false,sameOutfit:false,people:[],self:true,planned:shot,asked:['Tight facial portrait with unobstructed face','No visible hands or props',intent.angle,intent.expression],shot,where:null,together:false};
+  const shot='Close-up headshot, face only portrait. Tight crop from hairline to just below chin, face fills most of frame, no torso or extended arm. Eye-level stationary camera, '+intent.angle+', '+intent.expression+', entire face and hairline visible, soft even daylight, '+(intent.place||'neutral blurred background')+', ordinary clothing at neckline only. No hands, props, cup, steam or phone in frame.';
+  return {faceOnly:true,requestedExposure:'clothed',pov:false,cam:'close',posture:null,ro:{camera:'Portret facial',loc:'Fundal neutru',pozitie:intent.angle,tinuta:'Îmbrăcat',maini:'În afara cadrului'},samePlace:false,sameOutfit:false,people:[],self:true,planned:shot,asked:['Tight facial portrait with unobstructed face','No visible hands or props',intent.angle,intent.expression,...(intent.place?[intent.place]:[])],shot,where:null,together:false};
 }
 async function planShot(c, ch, {promised = '', exclude = null, signal, together = false, fix = '', cam:camForce = '', requestedExposure = ''} = {}){
   const portrait = !together && !camForce && (fix ? portraitIntent(fix) : latestFaceIntent(ch,exclude));
@@ -2424,8 +2438,8 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   if(!bodyRef && exposure === 'clothed' && st === 'photo' && fr.k !== 'close'){ try{ clothedBody = await bodyRefFor(c, shot, opt); if(opt.bounded && clothedBody) clothedBody = {...clothedBody, full2:null}; }catch(e){ clothedBody = null; } }
   // 9.83 (2): scena cere un unghi pe care portretul nu-l arată (profil, zâmbet larg) → și unghiul din fișa de identitate
   let angRef = null, angName = '', angTxt = '', angLbl = '', ang2 = null;
-  if(opt.faceOnly && exposure==='clothed' && st==='photo'){const a=await viPortraitAngle(c,shot).catch(()=>null);if(a){angRef=a.img;angName=a.name;angTxt=a.txt;angLbl=a.lbl;}}   // 10.6 (B) + 11.0 (C2): după scor; fără corp în cadru, două
-  if(!opt.faceOnly && !bodyRef && st === 'photo'){ const wantS = !!(opt.sref && sceneRefOn(c, opt)), room = clothedBody ? 2 + (clothedBody.full2 ? 1 : 0) + (wantS ? 1 : 0) < 4 : true;
+  if(fr.k==='close' && exposure==='clothed' && st==='photo'){const a=await viPortraitAngle(c,shot).catch(()=>null);if(a){angRef=a.img;angName=a.name;angTxt=a.txt;angLbl=a.lbl;}}   // 10.6 (B) + 11.0 (C2): după scor; fără corp în cadru, două
+  if(!angRef && !opt.faceOnly && !bodyRef && st === 'photo'){ const wantS = !!(opt.sref && sceneRefOn(c, opt)), room = clothedBody ? 2 + (clothedBody.full2 ? 1 : 0) + (wantS ? 1 : 0) < 4 : true;
     try{ const as = await angleRefsFor(c, shot, room, clothedBody || opt.bounded ? 1 : 2, !!opt.idLeg); if(as[0]){ angRef = as[0].img; angName = as[0].name; angTxt = as[0].txt; angLbl = as[0].lbl; } if(as[1]) ang2 = as[1]; }catch(e){} }
   let ratioTxt = ''; if(clothedBody){ try{ ratioTxt = bodyRatioText(await refBodySig(c)); }catch(e){} }   // 9.89 (a)
   const faceInstruction = clothedBody
@@ -2452,7 +2466,7 @@ async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
     const face2 = face;   // 10.3
     const p3 = opt.faceOnly ? closeScenePrompt(c,shot,fr,asked,fix,st) : `${ageIdentityLead(c)}${stilLead(st)}${continuity}${bustLock}${asked.length ? `REQUESTED, must be clearly visible: ${asked.join('; ')}. ` : ''}${stilFrame(st, fr.p)}. ${glassLead(c, id)}${shot}.${fix ? ` Corrections from the previous attempt: ${fix}.` : ''}${nude} Image 1 is ${c.name}'s head: keep her face exact, the same face shape, eyes, nose, lips, skin tone and texture, and any marks, and the hair exactly as shown (the same color, length, texture, volume and parting); preserve eyewear only if present in the reference.${body ? ` Image 2 is ${c.name}'s body reference: match the profile reference's actual bust scale precisely: preserve its apparent volume, forward projection, width and fullness relative to shoulders, ribcage and waist. If it is very large/prominent in the reference, keep it equally large/prominent and clearly visible in the requested framing; never normalize, flatten, narrow or reduce it. Do not exaggerate beyond the reference. Do not copy the reference clothes, pose or background.` : ''} ${c.name}, permanent look unless the request above changes something: ${lookText(c, id, shot) || 'as in image 1'}. Everything else (place, outfit, pose, framing, light) comes from this text. ${STIL_TAG[st]}`;
     const s3 = !opt.faceOnly && opt.sref && !bodyRef && sceneRefOn(c, opt) ? opt.sref : null;   // 10.1 (S5)
-    const angles = opt.faceOnly ? (angRef?[{img:angRef,txt:angTxt,lbl:angLbl}]:[]) : st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
+    const angles = fr.k==='close' && angRef ? [{img:angRef,txt:angTxt,lbl:angLbl}] : opt.faceOnly ? (angRef?[{img:angRef,txt:angTxt,lbl:angLbl}]:[]) : st === 'photo' && exposure === 'clothed' ? await angleRefsFor(c, shot, true, fr.k === 'close' ? 1 : 2).catch(()=>[]) : [];
     const refs3 = [face2, body].filter(Boolean);
     let p3Final = p3;
     for(const a of angles){ refs3.push(a.img); p3Final += ` Image ${refs3.length} is ${a.txt} Use this angle only for facial geometry, not the scene or outfit.`; }
@@ -2807,7 +2821,7 @@ function viPose(lm){const y=yawOfLm(lm);return Number.isFinite(y)?{yaw:y,role:Ma
 const VI_ATLAS_SLOTS=['sideLeft','threeLeft','front','threeRight','sideRight'];
 function viAtlasSlot(p){if(p?.confirmedSlot && VI_ATLAS_SLOTS.includes(p.confirmedSlot))return p.confirmedSlot;if(!p||!Number.isFinite(p.yaw)||p.role==='unknown')return null;return p.role==='front'?'front':p.role+(p.yaw<0?'Left':'Right');}
 function viAdjacentOrientation(a,b){return [['sideLeft','threeLeft'],['sideRight','threeRight']].some(pair=>a!==b&&pair.includes(a)&&pair.includes(b));}
-function viTargetSlot(shot){const role=viExplicitAngle(shot)||viSceneRole(shot);const t=String(shot||'').toLowerCase();const left=/toward(?:s)? (?:the )?(?:image |frame )?left|looking left|spre stânga imaginii|spre stanga imaginii/.test(t),right=/toward(?:s)? (?:the )?(?:image |frame )?right|looking right|spre dreapta imaginii/.test(t);return role==='front'?'front':left!==right?role+(left?'Left':'Right'):role;}
+function viTargetSlot(shot){shot=String(shot||'').split(' CAMERA GEOMETRY 16067:')[0];const role=viExplicitAngle(shot)||viSceneRole(shot);const t=String(shot||'').toLowerCase();const left=/toward(?:s)? (?:the )?(?:image |frame )?left|looking left|spre stânga imaginii|spre stanga imaginii/.test(t),right=/toward(?:s)? (?:the )?(?:image |frame )?right|looking right|spre dreapta imaginii/.test(t);return role==='front'?'front':left!==right?role+(left?'Left':'Right'):role;}
 function viAtlasRank(rows,shot){const target=viTargetSlot(shot);return rows.filter(r=>viRoleFamily(viAtlasSlot(r.pose)||'unknown')===viRoleFamily(target)).filter(r=>target===viRoleFamily(target)||viAtlasSlot(r.pose)===target).sort((a,b)=>Math.abs(Math.abs(a.pose.yaw)-(viRoleFamily(target)==='side'?1:viRoleFamily(target)==='three'?.38:0))-Math.abs(Math.abs(b.pose.yaw)-(viRoleFamily(target)==='side'?1:viRoleFamily(target)==='three'?.38:0)));}
 function viPoseCompatible(a,b){return !!viAtlasSlot(a) && viAtlasSlot(a)===viAtlasSlot(b) && Math.abs(a.yaw-b.yaw)<=.25;}
 // Scan only canonical and explicitly approved references; never promote generated candidates.
@@ -2821,16 +2835,19 @@ async function viScanAngles(c){
 }
 function viExplicitAngle(shot){const t=String(shot||'').toLowerCase();
   if(/strict side profile|side profile|profile view|90 degrees|profil lateral|din profil/.test(t))return 'side';
-  if(/three[- ]quarter|trei sferturi|40 degrees|45 degrees/.test(t))return 'three';
+  if(/three[- ]quarter|trei sferturi|35 degrees|40 degrees|45 degrees|3\/4|¾/.test(t))return 'three';
   return null;
 }
 function viAngleInstruction(shot){const role=viExplicitAngle(shot);return role==='side'?'Strict lateral head profile: one eye visible, nose and lips in silhouette; not a three-quarter view.':role==='three'?'Three-quarter head view, both eyes visible, far cheek foreshortened; not a frontal or full side view.':'';}
 async function viPortraitAngle(c,shot){
   const role=viExplicitAngle(shot)||viSceneRole(shot);if(role==='front')return null;
-  for(const r of viAtlasRank(await viScanAngles(c),shot).filter(r=>r.key!==c.photo)){
+  const target=viTargetSlot(shot);
+  const refs=(c.visualIdentity?.refs||[]).filter(r=>r.approved&&r.key!==c.photo&&viRoleFamily(r.role)===role&&(target===role||r.role===target));
+  for(const r of refs){
     const b=await DB.get(r.key).catch(()=>null);if(!b)continue;
-    const img=await refCropUp(r.key,(c.refBoxes||{})[r.key]||await faceBoxOf(b)).catch(()=>null);
-    if(img)return {img,name:'approved angle',txt:'an explicitly approved reference of the same fictional character at a similar angle. Use facial geometry only, not scene or clothing.',lbl:'reper aprobat '+VI_ROLES[role]};
+    const box=(c.refBoxes||{})[r.key]||await viLocalBox(b).catch(()=>null);
+    const img=box?await refCropUp(r.key,box).catch(()=>null):b;
+    if(img)return {img,name:'approved angle',txt:'an explicitly approved reference at the requested angle. Use facial geometry only, not scene or clothing.',lbl:'reper aprobat '+VI_ROLES[r.role]};
   }return null;
 }
 function viBodyKeys(c){return [...new Set([c.photoFull,...(c.visualIdentity?.refs||[]).filter(r=>r.approved&&r.role==='body').map(r=>r.key)].filter(Boolean))];}
@@ -5346,7 +5363,13 @@ function visualScore(value){
 }
 function parseVisualResult(out){
   const text=String(out||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');
-  let raw; try{ raw=JSON.parse(text); }catch(e){ const start=text.indexOf('{'), end=text.lastIndexOf('}'); try{ if(start<0||end<=start)throw e; raw=JSON.parse(text.slice(start,end+1)); }catch(_){throw new Error('JSON vizual invalid sau absent');} }
+  let raw; try{raw=JSON.parse(text);}catch(e){
+    for(let start=text.indexOf('{');start>=0;start=text.indexOf('{',start+1)){
+      let depth=0, quoted=false, escaped=false;
+      for(let i=start;i<text.length;i++){const ch=text[i];if(quoted){if(escaped)escaped=false;else if(ch==='\\')escaped=true;else if(ch==='"')quoted=false;continue;}if(ch==='"'){quoted=true;continue;}if(ch==='{')depth++;if(ch==='}'&&--depth===0){try{const candidate=JSON.parse(text.slice(start,i+1));const scores=candidate.scores||candidate;if(['face','scene','framing'].every(k=>visualScore(scores[k])!=null)&&Object.hasOwn(candidate,'limbIntegrity'))raw=candidate;}catch(_){}break;}}
+      if(raw)break;
+    }if(!raw)throw new Error('JSON vizual invalid sau absent');
+  }
   if(!raw || typeof raw!=='object' || Array.isArray(raw)) throw new Error('JSON vizual: obiect obligatoriu');
   const j=raw.scores && typeof raw.scores==='object' ? {...raw,...raw.scores} : raw;
   if(['face','scene','framing'].some(k=>visualScore(j[k])==null)) throw new Error('JSON vizual: scoruri obligatorii lipsă');
@@ -5380,7 +5403,7 @@ async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
   const must = together ? [] : mustOf(c);   // 10.0 (F6)
   const meta=opt.visualMeta||{};
   const anatomyRequired = !together && !opt.partner && (opt.requestedExposure || exposureMode(shot)) === 'clothed';
-  const anatomyPrompt = anatomyRequired ? `Independent anatomy audit of image 2 only. Camera mode: ${photoCameraMode(shot)}. Count visible arms (including partial camera arm), hands, phones and hands holding non-camera objects. Trace every hand to its arm; count disconnected hands too. A direct selfie has no visible phone and at most one object-holding hand. Do not let aesthetic quality override anatomy. A forbidden prop or wrong framing is request noncompliance, not a camera conflict. One camera arm and one object-holding hand are physically compatible. Report anatomy: {"arms":null,"hands":null,"visiblePhones":null,"objectHands":null,"extraLimbs":null,"cameraConflict":null,"evidence":""}. Counts are integers or null if uncertain; flags true/false/null. Evidence briefly describes actual visible geometry. For a tight facial portrait with no visible limbs, report arms:0, hands:0, extraLimbs:false if no extra limbs are visible; do not invent hidden anatomy.` : '';
+  const anatomyPrompt = anatomyRequired ? `Independent anatomy audit of image 2 only. Camera mode: ${photoCameraMode(shot)}. Count visible arms (including partial camera arm), hands, phones and hands holding non-camera objects. Trace every hand to its arm; count disconnected hands too. A direct selfie has no visible phone and at most one object-holding hand. Do not let aesthetic quality override anatomy. A forbidden prop or wrong framing is request noncompliance, not a camera conflict. One camera arm and one object-holding hand are physically compatible. Include an "anatomy" property INSIDE the same JSON object, never a second object: {"arms":null,"hands":null,"visiblePhones":null,"objectHands":null,"extraLimbs":null,"cameraConflict":null,"evidence":""}. Counts are integers or null if uncertain; flags true/false/null. Evidence briefly describes actual visible geometry. For a tight facial portrait with no visible limbs, report arms:0, hands:0, extraLimbs:false if no extra limbs are visible; do not invent hidden anatomy.` : '';
   const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Judge requested pose and objects as part of scene. For explicit side profile, a three-quarter view is not compliant. Check visible ear size, neck proportions and duplicate facial features; do not infer defects in hidden areas. Unrequested eyewear absent from reference is identity drift. ${asked?.length ? `Also score asked (0–10); absence requirements pass when forbidden items are absent. List only unmet requested details: ${asked.join("; ")}. Include asked and missing keys.` : ""} Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
   const out = await stream(opt.visualRetry ? 'Return one complete JSON object only. No markdown. Required numeric keys: face, scene, framing. Use null for unknown optional scores.' : 'You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:(opt.visualRetry ? compact :
 `${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${cleanPhotoScene(shot,{asked})}". Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
