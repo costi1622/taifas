@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.24';
+const APP_VER = '16.0.7.25';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2823,7 +2823,7 @@ function viAtlasSlot(p){if(p?.confirmedSlot && VI_ATLAS_SLOTS.includes(p.confirm
 function viAdjacentOrientation(a,b){return [['sideLeft','threeLeft'],['sideRight','threeRight']].some(pair=>a!==b&&pair.includes(a)&&pair.includes(b));}
 function viTargetSlot(shot){shot=String(shot||'').split(' CAMERA GEOMETRY 16067:')[0];const role=viExplicitAngle(shot)||viSceneRole(shot);const t=String(shot||'').toLowerCase();const left=/toward(?:s)? (?:the )?(?:image |frame )?left|looking left|spre stânga imaginii|spre stanga imaginii/.test(t),right=/toward(?:s)? (?:the )?(?:image |frame )?right|looking right|spre dreapta imaginii/.test(t);return role==='front'?'front':left!==right?role+(left?'Left':'Right'):role;}
 function viAtlasRank(rows,shot){const target=viTargetSlot(shot);return rows.filter(r=>viRoleFamily(viAtlasSlot(r.pose)||'unknown')===viRoleFamily(target)).filter(r=>target===viRoleFamily(target)||viAtlasSlot(r.pose)===target).sort((a,b)=>Math.abs(Math.abs(a.pose.yaw)-(viRoleFamily(target)==='side'?1:viRoleFamily(target)==='three'?.38:0))-Math.abs(Math.abs(b.pose.yaw)-(viRoleFamily(target)==='side'?1:viRoleFamily(target)==='three'?.38:0)));}
-function viPoseCompatible(a,b){return !!viAtlasSlot(a) && viAtlasSlot(a)===viAtlasSlot(b) && Math.abs(a.yaw-b.yaw)<=.25;}
+function viPoseCompatible(a,b){return !!viAtlasSlot(a) && viAtlasSlot(a)===viAtlasSlot(b) && (b.confirmedSlot===viAtlasSlot(a)||Math.abs(a.yaw-b.yaw)<=.25);}
 // Scan only canonical and explicitly approved references; never promote generated candidates.
 async function viScanAngles(c){
   const keys=[...new Set([c.photo,...(c.visualIdentity?.refs||[]).filter(r=>r.approved && r.role!=='body').map(r=>r.key)].filter(Boolean))];
@@ -5395,10 +5395,14 @@ async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
   const [full, body] = await Promise.all([DB.get(c.photo), c.photoFull && !together && !opt.usePortraitBody ? DB.get(c.photoFull).catch(() => null) : null]);
   const fb = !together && opt.usePortraitBody ? full : body;
   if(!full) throw new Error('Portretul nu poate fi citit.');
+  const angle = !together && !opt.partner && framingOf(shot).k === 'close' ? await viPortraitAngle(c,shot).catch(()=>null) : null;
+  const angleBlob = angle?.img instanceof Blob ? angle.img : null;
   const [id, imgs] = await Promise.all([
     identityOf(c).catch(() => null),
-    Promise.all([full, blob, fb].filter(Boolean).map(async image => blobToB64(await toJpeg(image, 768, .85))))
+    Promise.all([full, blob, fb, angleBlob].filter(Boolean).map(async image => blobToB64(await toJpeg(image, 768, .85))))
   ]);
+  const angleAudit = angleBlob ? ` Image ${fb?4:3} is an approved directional reference for the fictional character. Compare visible character design features at the requested angle; do not treat hidden features as mismatches. Keep canonical reference and scene checks. ` : '';
+  
   const marks = id && !id.none ? marksFor(c, id, shot).slice(0, 6) : [];   // 10.0 (F7): doar semnele din zonele care intră în cadru
   const must = together ? [] : mustOf(c);   // 10.0 (F6)
   const meta=opt.visualMeta||{};
@@ -5420,7 +5424,7 @@ ${fb ? '- "bust": compare visible bust volume and projection relative to shoulde
 - "asked": the user explicitly asked for these details: ${asked.map(a => '"' + a + '"').join(', ')}. 10 = every requirement is satisfied, 0 = none; absence requirements are satisfied when forbidden items are absent, not visible; judge angle, expression and crop separately; list the ones that are missing or wrong in "missing".` : ''}${must.length ? `
 - "must": this character's mandatory traits, numbered: ${must.map((x, i) => (i + 1) + '. ' + x.en).join('; ')}. Give a list with one answer per trait, in order: true = clearly matches in image 2; false = that part is visible in image 2 and it does NOT match; null = that part is not visible or too small to judge. Judge each one on its own, strictly, ignoring the light of the scene.` : ''}
 "fix": if face is below 8 or scene below 6 or framing below 5 or body below 7 or hair below 6${marks.length ? ' or marks below 6' : ''}${asked && asked.length ? ' or asked below 8' : ''}, give ONE short concrete English correction prioritizing identity first (face, then body: say exactly what differs, e.g. "fuller bust and wider hips as in the reference"), then hair${asked && asked.length ? ', then the missing requested details' : ''}, then scene; otherwise "".
-JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown","skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`) + "\n" + anatomyPrompt}], {max:opt.visualRetry ? 4096 : 2048, signal, cid:c.id, aux:!opt.visualRetry, meta, tag:'pozeai'});
+JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown","skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`) + "\n" + angleAudit + anatomyPrompt}], {max:opt.visualRetry ? 4096 : 2048, signal, cid:c.id, aux:!opt.visualRetry, meta, tag:'pozeai'});
   meta.textLength=String(out||'').length;
   if(meta.stop==='max_tokens') throw new Error('Evaluator: max_tokens — răspuns incomplet');
   const j = parseVisualResult(out), n = k => visualScore(j[k]);
@@ -5618,7 +5622,8 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     const quality = ordinary ? ordinaryQualityReview(checked,shot) : '';
     if(ordinary && !checked) throw failure('Poza a rămas nepublicată: evaluatorul vizual nu a putut verifica fotografia. Verifică manual fotografia.');
     if(quality) throw failure('Poza a rămas nepublicată: '+quality+'. Verifică manual fotografia.');
-    if((face == null || borderlineFace) && (!(checked?.face >= 9) || (faceMismatch && face - faceLimit > .10))) throw failure('Poza a rămas nepublicată: fața nu s-a putut confirma față de portret. Încearcă un cadru cu fața clar vizibilă sau un portret mai apropiat.');
+    if(face == null && !(checked?.face >= 9)) throw failure('Poza a rămas nepublicată: comparatorul local nu a furnizat un rezultat; evaluare vizuală '+(checked?.face ?? '—')+'/10. Verifică manual fotografia existentă, fără regenerare.');
+    if(borderlineFace && (!(checked?.face >= 9) || face - faceLimit > .10)) rejectFace();
     if(borderlineBody && (!(checked?.body >= 9) || (checked.bust != null && checked.bust < 8))) throw failure(checked?.body == null
       ? 'Poza a rămas nepublicată: măsurătoarea corpului a depășit puțin limita, iar comparația vizuală nu a putut confirma proporțiile. Încearcă un cadru mai apropiat ca poziție de reper.'
       : 'Poza a rămas nepublicată: comparația vizuală nu confirmă proporțiile reperului de corp.');
