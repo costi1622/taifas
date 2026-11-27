@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.26';
+const APP_VER = '16.0.7.27';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2028,9 +2028,9 @@ async function fdPersist(blob){
   if(!fp) return faceDescs0(blob);
   const m = fdMem.get(fp); if(m){ fdMem.delete(fp); fdMem.set(fp, m); return m; }
   const p = (async () => {
-    const fv = await fdMode() === 'a' ? 'a1' : 1;   // 14.0: amprentele ArcFace se țin separat de cele vechi
+    const fv = await fdMode() === 'a' ? 'a2' : 2;   // 14.0: amprentele ArcFace se țin separat de cele vechi
     try{ const v = await DB.get(thKey('f', fp)); if(v && v.v === fv && Array.isArray(v.r) && v.r.length){ fdTouch(fp); return v.r; } }catch(e){}
-    const r = await faceDescs0(blob), fv2 = r.length && r[0].j === 'a' ? 'a1' : 1;
+    const r = await faceDescs0(blob), fv2 = r.length && r[0].j === 'a' ? 'a2' : 2;
     if(r.length){ DB.set(thKey('f', fp), {v:fv2, r}).catch(() => {}); fdTouch(fp); }
     return r;
   })();
@@ -4782,7 +4782,7 @@ function drawIdTest(c, box){
 // 10.8: motorul din telefon (TensorFlow) lucrează pe rând, cu limită de timp. Dacă un pas nu se termină (placa video blocată),
 // pașii următori nu mai așteaptă: primesc imediat eroare, iar la pornirea următoare motorul merge pe procesor (WebAssembly).
 let tfQ = Promise.resolve(), tfStalled = false;
-const TF_TO = {face:45000, tile:20000, pose:30000, seg:30000, age:45000};
+const TF_TO = {face:90000, tile:20000, pose:30000, seg:30000, age:45000};
 function tfRun(what, fn, ms){
   if(tfStalled) return Promise.reject(new Error('motorul din telefon nu răspunde'));
   const run = tfQ.then(() => new Promise((res, rej) => {
@@ -4899,9 +4899,25 @@ async function faceDescs0x(blob){
       if(!f.nets.ssdMobilenetv1.isLoaded) await f.nets.ssdMobilenetv1.loadFromUri(FA + 'model');
       r = await f.detectAllFaces(im, new f.SsdMobilenetv1Options({minConfidence:.35})).withFaceLandmarks().withFaceDescriptors();
     }
+    // Recovery for large lateral portraits: retain original coordinate system.
+    let scale = 1, padX = 0, padY = 0, method = 'standard';
+    if(!r.length){
+      const attempts = [[.82,.20,608],[.65,.18,416]];
+      for(const [factor,threshold,size] of attempts){
+        const cv = document.createElement('canvas');
+        scale = Math.min(1, 960 / Math.max(im.naturalWidth,im.naturalHeight)) * factor;
+        const w = Math.round(im.naturalWidth*scale), h = Math.round(im.naturalHeight*scale);
+        padX = Math.round(w*.22); padY = Math.round(h*.22);
+        cv.width=w+2*padX; cv.height=h+2*padY;
+        const ctx=cv.getContext('2d'); ctx.fillStyle='#808080';ctx.fillRect(0,0,cv.width,cv.height);ctx.drawImage(im,padX,padY,w,h);
+        r=await f.detectAllFaces(cv,new f.TinyFaceDetectorOptions({inputSize:size,scoreThreshold:threshold})).withFaceLandmarks().withFaceDescriptors();
+        if(r.length){method='padded-sensitive';break;}
+      }
+      if(!r.length){scale=1;padX=padY=0; r=await f.detectAllFaces(im,new f.SsdMobilenetv1Options({minConfidence:.2})).withFaceLandmarks().withFaceDescriptors();method='ssd-sensitive';}
+    }
     const B = x => x.detection.box;
-    const out = r.map(x => ({d:Array.from(x.descriptor), a:B(x).area / area, box:{x:B(x).x, y:B(x).y, w:B(x).width, h:B(x).height}, W:im.naturalWidth, H:im.naturalHeight,
-      lm:x.landmarks && x.landmarks.positions ? x.landmarks.positions.map(p => [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10]) : null}));
+    const out = r.map(x => ({d:Array.from(x.descriptor), a:B(x).area / (area*scale*scale), method, box:{x:(B(x).x-padX)/scale, y:(B(x).y-padY)/scale, w:B(x).width/scale, h:B(x).height/scale}, W:im.naturalWidth, H:im.naturalHeight,
+      lm:x.landmarks && x.landmarks.positions ? x.landmarks.positions.map(p => [Math.round((p.x-padX)/scale * 10) / 10, Math.round((p.y-padY)/scale * 10) / 10]) : null}));
     // 14.0: amprenta ArcFace înlocuiește descriptorul face-api (păstrat în .fa); toate fețele din poză, sau niciuna
     if(out.length && await fdMode() === 'a'){ try{ for(const f of out){ if(!f.lm) throw new Error('fără puncte'); f.fa = f.d; f.d = await arcEmb(im, f.lm); f.j = 'a'; } }
       catch(e){ for(const f of out){ if(f.fa){ f.d = f.fa; delete f.fa; } delete f.j; } arcOff = true; arcErr = 'amprenta n-a mers: ' + String(e && e.message || e).slice(0, 100); } }
@@ -4912,7 +4928,7 @@ async function faceDescs0x(blob){
 async function refDescs(c){
   if(!c.photo) return [];
   const k = [await fdMode(), ...new Set([c.photo, ...(c.refs || []).slice(0, 2).filter(x => !refOut(c, x)), ...viApproved(c, '').filter(r=>viRoleFamily(r.role)!=='side').map(r=>r.key)])].join('|');   // 10.5 (R3): o poză în plus ieșită din grup nu mai intră   // 14.0: și judecătorul
-  if(c.faceEmb?.v === 2 && c.faceEmb.k === k && c.faceEmb.d.length) return c.faceEmb.d;
+  if(c.faceEmb?.v === 3 && c.faceEmb.k === k && c.faceEmb.d.length) return c.faceEmb.d;
   const d = [];
   for(const key of k.split('|').slice(1)){
     const b = await DB.get(key).catch(() => null); if(!b) continue;
@@ -4920,7 +4936,7 @@ async function refDescs(c){
     const f = fs.sort((x, y) => y.a - x.a)[0];
     if(f){ for(const v of [f.d,f.fa].filter(Boolean)) d.push(v.map(x => Math.round(x * 1e4) / 1e4)); }
   }
-  c.faceEmb = {k, d, v:2}; saveChars();
+  c.faceEmb = {k, d, v:3}; saveChars();
   return d;
 }
 // 14.0: amprentele ArcFace (512) → 1 − asemănarea (cosinus); cele vechi (128) → distanța obișnuită; amestecate → departe
