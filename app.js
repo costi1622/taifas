@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.20';
+const APP_VER = '16.0.7.21';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2854,9 +2854,12 @@ async function viCandidateAudit(c,blob,slot){
   const ds=compatible.map(r=>fdist(f.d,r.face.d)).filter(Number.isFinite);
   return {slot:viAtlasSlot(viPose(f.lm)),d:ds.length?Math.min(...ds):null};
 }
-function viRotationPrompt(c,angle,direction){
-  return `Edit the original fictional character photograph, not a new casting or a redesign. Image 1 is the canonical face crop; Image 2 is the original photograph of the same character and provides hair and clothing context. Change only the viewing angle to ${angle}, nose pointing toward image ${direction}. Keep the original expression, dry or wet hair state, hairstyle, braid placement, hairline, eyebrow shape, nose, lips, freckles, skin texture and apparent age. Do not invent a new hairstyle or change facial proportions. Fully clothed head-and-shoulders portrait, soft natural light, simple background, one person. `+ageIdentityLead(c);
+function viRotationPrompt(c,angle,direction,mode='crop'){
+  const refs=mode==='dual'?'Image 1 is the original face crop. Image 2 is the same original photograph for context.':'Image 1 is the original face crop.';
+  return `${refs} Rotate the head to ${angle}, nose toward image ${direction}. Preserve the original facial features, expression, hair arrangement and texture, skin and clothing. Keep the hair in its original condition. One fully clothed person, head and shoulders, neutral background. `+viNote(c);
 }
+function viBenchmarkConfig(p){return {model:p.atlasModel==='kv'?RW_KV:RW_KL,mode:p.atlasRefs==='dual'?'dual':'crop'};}
+function viBenchmarkSummary(a){const m=a?.request;if(!m)return '';return `${m.model} · ${m.refs} repere · ${m.w}×${m.h} · ${m.taskUUID}`;}
 const viGenerating = new WeakSet();
 async function viGenerateAngle(c,slot,replaceKey=null){
   const p=viProfile(c); if(!VI_ATLAS_SLOTS.includes(slot)||slot==='front'||!c.photo||(p.refs.length>=12&&!replaceKey)||viGenerating.has(c))throw new Error('Generare indisponibilă.');
@@ -2866,16 +2869,21 @@ async function viGenerateAngle(c,slot,replaceKey=null){
     const original=c.photo, source=await viCanonicalCrop(c);
     if(replaceKey&&!p.refs.some(r=>r.key===replaceKey&&!r.approved&&r.role===slot))throw new Error('Candidat indisponibil.');
     const direction=slot.endsWith('Left')?'left':'right', angle=slot.startsWith('side')?'strict side profile, one eye visible':'three-quarter view, both eyes visible';
-    const prompt=viRotationPrompt(c,angle,direction);
+    const cfg=viBenchmarkConfig(p);
+    const prompt=viRotationPrompt(c,angle,direction,cfg.mode);
     const originalBlob=await DB.get(original);
     if(!originalBlob)throw new Error('Originalul lipsește.');
-    const blob=await rwRun(prompt,[await toJpeg(source.blob,1024,.94),await toJpeg(originalBlob,1024,.94)],768,1024,new AbortController().signal,rwKlein(),1);
+    const refs=[await toJpeg(source.blob,1024,.94)];
+    if(cfg.mode==='dual')refs.push(await toJpeg(originalBlob,1024,.94));
+    if(rwCapLeft()<rwPer())throw new Error('Plafon Runware insuficient.');
+    const blob=await rwRun(prompt,refs,768,1024,new AbortController().signal,cfg.model,1);
     const audit=await viCandidateAudit(c,blob,slot);
     if(c.photo!==original)throw new Error('Portretul s-a schimbat în timpul generării.');
     key=await saveImg(blob);const old=p.refs.slice();
     if(replaceKey)p.refs=p.refs.filter(r=>r.key!==replaceKey||r.approved);
     if(!viAdd(c,key,slot)){p.refs=old;throw new Error('Nu se poate salva candidatul.');}
-    p.refs.find(r=>r.key===key).audit=audit;
+    const meta=rwImageMeta.get(blob);
+    p.refs.find(r=>r.key===key).audit={...audit,request:meta||null,config:cfg};
     try{await saveChars();}catch(e){p.refs=old;throw e;}key=null;
     if(replaceKey)await delImg(replaceKey).catch(()=>{});
   }finally{if(key)await delImg(key).catch(()=>{});viGenerating.delete(c);}
@@ -2892,7 +2900,10 @@ function drawVisualIdentity(c,box){
     const urls=[];d.addEventListener('close',()=>urls.forEach(u=>URL.revokeObjectURL(u)),{once:true});
     try{const source=await viCanonicalCrop(c), cb=await DB.get(r.key), box=await viLocalBox(cb);if(!box||!d.open)return;const crop=await cropFace(cb,box);if(!d.open)return;for(const [i,blob] of [source.blob,crop].entries()){const u=URL.createObjectURL(blob);urls.push(u);d.querySelectorAll('img')[i].src=u;}d.querySelector('figcaption').textContent='Original · față decupată';}catch(e){if(d.open)toast('Decupare indisponibilă; se afișează originalele.');}
   });
-  root.insertAdjacentHTML('afterbegin', `<div style="min-width:0;overflow-wrap:anywhere"><b>Atlas facial · 5 orientări · Studio 2.0</b><div id="viAtlasStatus" aria-live="polite">Scanare…</div><button class="btn sm" id="viAtlasScan">Scanează reperele aprobate (local)</button><small>Generează individual unghiurile lipsă prin Runware (cost API). Verifică și aprobă manual fiecare candidat. Originalele nu sunt înlocuite.</small></div>`);
+  root.insertAdjacentHTML('afterbegin', `<div style="min-width:0;overflow-wrap:anywhere"><b>Atlas facial · 5 orientări · Benchmark 2.1</b><div id="viAtlasStatus" aria-live="polite">Scanare…</div><button class="btn sm" id="viAtlasScan">Scanează reperele aprobate (local)</button><small>Generează individual unghiurile lipsă prin Runware (cost API). Verifică și aprobă manual fiecare candidat. Originalele nu sunt înlocuite.</small></div>`);
+  root.insertAdjacentHTML('afterbegin', `<div class="refbox"><b>Test motor atlas (independent)</b><label>Model<select id="viBenchModel"><option value="classic">Klein 9B clasic · 400@2</option><option value="kv">Klein 9B KV · 400@6</option></select></label><label>Repere<select id="viBenchRefs"><option value="crop">Decupaj original</option><option value="dual">Decupaj + original</option></select></label><small>O generare per test; setările generale nu se schimbă.</small></div>`);
+  for(const [id,prop,def] of [['viBenchModel','atlasModel','classic'],['viBenchRefs','atlasRefs','crop']]){const el=root.querySelector('#'+id);el.value=p[prop]||def;el.onchange=async()=>{p[prop]=el.value;await saveChars();};}
+  root.querySelectorAll('[data-vipreview]').forEach(b=>{const r=p.refs[+b.dataset.vipreview],m=r?.audit?.request;if(!m)return;const d=document.createElement('details');const sum=document.createElement('summary');sum.textContent='Diagnostic cerere atlas';d.append(sum);const t=document.createElement('small');t.style.overflowWrap='anywhere';t.textContent=viBenchmarkSummary(r.audit)+' · '+m.prompt+' · '+JSON.stringify(m.params);d.append(t);for(const ref of m.referenceManifest||[]){const info=document.createElement('small');info.textContent=`Reper ${ref.index}: ${ref.width}×${ref.height} · ${ref.bytes} bytes · SHA-256 ${ref.sha256||'—'}`;d.append(info);if(ref.thumbnail){const im=document.createElement('img');im.src=ref.thumbnail;im.alt='Reper efectiv '+ref.index;im.style.maxWidth='100%';d.append(im);}}b.closest('figure').append(d);});
   const status=root.querySelector('#viAtlasStatus'), scan=root.querySelector('#viAtlasScan');
   const refresh=async()=>{scan.disabled=true;try{const rows=await viScanAngles(c);if(!root.isConnected)return;const slots=VI_ATLAS_SLOTS.map(slot=>({slot,n:rows.filter(r=>viAtlasSlot(r.pose)===slot).length,pending:p.refs.some(r=>!r.approved&&r.role===slot)}));status.innerHTML=`<div>${slots.filter(x=>x.n).length}/5 orientări aprobate</div>`+slots.map(x=>`<div>${esc(VI_ROLES[x.slot])}: ${x.n||'lipsește'} ${!x.n&&!x.pending&&x.slot!=='front'?`<button class="btn sm" data-vigen="${x.slot}">Generează</button>`:x.pending?' · candidat în așteptare':''}</div>`).join('');status.querySelectorAll('[data-vigen]').forEach(b=>b.onclick=async()=>{if(!confirm('Generezi un reper Runware cu cost API?'))return;scan.disabled=true;status.querySelectorAll('button').forEach(x=>x.disabled=true);try{await viGenerateAngle(c,b.dataset.vigen);drawPics(c);}catch(e){toast(String(e.message||e));await refresh();}});}catch(e){status.textContent='Scanare indisponibilă.';}finally{scan.disabled=false;}};
   scan.onclick=refresh; refresh();
