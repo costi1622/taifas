@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.29';
+const APP_VER = '16.0.7.30';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1487,7 +1487,7 @@ function cleanPhotoScene(shot,opt={}){
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
 function ageReviewNeeded(r){if(r?.lk?.ageInfo?.reliable===false)return false;return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return [d.visualAttempts?.length?'Încercări evaluator: '+JSON.stringify(d.visualAttempts):'','Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),d.faceReason?'Comparator local: '+d.faceReason:'',d.pose?'Poziție facială estimată: '+d.pose.role+' · indice yaw '+f(d.pose.yaw)+' · repere compatibile '+(d.poseRefs??0)+' · comparație '+(d.faceVia||'standard')+(d.poseRefs===0?' · fără reper compatibil confirmat':''):'',d.poseAudit?.length?'Audit repere comparator: '+JSON.stringify(d.poseAudit):'',rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, rezoluție, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',Object.hasOwn(d,'visualAsked')?'Respectarea cererii: '+f(d.visualAsked)+' / 10':'',d.visualMissing?.length?'Detalii neîndeplinite: '+d.visualMissing.join('; '):'',d.visualFix?'Corecție evaluator: '+d.visualFix:'',d.visualAnatomy?'Audit anatomie: '+JSON.stringify(d.visualAnatomy):'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return [d.visualAttempts?.length?'Încercări evaluator: '+JSON.stringify(d.visualAttempts):'','Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),d.faceReason?'Comparator local: '+d.faceReason:'',d.pose?'Poziție facială estimată: '+d.pose.role+' · indice yaw '+f(d.pose.yaw)+' · repere compatibile '+(d.poseRefs??0)+' · comparație '+(d.faceVia||'standard')+(d.poseRefs===0?' · fără reper compatibil confirmat':''):'',d.poseAudit?.length?'Audit repere comparator: '+JSON.stringify(d.poseAudit):'',rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.taskUUID?'Cerere imagine finală: '+rw.taskUUID:'',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, rezoluție, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.visualError?'Eroare evaluator: '+d.visualError:'',d.publicationReason?'Decizie publicare: '+d.publicationReason:'',Object.hasOwn(d,'visualAsked')?'Respectarea cererii: '+f(d.visualAsked)+' / 10':'',d.visualMissing?.length?'Detalii neîndeplinite: '+d.visualMissing.join('; '):'',d.visualFix?'Corecție evaluator: '+d.visualFix:'',d.visualAnatomy?'Audit anatomie: '+JSON.stringify(d.visualAnatomy):'',d.visualLimbIntegrity?'Integritate membre: '+d.visualLimbIntegrity:'',Object.hasOwn(d,'visualHands')?'Mâini: '+f(d.visualHands)+' / 10 · încadrare: '+f(d.visualFraming)+' / 10':'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
 function photoReferenceThumbs(m){const refs=m?.photoDiagnostic?.runware?.referenceManifest||[];return refs.length?`<div><small>Repere Runware efective (miniaturi locale)</small><div style="display:flex;flex-wrap:wrap;gap:8px">${refs.map(r=>`<div><small>Reper ${esc(String(r.index))}</small>${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.thumbnail||'')?`<img style="display:block;width:96px;height:auto" src="${esc(r.thumbnail)}" alt="Reper ${esc(String(r.index))}">`:'<small>Miniatură indisponibilă</small>'}</div>`).join('')}</div></div>`:'';}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
@@ -5599,6 +5599,19 @@ async function makeScenePhoto(c, shot, signal, opt = {}){
     if(referenceDistance != null) r.gen.pf = Math.round(referenceDistance * 1000) / 1000;
   }catch(e){}
   return r;
+}
+function reviewPublicationDecision(d,previous,reason,opt,shot){
+  const no=reason=>({ok:false,reason});
+  if(reason)return no(reason);
+  if(opt?.together || opt?.partner || exposureMode(shot)!=='clothed' || (opt?.requestedExposure && opt.requestedExposure!=='clothed'))return no('Cadru special: confirmare manuală necesară.');
+  if(/vârstă aparentă/i.test(previous.status||'') && previous.ageInfo?.reliable!==false)return no('Avertismentul anterior de vârstă necesită verificare manuală.');
+  if(!Number.isFinite(d.face)||!Number.isFinite(d.faceLimit)||d.face>d.faceLimit)return no('Comparatorul facial nu confirmă pragul obligatoriu.');
+  if(d.visualStatus!=='evaluat'||!(d.visualFace>=8)||!(d.visualScene>=6)||!(d.visualFraming>=6)||d.visualLimbIntegrity!=='ok')return no('Verificarea vizuală obligatorie este incompletă sau sub prag.');
+  if(d.visualMissing?.length || (Number.isFinite(d.visualAsked)&&d.visualAsked<8) || (opt?.asked?.length && !Number.isFinite(d.visualAsked)))return no('Detaliile cerute nu sunt confirmate.');
+  if(d.bodyLimit!=null && (!Number.isFinite(d.body)||d.body>d.bodyLimit))return no('Proporțiile nu sunt confirmate.');
+  if(d.reference!=='fără comparație corp' && d.body==null && !(d.visualBody>=8))return no('Corpul necesită verificare.');
+  if(!opt && framingOf(shot).k!=='close')return no('Fotografie veche: opțiunile originale lipsesc; verificare manuală.');
+  return {ok:true,reason:'Toate criteriile de republicare au trecut.'};
 }
 async function verifyStudioPhoto(c, blob, shot, signal, opt){
   const diagnostic = {runware:typeof rwImageMeta !== 'undefined' ? rwImageMeta.get(blob) : null,visualStatus:S.imgCheck === 'off' ? 'dezactivat' : 'neapelat'};
@@ -12766,7 +12779,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
   $('#sugg').innerHTML = '';
   const rw0 = rwDay().usd, rwN0 = rwDay().n, rwC0 = rwCallN;   // 13.3: cererile Runware ale pozei   // 9.37: cât a costat poza asta pe Runware (toate generările ei)
   const pT = setInterval(pTick, 120);
-  let reviewScene = '';
+  let reviewScene = '', reviewOptions = null;
   try{
     const promised = !target && (spont || opt.useShot) && ch.nextShot ? ch.nextShot.t : '';      // descrierea scrisă chiar de personaj când a trimis poza   // 13.8: sau scenariul video ales
     if(promised) delete ch.nextShot;
@@ -12850,6 +12863,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont, verifyIdentity:verifyIdentity && !together && !sceneOpt.partner, sceneWardrobe:true,usePortraitBody:chatBodyKey(c) === c.photo});
     const tVerify = performance.now();
     reviewScene = shot;
+    reviewOptions = {asked:[...asked],together,requestedExposure:sceneOpt.requestedExposure,partner:!!sceneOpt.partner,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off',spontaneous:!!spont};
     const studioDiagnostic = {};
     const diagnosticBase = {version:APP_VER,age:canonicalPhotoAge(c),ageSource:photoAgeSource(c),ageDelta:R.lk?.age??null,ageInfo:R.lk?.ageInfo??null,runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
     const bodyNotice = verifyIdentity
@@ -12872,7 +12886,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     let {prompt, blob, check, retried, bd, bodyWarn, faceWarn, gen:gdiag} = R; const fin = !!R.fin;
     if(gdiag){ gdiag.tm = {...tm.s, total:performance.now() - tm.t0}; gdiag.rwc = rwCalls.filter(x => x.i > rwC0).map(({i, ...x}) => x); if(gdiag.mdl === 'Klein 9B') gdiag.mdl = kleinLbl(); }   // 13.3: tot, inclusiv pașii de după (garanția, măsurarea, finisarea)
     const k = await saveImg(blob);
-    if(m.reviewImg){ await delImg(m.reviewImg).catch(()=>{}); delete m.reviewImg; delete m.reviewScene; }
+    if(m.reviewImg){ await delImg(m.reviewImg).catch(()=>{}); delete m.reviewImg; delete m.reviewScene; delete m.reviewOptions; }
     clearInterval(pT); if(live && live.stage){ live.stage.t = '✅ Gata'; live.stage.pv = 100; const st = $('#msgs .picload .plst'); if(st) st.textContent = '✅ Gata'; pDraw(100); }
     if(target){
       if(!m.imgAlts && m.img) m.imgAlts = [m.img];
@@ -12917,7 +12931,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
         + (Object.hasOwn(d,'visualFace') ? ' · vizual: față ' + visual(d.visualFace) + ', corp ' + visual(d.visualBody) + ', bust ' + visual(d.visualBust) : ' · fără comparație vizuală') : '';
       m.err = failure + details;
       if(d) m.photoDiagnostic={...d,version:APP_VER,status:d.status||'nepublicată'};
-      if(!flag && e.reviewBlob && !m.img){ try{ const key=await saveImg(e.reviewBlob); if(m.reviewImg) await delImg(m.reviewImg).catch(()=>{}); m.reviewImg=key; m.reviewScene=reviewScene; }catch(storageError){ m.err += '\nPrevizualizarea nu a putut fi salvată.'; } }
+      if(!flag && e.reviewBlob && !m.img){ try{ const key=await saveImg(e.reviewBlob); if(m.reviewImg) await delImg(m.reviewImg).catch(()=>{}); m.reviewImg=key; m.reviewScene=reviewScene; m.reviewOptions=reviewOptions; }catch(storageError){ m.err += '\nPrevizualizarea nu a putut fi salvată.'; } }
       if(flag) m.errKind = 'flag'; else if(e.photoKind) m.errKind = e.photoKind;
     }
   }
@@ -18865,16 +18879,23 @@ function bind(){
         const shot=m.reviewScene||'';
         if(!shot) throw Error('Scena originală lipsește; verificare manuală necesară.');
         const fresh={}; let reason='';
-        try{ reason=await verifyStudioPhoto(c,blob,shot,undefined,{diagnosticOut:fresh,sceneWardrobe:true,allowBodyUnknown:true,usePortraitBody:chatBodyKey(c)===c.photo,asked:m.reviewAsked||[]})||''; }
+        try{ reason=await verifyStudioPhoto(c,blob,shot,undefined,{diagnosticOut:fresh,sceneWardrobe:true,allowBodyUnknown:true,usePortraitBody:chatBodyKey(c)===c.photo,...m.reviewOptions,asked:m.reviewOptions?.asked||m.reviewAsked||m.asked||[]})||''; }
         catch(e){ if(!e.photoDiagnostic)throw e; Object.assign(fresh,e.photoDiagnostic); reason=String(e.message||e); }
         const previous=m.photoDiagnostic||{};
         m.photoDiagnostic={...previous,...fresh,runware:previous.runware,calls:previous.calls,version:APP_VER,status:'nepublicată',visualError:fresh.visualError||''};
         const score=n=>Number.isFinite(n)?n+'/10':'—';
-        m.err='Reevaluare finalizată: față '+score(fresh.visualFace)+', scenă '+score(fresh.visualScene)+', încadrare '+score(fresh.visualFraming)+'. '+(reason||'Verificarea curentă a trecut; publicarea necesită confirmare manuală pentru fotografia reținută anterior.');
+        const decision=reviewPublicationDecision(fresh,previous,reason,m.reviewOptions,shot);
+        m.photoDiagnostic.publicationReason=decision.reason;
+        if(decision.ok){
+          m.img=m.reviewImg; m.scene=shot; if(m.reviewOptions?.asked?.length)m.asked=m.reviewOptions.asked;
+          m.photoDiagnostic.status='acceptată automat după reevaluare';
+          delete m.err; delete m.errKind; delete m.manualIdentity; delete m.reviewImg; delete m.reviewScene; delete m.reviewOptions;
+          toast('Fotografia a trecut verificarea și a fost publicată.');
+        }else m.err='Reevaluare finalizată: față '+score(fresh.visualFace)+', scenă '+score(fresh.visualScene)+', încadrare '+score(fresh.visualFraming)+'. '+decision.reason;
       }catch(err){m.photoDiagnostic={...m.photoDiagnostic,version:APP_VER,visualStatus:'reevaluare eșuată',visualError:String(err.message||err),visualAttempts:err.visualAttempts||[]}; m.err='Reevaluare eșuată: '+String(err.message||err);}
       finally{delete m._reevaluating;btn.disabled=false;await saveChat(c,ch);if(chat===ch)renderMsgs();} return;
     }
-    if(e.target.closest('[data-review-accept],[data-review-delete]')){ if(!busy && m?.reviewImg && m.errKind==='local'){ const ch=chat,c=cur; const accept=!!e.target.closest('[data-review-accept]'); if(accept && !confirm('Publici manual fotografia? Identitatea nu a fost confirmată automat.')) return; const k=m.reviewImg; if(accept){ m.img=k; m.scene=m.reviewScene; m.manualIdentity=true; if(m.photoDiagnostic)m.photoDiagnostic.status='acceptată manual — identitate neconfirmată'; delete m.err; delete m.errKind; } else await delImg(k).catch(()=>{}); delete m.reviewImg; delete m.reviewScene; await saveChat(c,ch); if(chat===ch) renderMsgs(); } return; }
+    if(e.target.closest('[data-review-accept],[data-review-delete]')){ if(!busy && m?.reviewImg && m.errKind==='local'){ const ch=chat,c=cur; const accept=!!e.target.closest('[data-review-accept]'); if(accept && !confirm('Publici manual fotografia? Identitatea nu a fost confirmată automat.')) return; const k=m.reviewImg; if(accept){ m.img=k; m.scene=m.reviewScene; m.manualIdentity=true; if(m.photoDiagnostic)m.photoDiagnostic.status='acceptată manual — identitate neconfirmată'; delete m.err; delete m.errKind; } else await delImg(k).catch(()=>{}); delete m.reviewImg; delete m.reviewScene; delete m.reviewOptions; await saveChat(c,ch); if(chat===ch) renderMsgs(); } return; }
     if(e.target.closest('[data-regen]')){ if(!busy){ if(m.eco && chat){ chat.ecoCool = Date.now(); } reply(m); } return; }   // 9.60: ai refăcut un răspuns Haiku → filtrul devine mai prudent aici   // 8.19: o singură variantă nouă; „🎰 +2” doar dacă mai vrei
     if(e.target.closest('[data-more3]')){ if(!busy) reply(m, {three:true, keep:true}); return; }
     { const rb = e.target.closest('[data-rate]'); if(rb){ rateMsg(i, +rb.dataset.rate); return; } }
