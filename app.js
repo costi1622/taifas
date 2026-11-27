@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.31';
+const APP_VER = '16.0.7.32';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -459,11 +459,13 @@ const safeJSON = o => JSON.stringify(o, (k, v) => typeof v === 'string' ? wellFo
    se reia singură când revii (de cel mult 2 ori) */
 let bgEpoch = 0; document.addEventListener('visibilitychange', () => { if(document.hidden) bgEpoch++; });
 const untilVisible = () => !document.hidden ? Promise.resolve() : new Promise(r => { const f = () => { if(!document.hidden){ document.removeEventListener('visibilitychange', f); r(); } }; document.addEventListener('visibilitychange', f); });
+let photoCreditBlocked = false;
 async function stream(sys, msgs, opts = {}){
   const ep = bgEpoch;
   for(let k = 0; ; k++){
-    try{ return await stream0(sys, msgs, opts); }
+    try{ const result=await stream0(sys, msgs, opts); photoCreditBlocked=false; return result; }
     catch(e){
+      if(geCredit(e)) photoCreditBlocked=true;
       const net = e && e.name !== 'AbortError' && /Failed to fetch|NetworkError|network|Load failed|terminated|ERR_/i.test(String(e.message || e));
       if(!opts.groupSession && k < 2 && net && !opts.onText && !(opts.signal && opts.signal.aborted) && (bgEpoch !== ep || document.hidden)){ await untilVisible(); await sleep(800); continue; }
       throw e;
@@ -1656,7 +1658,7 @@ function prevSceneMsg(ch, m){
 }
 async function sceneOptOf(c, ch, m, pl, together){
   const o = {posture:pl.posture || null, pov:!!pl.pov, faceOnly:!!pl.faceOnly};
-  if(pl.faceOnly || framingOf(pl.shot).k==='close') return o;
+  if(pl.isolated || pl.faceOnly || framingOf(pl.shot).k==='close') return o;
   try{
     if(sceneRefOn(c, {together}) && pl.samePlace && !(pl.people && pl.people.length)){
       const pm = prevSceneMsg(ch, m), b = pm ? await DB.get(pm.img).catch(() => null) : null;
@@ -1890,17 +1892,18 @@ async function planShot(c, ch, {promised = '', exclude = null, signal, together 
   const recent = hist.slice(-16).map(x => spk(x, u, c.name) + ': ' + plain(stripMood(x.text)).slice(0, 600) + (acts(x.text) ? ' [actions: ' + acts(x.text) + ']' : '')).join('\n');
   const prevShots = ch.msgs.filter(x => x.img && x.scene && x !== exclude).slice(-3).map(x => '- ' + x.scene).join('\n');
   const home = c.home && Object.keys(c.home).length ? Object.entries(c.home).map(([k, v]) => `- ${k}: ${v}`).join('\n') : '';
-  const lf = lifeNow(c), meta = {}, ask = photoAsk(ch, exclude);
+  const lf = lifeNow(c), meta = {}, ask = fix || photoAsk(ch, exclude);
+  const isolated = !together && photoRequestLock(ask).daylight && photoExposureRequest(ask) !== 'topless' && exposureMode(ask)==='clothed';
   const exposure = photoExposureRequest(fix) || requestedExposure;
   const clothingRule = exposure && (exposure === 'clothed' || clearlyAdultCharacter(c)) ? 'Latest clothing instruction for a solo photo: ' + exposure + '. Apply exactly and disregard older or quoted clothing instructions.\n' : '';
-  const wx = aiReady() ? await photoWeather(c) : null;
+  const wx = aiReady() && !isolated ? await photoWeather(c) : null;
   const out = !aiReady() ? '': await stream(`You are the photo planner of a chat app where ${c.name}, a fictional adult character when explicitly established as 18+, sends ${u} photos from their phone. You read the conversation and decide exactly where the character is and how, then describe the photo. The conversation is the only truth. Answer with JSON only.`, [{role:'user', text:
 `Character: ${c.name}.${c.persona ? ' About: ' + plain(c.persona).slice(0, 500) : ''}
-Now: ${todEn()}.${wx ? ` Real weather right now in ${wx.city}, where the character lives: ${wx.t}°C, ${wx.en}, ${wx.day ? 'daylight' : 'dark outside'} (use it for anything outdoors and for the light through windows).` : ''}${lf ? ' Daily routine says right now: ' + lf.w + ' (use only if the conversation says nothing else).' : ''}
-${ch.scene ? 'Scene set by the user (has priority, translate to English): ' + ch.scene + '\n' : ''}${ch.where ? 'Last known state of the character (from earlier photos): ' + JSON.stringify(ch.where) + '\n' : ''}${frameLine(c, ch, exclude)}${ch.plot ? 'Ongoing activity noted by the character (Romanian, "activity › current step"): ' + ch.plot.t + '\n' : ''}${home ? `Rooms of ${c.name}'s home (reuse these details EXACTLY when the photo is in one of them, so the home always looks the same):\n${home}\n` : ''}
+Now: ${isolated ? 'Requested standalone daytime scene; ignore current time and previous temporary appearance.' : todEn()}.${wx ? ` Real weather right now in ${wx.city}, where the character lives: ${wx.t}°C, ${wx.en}, ${wx.day ? 'daylight' : 'dark outside'} (use it for anything outdoors and for the light through windows).` : ''}${lf && !isolated ? ' Daily routine says right now: ' + lf.w + ' (use only if the conversation says nothing else).' : ''}
+${ch.scene && !isolated ? 'Scene set by the user (has priority, translate to English): ' + ch.scene + '\n' : ''}${ch.where && !isolated ? 'Last known state of the character (from earlier photos): ' + JSON.stringify(ch.where) + '\n' : ''}${isolated ? '' : frameLine(c, ch, exclude)}${ch.plot && !isolated ? 'Ongoing activity noted by the character (Romanian, "activity › current step"): ' + ch.plot.t + '\n' : ''}${home ? `Rooms of ${c.name}'s home (reuse these details EXACTLY when the photo is in one of them, so the home always looks the same):\n${home}\n` : ''}
 Conversation, oldest first (the Romanian text is the source of truth):
-${recent || '(just started)'}
-${ask ? `\n${u.toUpperCase()}'S PHOTO REQUEST, verbatim (Romanian), HIGHEST PRIORITY: «${ask}»\nTreat colloquial requests to see/show/send a body part or a nude image as explicit requests for an image, not merely conversation. Every concrete detail in the request must be reflected in the image. Preserve requested place, scene, pose, camera angle and framing. If nudity is explicitly requested for a clearly adult character, change only the clothing state; do not invent a new room, pose or camera setup. The request overrides clothing continuity and in-character dialogue, but not safety rules. Treat earlier photo requests as superseded, not cumulative. Do not inherit props, activities, camera angles or expressions that conflict with this request. A standalone portrait or pose request does not require the previous activity or its objects. Fill in only compatible unspecified details from the conversation.\n` : ''}${S.userPhoto ? (together ? `\nThis photo is of ${c.name} and ${u} TOGETHER (${u} asked for it): describe both of them in the scene (where each one is, how they stand or sit together, what each wears). Photos together are ordinary everyday couple photos, both fully clothed and natural (like a selfie at a café or on a walk).\n` : `\n${u} has a profile photo, so a photo of the two of them together is possible: set "together": true only if they are physically together in the scene right now AND the photo is clearly of both of them (a selfie together, ${u} asks for a photo together). Then describe both of them. Photos together are ordinary everyday couple photos, both fully clothed and natural.\n`) : ''}${promised ? `\n${c.name} just sent the photo and described it like this: "${promised}". Use it only for details compatible with the latest explicit photo request; discard conflicting details.\n` : ''}${prevShots ? `\nPhotos already sent (vary pose or framing unless the conversation says the same place and moment):\n${prevShots}\n` : ''}${planFixBlock(u, fix, camForce)}
+${isolated ? '(Standalone photo: use only the explicit request below; ordinary dry hair and neutral appropriate clothing unless specified.)' : recent || '(just started)'}
+${ask ? `\n${u.toUpperCase()}'S PHOTO REQUEST, verbatim (Romanian), HIGHEST PRIORITY: «${ask}»\nTreat colloquial requests to see/show/send a body part or a nude image as explicit requests for an image, not merely conversation. Every concrete detail in the request must be reflected in the image. Preserve requested place, scene, pose, camera angle and framing. If nudity is explicitly requested for a clearly adult character, change only the clothing state; do not invent a new room, pose or camera setup. The request overrides clothing continuity and in-character dialogue, but not safety rules. Treat earlier photo requests as superseded, not cumulative. Do not inherit props, activities, camera angles or expressions that conflict with this request. A standalone portrait or pose request does not require the previous activity or its objects. Fill in only compatible unspecified details from the conversation.\n` : ''}${S.userPhoto ? (together ? `\nThis photo is of ${c.name} and ${u} TOGETHER (${u} asked for it): describe both of them in the scene (where each one is, how they stand or sit together, what each wears). Photos together are ordinary everyday couple photos, both fully clothed and natural (like a selfie at a café or on a walk).\n` : `\n${u} has a profile photo, so a photo of the two of them together is possible: set "together": true only if they are physically together in the scene right now AND the photo is clearly of both of them (a selfie together, ${u} asks for a photo together). Then describe both of them. Photos together are ordinary everyday couple photos, both fully clothed and natural.\n`) : ''}${promised && !isolated ? `\n${c.name} just sent the photo and described it like this: "${promised}". Use it only for details compatible with the latest explicit photo request; discard conflicting details.\n` : ''}${prevShots && !isolated ? `\nPhotos already sent (vary pose or framing unless the conversation says the same place and moment):\n${prevShots}\n` : ''}${planFixBlock(u, fix, camForce)}
 Rules:
 ${clothingRule}1. If ${u} asked for a specific photo (place, pose, outfit, activity, angle), that is the photo, with every requested detail.
 2. Otherwise: where ${c.name} is RIGHT NOW according to the most recent messages (room, what she/he sits/lies/stands on, what the hands do, what is worn). The latest statement wins over older ones; if the latest messages say nothing, keep the last known state.
@@ -1934,29 +1937,29 @@ JSON, keys in exactly this order, nothing else:
   // un refuz în dialog sau ținuta anterioară nu trebuie să transforme automat scena într-o poză îmbrăcată.
   // 9.38: nuditatea este determinată de cererea recentă care a declanșat fotografia, nu de orice mesaj vechi din istoric.
   // Se păstrează scena/poziția/încadrarea planificate; se suprascrie doar continuitatea vestimentară.
-  if(shot.length < 15) shot = fallbackShot(c, ch, exclude);
+  if(shot.length < 15) shot = isolated ? "Natural daytime photo of the reference character. Current request: " + ask : fallbackShot(c, ch, exclude);
   if(shot.length < 15) throw new Error('Nu am putut descrie poza din conversație. Mai încearcă o dată.');
-  if(j.where && typeof j.where === 'object'){
+  if(!isolated && j.where && typeof j.where === 'object'){
     const w = {}; for(const k of ['place', 'room', 'position', 'outfit', 'activity', 'light']) if(j.where[k]) w[k] = String(j.where[k]).slice(0, 200);
     ch.where = {...w, ts:Date.now()};
   }
-  if(j.home && typeof j.home === 'object'){
+  if(!isolated && j.home && typeof j.home === 'object'){
     c.home = c.home || {};
     for(const [k, v] of Object.entries(j.home)){ const kk = String(k).toLowerCase().trim().slice(0, 30), vv = String(v || '').trim().slice(0, 320); if(kk && vv.length > 8 && (c.home[kk] || Object.keys(c.home).length < 10)) c.home[kk] = vv; }
     saveChars();
   }
   const cam = String(j.camera || '');
-  const px = planPost(c, ch, j, shot, cam, u); shot = px.shot;   // 10.1: camera din ochii tăi, poziția, mâinile, rezumatul în română
+  const px = planPost(c, isolated ? {...ch,where:null} : ch, j, shot, cam, u); shot = px.shot;   // 10.1: camera din ochii tăi, poziția, mâinile, rezumatul în română
   const lock=photoRequestLock(ask);
   if(ask && !together && j.together!==true && j.self!==false && !(j.people||[]).length && (!exposure || exposure==='clothed')){
     shot=applyPhotoRequestLock(shot,lock);
     if(lock.frame==='close') {px.cam='close';px.samePlace=false;}
-    if(lock.frame==='full') px.samePlace=false; if(lock.daylight) px.samePlace=false;
+    if(lock.frame==='full') px.samePlace=false; if(lock.daylight) {px.samePlace=false;px.sameOutfit=false;px.posture=null;}
     if(lock.frame) asked.push(lock.frame==='close'?'head and shoulders only':'entire body from head to feet');
     if(lock.daylight) asked.push('natural daylight');
   }
   const people = Array.isArray(j.people) ? j.people.map(x => ({name:String(x && x.name || '').trim().slice(0, 40), relation:String(x && x.relation || '').trim().slice(0, 60), look:String(x && x.look || '').trim().slice(0, 300)})).filter(x => x.name || x.relation).slice(0, 2) : [];
-  return {requestedExposure: exposure, pov:px.pov, cam:px.cam, posture:px.posture, ro:px.ro, samePlace:px.samePlace, sameOutfit:px.sameOutfit, people, self: j.self !== false, planned: planned.length >= 15 ? planned : shot, asked, shot: lock.frame ? shot : cam && !shot.toLowerCase().includes(cam.toLowerCase().split(' ')[0]) ? cam + ', ' + shot : shot, where: ch.where, together: !!S.userPhoto && (together || j.together === true || /"together"\s*:\s*true/.test(out))};
+  return {isolated,requestedExposure: exposure, pov:px.pov, cam:px.cam, posture:px.posture, ro:px.ro, samePlace:px.samePlace, sameOutfit:px.sameOutfit, people, self: j.self !== false, planned: planned.length >= 15 ? planned : shot, asked, shot: lock.frame ? shot : cam && !shot.toLowerCase().includes(cam.toLowerCase().split(' ')[0]) ? cam + ', ' + shot : shot, where: isolated ? null : ch.where, together: !!S.userPhoto && (together || j.together === true || /"together"\s*:\s*true/.test(out))};
 }
 /* ───────── 9.42: motorul „ca în creator” pentru pozele din chat (S.photoEngine = 'creator', implicit) ─────────
    De ce: în chat, generatorul primea până la 4 imagini de model (fața, corpul, unghiurile) și ~250 de cuvinte de reguli care
@@ -3961,7 +3964,7 @@ async function finishPerson(c, r, shot, signal, opt = {}){
   if(photo && !opt.noChar && S.imgProv === 'worker'){
     if(r.fd === undefined || opt.together){ try{ r.fd = (await localFace(r.blob, c)).d; }catch(e){} }   // împreună: fața ei, dintre cele două
     // fața prea departe → retuș cu același model, păstrat doar dacă telefonul măsoară că s-a apropiat
-    if(r.fd != null && r.fd > faceRepairThreshold(c, opt) && !r.retouched && !r.retTried && !r.bounded && fixBudget()){   // 13.7 (3)   // o singură dată: nu repetă un retuș deja încercat
+    if(!photoCreditBlocked && r.fd != null && r.fd > faceRepairThreshold(c, opt) && !r.retouched && !r.retTried && !r.bounded && fixBudget()){   // 13.7 (3)   // o singură dată: nu repetă un retuș deja încercat
 
       pstage(signal, '✨ Garanția: potrivește fața', 96);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
@@ -3969,13 +3972,13 @@ async function finishPerson(c, r, shot, signal, opt = {}){
     }
     // 10.9: a doua trecere, o singură dată: fața tot peste prag după un retuș (al motorului sau al garanției)
     const late = () => tm && tm.t0 && performance.now() - tm.t0 > 90e3;   // 14.0: trecerile în plus nu țin poza mai mult de 90 s
-    if(r.fd != null && r.fd > fRet2(opt) && (r.retouched || (r.retTried && !opt.idLeg)) && !r.ret2 && !r.bounded && fixBudget() && !late()){   // 13.7 (3): și când primul retuș n-a apropiat fața
+    if(!photoCreditBlocked && r.fd != null && r.fd > fRet2(opt) && (r.retouched || (r.retTried && !opt.idLeg)) && !r.ret2 && !r.bounded && fixBudget() && !late()){   // 13.7 (3): și când primul retuș n-a apropiat fața
       r.ret2 = true; pstage(signal, '✨ Garanția: încă o trecere pe față', 97);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
         if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; r.bd = undefined; delete r.check; } } }catch(e){ if(e.name === 'AbortError') throw e; }
     }
     // 14.0 (2): a treia trecere, doar cu ArcFace, cât fața e sub țintă
-    if(r.fd != null && r.fd > fRet2(opt) && r.ret2 && !r.ret3 && !r.bounded && !opt.idLeg && fdModeNow() === 'a' && fixBudget() && !late()){
+    if(!photoCreditBlocked && r.fd != null && r.fd > fRet2(opt) && r.ret2 && !r.ret3 && !r.bounded && !opt.idLeg && fdModeNow() === 'a' && fixBudget() && !late()){
       r.ret3 = true; pstage(signal, '✨ Garanția: ultima trecere pe față', 98);
       try{ const x = await retouchBest(c, r.blob, signal, rwFor('ancorat') ? 'ancorat' : 'eco', shot, 'retus');
         if(x){ addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); if(x.used){ r.blob = x.blob; r.fd = x.d; } } }catch(e){ if(e.name === 'AbortError') throw e; }
@@ -5476,7 +5479,7 @@ ${fb ? '- "bust": compare visible bust volume and projection relative to shoulde
 - "asked": the user explicitly asked for these details: ${asked.map(a => '"' + a + '"').join(', ')}. 10 = every requirement is satisfied, 0 = none; absence requirements are satisfied when forbidden items are absent, not visible; judge angle, expression and crop separately; list the ones that are missing or wrong in "missing".` : ''}${must.length ? `
 - "must": this character's mandatory traits, numbered: ${must.map((x, i) => (i + 1) + '. ' + x.en).join('; ')}. Give a list with one answer per trait, in order: true = clearly matches in image 2; false = that part is visible in image 2 and it does NOT match; null = that part is not visible or too small to judge. Judge each one on its own, strictly, ignoring the light of the scene.` : ''}
 "fix": if face is below 8 or scene below 6 or framing below 5 or body below 7 or hair below 6${marks.length ? ' or marks below 6' : ''}${asked && asked.length ? ' or asked below 8' : ''}, give ONE short concrete English correction prioritizing identity first (face, then body: say exactly what differs, e.g. "fuller bust and wider hips as in the reference"), then hair${asked && asked.length ? ', then the missing requested details' : ''}, then scene; otherwise "".
-JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown","skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`) + "\n" + angleAudit + anatomyPrompt}], {max:opt.visualRetry ? 4096 : 2048, signal, cid:c.id, aux:!opt.visualRetry, meta, tag:'pozeai'});
+JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown",${anatomyRequired ? '"anatomy":{"arms":null,"hands":null,"visiblePhones":null,"objectHands":null,"extraLimbs":null,"cameraConflict":null,"evidence":""},' : ''}"skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`) + "\n" + angleAudit + anatomyPrompt}], {max:opt.visualRetry ? 4096 : 2048, signal, cid:c.id, aux:!opt.visualRetry, meta, tag:'pozeai'});
   meta.textLength=String(out||'').length;
   if(meta.stop==='max_tokens') throw new Error('Evaluator: max_tokens — răspuns incomplet');
   const j = parseVisualResult(out), n = k => visualScore(j[k]);
@@ -5716,6 +5719,7 @@ async function boundedScene(c, shot, signal, opt){
   const corrections = [pfbCorr(c, reference, opt.miss), mustCorr(c)].filter(Boolean).join('; ').slice(0, 700);
   const result = await bestScene(c, shot, signal, corrections || null, mode);
   result.bounded = true;
+  if(photoCreditBlocked) return result;
   result.fd ??= (await localFace(result.blob, c)).d;
   const measureBody = async blob => bodyMatch(c, await measuredBody(blob).catch(() => null), await photoBodySigs(c,opt).catch(() => [])).catch(() => null);
   if(c.photoFull && framingOf(shot).k !== 'close' && result.bd == null) result.bd = await measureBody(result.blob);
@@ -5781,6 +5785,7 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
   const corr0 = opt.together || opt.partner ? '' : [pfbCorr(c, id0, opt.miss), mustCorr(c)].filter(Boolean).join('; ').slice(0, 700);   // 10.0 (F6): ce ai ales peste poză și ce pică des
   let a = await gen(corr0 || null, opt);
   if(corr0) a.corr0 = corr0;
+  if(photoCreditBlocked) return a;
   if(a.lk === undefined && lookOn(c, opt)) a.lk = await lookOf(c, a.blob, shot, opt);   // 10.0: și la o singură variantă
   if(S.imgCheck === 'off' || !aiReady()) return a;
   // 9.86 (c): fața, corpul și scena deja măsurate ca bune → fără verificarea cu Claude (câteva secunde mai repede)
@@ -5837,7 +5842,7 @@ async function makeScenePhoto0(c, shot, signal, opt = {}){
   }
   const bodyBad = y => y && y.bd != null && y.bd > bodyGate(c);   // 9.85 (6): garanția de corp, măsurată în telefon
   const bad = x => x && ((!opt.together && !opt.partner && exposureMode(shot)==='clothed' && !!anatomyIssue(x,shot)) || x.face < 8 || x.scene < 6 || x.framing < 5 || (x.asked != null && x.asked < 8) || (x.body != null && x.body < 7 && !(a.fixed && a.fixed.includes('corp') && a.bd != null && a.bd <= bodyMax(c))) || (x.hair != null && x.hair < 6) || (x.marks != null && x.marks < 6) || (x.hands != null && x.hands < 5) || (x.mustMiss && x.mustMiss.length > 0) || bodyBad(a));   // 9.85: corpul reparat și confirmat prin măsurare nu mai cere poză nouă   // 9.39: corectare corp înainte de refacerea scenei
-  if(!bad(a.check) || (!rwFor(S.wkChat || S.wkModel) && capLeft() < (neurPerPhoto(S.wkChat || S.wkModel) || 5000))) return a;
+  if(photoCreditBlocked || !bad(a.check) || (!rwFor(S.wkChat || S.wkModel) && capLeft() < (neurPerPhoto(S.wkChat || S.wkModel) || 5000))) return a;
   let b;
   try{ b = await gen([(!opt.together && !opt.partner && exposureMode(shot)==='clothed' && anatomyIssue(a.check,shot) ? 'Correct the camera geometry and visible limbs; '+(a.check.anatomy?.evidence||'') : a.check.fix) || (bodyBad(a) ? '' : 'follow the scene and keep the face of the reference'), bodyBad(a) ? 'the body must be exactly the body of the full-body reference: the same build, weight and proportions' : '', corr0].filter(Boolean).join('; '), opt); addUsage(c.id, imgPrice(), 'img', null, opt.tag || 'poze'); }
   catch(e){ if(stopPhotoRetry(e)) throw e; return a; }
@@ -12788,6 +12793,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
   if(busy){ if(!spont) toast('Așteaptă să termine ' + (live ? live.c.name : '') + '.'); return; }
   if(spont && !rwFor(S.wkChat || S.wkModel) && capLeft() < (neurPerPhoto(S.imgProv === 'worker' ? (S.wkChat || S.wkModel) : undefined) || 5000)) return;   // limita zilnică atinsă: fără poze spontane
   if(S.imgProv === 'none'){ toast('Pornește pozele din Setări.'); return; }
+  if(photoCreditBlocked && S.imgCheck !== 'off'){ if(!spont) toast('Credit API vizual insuficient. Alimentează creditul și reevaluează fotografia existentă înainte de o nouă generare.',6500); return; }
   const c0 = cur, ch = chat, duo = duoOn(c0);   // 14.3: la duo, poza e a uneia (sau cu amândouă); conversația rămâne a duo-ului
   const who = duo ? (opt.who != null ? opt.who : target && target.who != null ? target.who : duoWho(c0, ch, null)) : null;
   const duoUm = duo && !target && opt.who == null ? [...ch.msgs].reverse().find(x => x.role === 'user' && x.text) : null;
@@ -12851,7 +12857,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
     else { const tS = performance.now(); let pl = await planShot(c, ch, {promised, exclude:m, signal:busy.signal, together, requestedExposure:spont ? '' : latestPhotoExposure(ch, m)}); tm.s.scena = performance.now() - tS;
       { const tC = performance.now(); pl = await framePreview(c, ch, m, pl, {spont, target, mode, promised, together, signal:busy.signal}); const dC = performance.now() - tC; if(dC > 300) tm.s.cadru = dC; }   // 13.3: confirmarea cadrului, separat   // 10.1 (S4): confirmi sau corectezi cadrul
       sceneOpt = await sceneOptOf(c, ch, m, pl, pl.together);   // 10.1 (S5, S8)
-      shot = pl.shot; where = pl.where; together = pl.together; asked = pl.asked || []; if(!pl.faceOnly) shot = giftDetail(c, shot, where);
+      shot = pl.shot; where = pl.where; together = pl.together; asked = pl.asked || []; if(!pl.faceOnly && !pl.isolated) shot = giftDetail(c, shot, where);
       // 9.56: leagă cererea explicită de expunere din ultimele mesaje de fotografia generată, chiar dacă planificatorul a omis-o.
       const requestedExposure = pl.requestedExposure || 'clothed';
       if(pl.requestedExposure) sceneOpt.requestedExposure = requestedExposure;
