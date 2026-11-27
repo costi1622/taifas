@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.6.4';
+const APP_VER = '16.0.6.5';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -1448,8 +1448,9 @@ function ageEstimateInfo(sig,ref,c){
   return {generated,reference,declared,reliable,delta:reliable?Math.round((generated-reference)*10)/10:null};
 }
 function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
-function ageReviewNeeded(r){return !!(r?.lk?.ageInfo?.reliable===false || r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function ageReviewNeeded(r){return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(Math.round(n*1000)/1000):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.4')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere față de reper: '+f(d.ageDelta),d.ageSource?'Sursa vârstei: '+d.ageSource.source+(d.ageSource.min!=null?' · interval '+d.ageSource.min+'–'+d.ageSource.max:''):'',d.ageInfo?'Estimare locală: imagine '+f(d.ageInfo.generated)+' / reper '+f(d.ageInfo.reference)+' · '+(d.ageInfo.reliable?'plauzibilă':'nesigură'):' ','Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest.map(({thumbnail,...r})=>r)):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function photoReferenceThumbs(m){const refs=m?.photoDiagnostic?.runware?.referenceManifest||[];return refs.length?`<div><small>Repere Runware efective (miniaturi locale)</small><div style="display:flex;flex-wrap:wrap;gap:8px">${refs.map(r=>`<div><small>Reper ${esc(String(r.index))}</small>${/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(r.thumbnail||'')?`<img style="display:block;width:96px;height:auto" src="${esc(r.thumbnail)}" alt="Reper ${esc(String(r.index))}">`:'<small>Miniatură indisponibilă</small>'}</div>`).join('')}</div></div>`:'';}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
   const requestedBodyChange = !opt.sceneWardrobe && /(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)[^.!?]{0,45}(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)|(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)[^.!?]{0,45}(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)/i.test(String(shot || ''));
@@ -5655,7 +5656,7 @@ async function rwPoll(task, signal){
   }
 }
 async function rwReferenceManifest(refs){
-  return Promise.all(refs.map(async (b,i)=>{let sha256=null;try{sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await b.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('');}catch(e){} return {index:i+1,bytes:b.size,sha256};}));
+  return Promise.all(refs.map(async (b,i)=>{let sha256=null;try{sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await b.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('');}catch(e){} let thumbnail=null;try{const t=await toJpeg(b,160,.65);if(t)thumbnail='data:image/jpeg;base64,'+await b64C(t);}catch(e){} return {index:i+1,bytes:b.size,sha256,thumbnail};}));
 }
 async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
   const f3 = mdl === RW_F3;
@@ -7739,7 +7740,7 @@ function showCharacterAlbum(c, items, initial){
     preview.innerHTML = `<header><button type="button" class="ib" data-prevback aria-label="Înapoi la album">‹</button><b>${heading}</b></header>
       <div class="mediaCanvas">${it.kind === 'video' ? '<video controls playsinline preload="metadata"></video>' : `<img data-k="${esc(it.key)}" alt="Fotografie">`}</div>
       <footer>${it.mid ? '<button type="button" class="btn" data-origin>Vezi mesajul</button>' : ''} <button type="button" class="btn" data-media-save>Salvează</button>
-      ${it.m ? `<details><summary>Detalii</summary><p>${esc(it.kind === 'video' ? (vidInfo(it.m) || 'Fidelitate neverificată.') : [warnLine(it.m), photoDetails62(it.m), it.m.scene].filter(Boolean).join('\n') || 'Fără detalii de generare.')}</p></details>` : ''}</footer>`;
+      ${it.m ? `<details><summary>Detalii</summary><p>${esc(it.kind === 'video' ? (vidInfo(it.m) || 'Fidelitate neverificată.') : [warnLine(it.m), photoDetails62(it.m), it.m.scene].filter(Boolean).join('\n') || 'Fără detalii de generare.')}</p>${photoReferenceThumbs(it.m)}</details>` : ''}</footer>`;
     preview.hidden = false;
     preview.querySelector('[data-prevback]').focus({preventScroll:true});
     if(it.kind === 'photo'){ hydrate(preview); return; }
@@ -9785,7 +9786,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
   let inner, cls = me ? 'me' : 'ai';
   if(m.pendingImg){ const stg = live && live.ch === chat && live.stage || {t:'✨ Se pregătește', p:8, pv:0}, pcx = duoOn(cur) && m.who != null ? duoChar(cur, m.who) || cur : cur;   // 14.3
     inner = `<div class="picload">${pcx.photo ? `<img class="plbg" data-k="${esc(photoNow(pcx))}" alt="">` : ''}<div class="plgrain"></div><div class="plin"><span class="shut"><i></i></span><b>${esc(m.duoBoth ? duoNm(cur, 0) + ' și ' + duoNm(cur, 1) + ' îți fac' : pcx.name + ' îți face')} o poză</b><small>${esc(whereIn(chat.where) || 'se aranjează…')}</small><span class="plst">${esc(stg.t)}</span><span class="plbar"><i style="width:${stg.pv || 0}%"></i></span><span class="plpct">${Math.floor(stg.pv || 0)}%</span></div></div>`; cls += ' picm'; }
-  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><details><summary>Diagnostic complet</summary><p style="white-space:pre-wrap">${esc(photoDetails62(m))}</p></details><button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
+  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><details><summary>Diagnostic complet</summary><p style="white-space:pre-wrap">${esc(photoDetails62(m))}</p>${photoReferenceThumbs(m)}</details><button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
   else if(m.img && !me){
     cls += ' picm';
     const fresh = !devDone.has(m.img) && m.ts && Date.now() - m.ts < 3 * 60e3;   // poza abia sosită „se developează”
@@ -12462,9 +12463,10 @@ async function askPhoto0(spont, target, mode, opt = {}){
       ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,diagnosticOut:studioDiagnostic,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
     const ageDiag = {...studioDiagnostic,version:APP_VER,status:'acceptată automat',age:canonicalPhotoAge(c),ageDelta:R.lk?.age??null,ageInfo:R.lk?.ageInfo??null,ageSource:photoAgeSource(c),face:R.fd??null,faceLimit:idMax(c),body:R.bd??null,bodyLimit:bodyGate(c),runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,reference:studioDiagnostic.reference || 'corp neverificat',visualStatus:studioDiagnostic.visualStatus === 'evaluat' || R.check ? 'evaluat' : studioDiagnostic.visualStatus && studioDiagnostic.visualStatus !== 'neapelat' ? studioDiagnostic.visualStatus : S.imgCheck === 'off' ? 'dezactivat' : !aiReady() ? 'API vizual Anthropic indisponibil' : 'neapelat pentru acest cadru',calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
     if(!together && !duoBoth && !peopleIn && c.photo && ageReviewNeeded(R)){
-      ageDiag.status=R.lk?.ageInfo?.reliable===false?'nepublicată — estimare vârstă incertă':'nepublicată — vârstă aparentă';
-      throw Object.assign(new Error(R.lk?.ageInfo?.reliable===false?'Poza a rămas nepublicată: estimarea vârstei este nesigură. Verifică manual fotografia.':'Poza a rămas nepublicată: vârsta aparentă diferă. Verifică manual fotografia.'),{photoKind:'local',photoDiagnostic:ageDiag,reviewBlob:R.blob});
+      ageDiag.status='nepublicată — vârstă aparentă';
+      throw Object.assign(new Error('Poza a rămas nepublicată: vârsta aparentă diferă. Verifică manual fotografia.'),{photoKind:'local',photoDiagnostic:ageDiag,reviewBlob:R.blob});
     }
+    if(R.lk?.ageInfo?.reliable===false){ ageDiag.status='acceptată automat — estimare vârstă nesigură (avertisment)'; R.lookWarn=[...(R.lookWarn||[]),'estimare vârstă nesigură']; }
     m.photoDiagnostic=ageDiag;
     if(verifyIdentity) tm.s.verificare = performance.now() - tVerify;
     if(bodyNotice) R.lookWarn = [...(R.lookWarn || []),bodyNotice];
