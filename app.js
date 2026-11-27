@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.1';
+const APP_VER = '16.0.7.2';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -982,6 +982,7 @@ async function streamOnce(sys, msgs, {max = 700, signal, onText, cid, aux, meta,
     groupSession.stats.context={system:giBytes(payload.system),history:giBytes(payload.messages),blocks:payload.system.map(b=>giBytes(b.text)),model,max,cache:!!conv};
   }
   if(groupSession) giThinking(payload);
+  if(tag==='pozeai') payload.thinking={type:'disabled'};
   const reservation=groupSession?geReserve(groupSession,payload.system,payload.messages,max,model,!!conv):0;
   if(groupSession) groupSession.stats.attempted=(groupSession.stats.attempted||0)+1;
   let res; try{ res = await fetch(apiUrl('anthropic', '/v1/messages'), {method:'POST', signal, headers:apiHeaders('anthropic', {
@@ -1706,7 +1707,7 @@ function framingOf(shot){
     if(/full[- ]?body|head to (toe|feet)|whole body|wide shot|from the doorway|from across the room|from afar|walking|dancing/.test(t)) return {k:'full', pov:true, p:'Full-body photo from the point of view of the person who is with her in the room, seen from where he is, at eye level: her entire body visible from head to toe, the room around clearly visible; she is not holding a phone, no selfie arm, no mirror'};
     return {k:'mid', pov:true, p:'Photo from the point of view of the person who is with her, seen from where he is in the scene, at eye level: her body visible from head to thighs, the furniture she is on and the room around clearly visible; she is not holding a phone, no selfie arm, no mirror'};
   }
-  if(/close[- ]?up|headshot|face only|portrait of (her|his) face|prim[- ]plan|selfie de aproape|chest up|head and shoulders/.test(t)) return {k:'close', p:/mirror|oglind/.test(t) ? 'Close-up mirror photo, one reflection' : 'Close-up photo, head and shoulders; for a direct selfie the camera is outside the frame'};
+  if(/close[- ]?up|close selfie|headshot|face only|portrait of (her|his) face|prim[- ]plan|selfie de aproape|chest up|head and shoulders/.test(t)) return {k:'close', p:/mirror|oglind/.test(t) ? 'Close-up mirror photo, one reflection' : 'Close-up photo, head and shoulders; for a direct selfie the camera is outside the frame'};
   // 9.27: stă jos sau e întinsă (canapea, pat, fotoliu, scaun): selfie de aproape, cu locul pe care stă bine vizibil, nu oglindă
   const seated = /\b(sitting|seated|lying|lies|reclining|curled up|on the (sofa|couch|bed|armchair|chair|floor)|in bed)\b/.test(t);
   if(seated && !/propped|timer|tripod|self-timer/.test(t)) return {k:'mid', p:'Direct arm\'s-length selfie from a camera outside the frame, the character sitting or lying exactly as described, framed from the head down to the thighs, the sofa, bed or chair she is on and the room around clearly visible'};
@@ -2429,10 +2430,11 @@ function identityOutfit(c, shot, opt = {}){
 }
 // 16.0.6.7: ordinary photo camera geometry, independent of identity.
 function ordinarySceneGeometry(shot, opt = {}){
-  const text = String(shot || '');
+  let text = String(shot || '');
   if(opt.together || opt.partner || (opt.requestedExposure || exposureMode(text)) !== 'clothed') return text;
   if(text.includes('CAMERA GEOMETRY 16067:')) return text;
   const selfie = /\bselfie\b/i.test(text), mirror = /\bmirror\b|oglind[ăa]/i.test(text); 
+  if(selfie && !mirror) text=text.replace(/\bin both hands\b|\bwith both hands\b/gi,'in one hand');
   const camera = selfie && !mirror ? 'Direct front-camera viewpoint; the capturing phone is outside the frame. One arm holds the camera outside the frame; only the other hand may hold a cup or other object. Never show two hands holding an object plus a camera arm. No mirror or second camera viewpoint.' : selfie && mirror ? 'Mirror selfie: one consistent reflection and one phone held naturally; no duplicated reflected limbs.' : 'One coherent camera viewpoint.';
   return 'CAMERA PRIORITY: ' + camera + ' Scene: ' + text + ' CAMERA GEOMETRY 16067: ' + camera + ' Natural human anatomy: two arms and two hands per person, five fingers per hand when fully visible; respect occlusion and cropping. Keep each requested object in a physically consistent position; do not duplicate it accidentally.';
 }
@@ -5132,7 +5134,7 @@ async function checkPhoto(c, blob, shot, signal, together, asked, opt = {}){
     catch(e){
       if(e.name==='AbortError') throw e;
       attempts.push({...meta,error:String(e.message||e).slice(0,160)});
-      if(i===1 || !/json|răspuns/i.test(String(e.message))){ e.visualAttempts=attempts; throw e; }
+      if(i===1 || !/json|răspuns|max_tokens|thinking/i.test(String(e.message))){ e.visualAttempts=attempts; throw e; }
     }
   }
 }
@@ -5166,8 +5168,9 @@ ${fb ? '- "bust": compare visible bust volume and projection relative to shoulde
 - "asked": the user explicitly asked for these details: ${asked.map(a => '"' + a + '"').join(', ')}. 10 = every one is clearly visible in image 2, 0 = none; list the ones that are missing or wrong in "missing".` : ''}${must.length ? `
 - "must": this character's mandatory traits, numbered: ${must.map((x, i) => (i + 1) + '. ' + x.en).join('; ')}. Give a list with one answer per trait, in order: true = clearly matches in image 2; false = that part is visible in image 2 and it does NOT match; null = that part is not visible or too small to judge. Judge each one on its own, strictly, ignoring the light of the scene.` : ''}
 "fix": if face is below 8 or scene below 6 or framing below 5 or body below 7 or hair below 6${marks.length ? ' or marks below 6' : ''}${asked && asked.length ? ' or asked below 8' : ''}, give ONE short concrete English correction prioritizing identity first (face, then body: say exactly what differs, e.g. "fuller bust and wider hips as in the reference"), then hair${asked && asked.length ? ', then the missing requested details' : ''}, then scene; otherwise "".
-JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown","skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`}], {max:Math.min(1200, 650 + must.length * 12), signal, cid:c.id, aux:!opt.visualRetry, meta, tag:'pozeai'});
+JSON: {"face":0,"scene":0,"framing":0,"body":0,${fb ? '"bust":null,' : ''}"hair":0,"hands":0,"limbIntegrity":"unknown","skin":0,${marks.length ? '"marks":0,' : ''}${asked && asked.length ? '"asked":0,"missing":[],' : ''}${must.length ? '"must":[' + must.map(() => 'null').join(',') + '],' : ''}"fix":""}`}], {max:opt.visualRetry ? 4096 : 2048, signal, cid:c.id, aux:!opt.visualRetry, meta, tag:'pozeai'});
   meta.textLength=String(out||'').length;
+  if(meta.stop==='max_tokens') throw new Error('Evaluator: max_tokens — răspuns incomplet');
   const j = parseVisualResult(out), n = k => visualScore(j[k]);
   if(n('face') == null || n('scene') == null || n('framing') == null) throw new Error('Răspuns vizual fără scoruri obligatorii valide.');
   const r = {face:n('face'), scene:n('scene'), framing:n('framing'), fix:String(j.fix || '').slice(0, 300)};
@@ -9866,7 +9869,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
   let inner, cls = me ? 'me' : 'ai';
   if(m.pendingImg){ const stg = live && live.ch === chat && live.stage || {t:'✨ Se pregătește', p:8, pv:0}, pcx = duoOn(cur) && m.who != null ? duoChar(cur, m.who) || cur : cur;   // 14.3
     inner = `<div class="picload">${pcx.photo ? `<img class="plbg" data-k="${esc(photoNow(pcx))}" alt="">` : ''}<div class="plgrain"></div><div class="plin"><span class="shut"><i></i></span><b>${esc(m.duoBoth ? duoNm(cur, 0) + ' și ' + duoNm(cur, 1) + ' îți fac' : pcx.name + ' îți face')} o poză</b><small>${esc(whereIn(chat.where) || 'se aranjează…')}</small><span class="plst">${esc(stg.t)}</span><span class="plbar"><i style="width:${stg.pv || 0}%"></i></span><span class="plpct">${Math.floor(stg.pv || 0)}%</span></div></div>`; cls += ' picm'; }
-  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><details><summary>Diagnostic complet</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-width:100%">${esc(photoDetails62(m))}</p>${photoReferenceThumbs(m)}</details><button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
+  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><details><summary>Diagnostic complet</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-width:100%">${esc(photoDetails62(m))}</p>${photoReferenceThumbs(m)}</details><button class="btn sm" data-review-reeval>Reevaluează fotografia</button> <button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
   else if(m.img && !me){
     cls += ' picm';
     const fresh = !devDone.has(m.img) && m.ts && Date.now() - m.ts < 3 * 60e3;   // poza abia sosită „se developează”
@@ -18545,6 +18548,17 @@ function bind(){
     if(e.target.closest('.hero')){ charProfile(cur.id); return; }
     const w = e.target.closest('.mw'); if(!w) return;
     const i = +w.dataset.i, m = chat.msgs[i];
+    if(e.target.closest('[data-review-reeval]')){
+      if(busy || !m?.reviewImg || m.errKind!=='local') return;
+      const ch=chat,c=cur,btn=e.target.closest('[data-review-reeval]');
+      if(m._reevaluating) return; m._reevaluating=true; btn.disabled=true;
+      try{ const blob=await DB.get(m.reviewImg); if(!blob) throw Error('Fotografia nu mai este disponibilă.');
+        const r=await checkPhoto(c,blob,m.reviewScene||'',undefined,false,[]);
+        m.photoDiagnostic={...m.photoDiagnostic,version:APP_VER,visualAttempts:r.visualAttempts,visualStatus:'evaluat din nou — verificare manuală',visualError:'',visualFace:r.face,visualBody:r.body,visualBust:r.bust,visualHands:r.hands,visualFraming:r.framing,visualLimbIntegrity:r.limbIntegrity};
+        m.err='Reevaluare finalizată: față '+r.face+'/10, scenă '+r.scene+'/10, încadrare '+r.framing+'/10. Fotografia rămâne nepublicată până la decizia manuală.';
+      }catch(err){m.photoDiagnostic={...m.photoDiagnostic,version:APP_VER,visualStatus:'reevaluare eșuată',visualError:String(err.message||err),visualAttempts:err.visualAttempts||[]}; m.err='Reevaluare eșuată: '+String(err.message||err);}
+      finally{delete m._reevaluating;btn.disabled=false;await saveChat(c,ch);if(chat===ch)renderMsgs();} return;
+    }
     if(e.target.closest('[data-review-accept],[data-review-delete]')){ if(!busy && m?.reviewImg && m.errKind==='local'){ const ch=chat,c=cur; const accept=!!e.target.closest('[data-review-accept]'); if(accept && !confirm('Publici manual fotografia? Identitatea nu a fost confirmată automat.')) return; const k=m.reviewImg; if(accept){ m.img=k; m.scene=m.reviewScene; m.manualIdentity=true; if(m.photoDiagnostic)m.photoDiagnostic.status='acceptată manual — identitate neconfirmată'; delete m.err; delete m.errKind; } else await delImg(k).catch(()=>{}); delete m.reviewImg; delete m.reviewScene; await saveChat(c,ch); if(chat===ch) renderMsgs(); } return; }
     if(e.target.closest('[data-regen]')){ if(!busy){ if(m.eco && chat){ chat.ecoCool = Date.now(); } reply(m); } return; }   // 9.60: ai refăcut un răspuns Haiku → filtrul devine mai prudent aici   // 8.19: o singură variantă nouă; „🎰 +2” doar dacă mai vrei
     if(e.target.closest('[data-more3]')){ if(!busy) reply(m, {three:true, keep:true}); return; }
