@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.7.14';
+const APP_VER = '16.0.7.15';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -2395,7 +2395,7 @@ function clearFaceSelfie(shot){
 }
 function closeScenePrompt(c, shot, fr, asked, fix, st){
   const age=canonicalPhotoAge(c);
-  return [ 'Image 1 is the canonical face reference. Preserve its facial geometry, skin texture, hair color and distinguishing marks.'+(age==null?'':` The adult character is ${age} years old.`), fr.p, asked.length?'Required: '+asked.join('; '):'', shot, clearFaceSelfie(shot), fix?'Correct only these defects: '+fix:'', STIL_TAG[st]].filter(Boolean).join('. ');
+  return [ 'Image 1 is the canonical face reference. Preserve its facial geometry, skin texture, hair color and distinguishing marks.'+(age==null?'':` The adult character is ${age} years old.`), fr.p, asked.length?'Required: '+asked.join('; '):'', shot, viAngleInstruction(shot), 'Preserve eyewear only if present in the canonical reference or explicitly requested. Natural ear size and neck proportions; no duplicate facial features.', clearFaceSelfie(shot), fix?'Correct only these defects: '+fix:'', STIL_TAG[st]].filter(Boolean).join('. ');
 }
 async function creatorScene(c, shot, signal, fix, opt, full, id, fr){
   const st = c.stil || 'photo', model = S.wkChat || (S.wkModel === 'eco' ? 'ancorat' : S.wkModel);
@@ -2805,14 +2805,27 @@ function viApproved(c, shot){
 }
 function viPose(lm){const y=yawOfLm(lm);return Number.isFinite(y)?{yaw:y,role:Math.abs(y)>=.55?'side':Math.abs(y)>=.22?'three':'front'}:{yaw:null,role:'unknown'};}
 function viPoseCompatible(a,b){return a.role!=='unknown' && b.role!=='unknown' && a.role===b.role && Math.abs(a.yaw-b.yaw)<=.25;}
+// Scan only canonical and explicitly approved references; never promote generated candidates.
+async function viScanAngles(c){
+  const keys=[...new Set([c.photo,...(c.visualIdentity?.refs||[]).filter(r=>r.approved && r.role!=='body').map(r=>r.key)].filter(Boolean))];
+  const out=[];
+  for(const key of keys){const blob=await DB.get(key).catch(()=>null);if(!blob)continue;
+    const fs=await faceDescs(blob).catch(()=>[]);if(fs.length!==1)continue;
+    const pose=viPose(fs[0].lm);if(pose.role!=='unknown')out.push({key,pose,face:fs[0]});
+  }return out;
+}
+function viExplicitAngle(shot){const t=String(shot||'').toLowerCase();
+  if(/strict side profile|side profile|profile view|90 degrees|profil lateral|din profil/.test(t))return 'side';
+  if(/three[- ]quarter|trei sferturi|40 degrees|45 degrees/.test(t))return 'three';
+  return null;
+}
+function viAngleInstruction(shot){const role=viExplicitAngle(shot);return role==='side'?'Strict lateral head profile: one eye visible, nose and lips in silhouette; not a three-quarter view.':role==='three'?'Three-quarter head view, both eyes visible, far cheek foreshortened; not a frontal or full side view.':'';}
 async function viPortraitAngle(c,shot){
-  if(viSceneRole(shot)==='front')return null;
-  for(const r of viApproved(c,shot).filter(r=>viRoleFamily(r.role)===viSceneRole(shot))){
+  const role=viExplicitAngle(shot)||viSceneRole(shot);if(role==='front')return null;
+  for(const r of (await viScanAngles(c)).filter(r=>r.key!==c.photo && r.pose.role===role)){
     const b=await DB.get(r.key).catch(()=>null);if(!b)continue;
-    const fs=await faceDescs(b).catch(()=>[]);if(fs.length!==1)continue;
-    if(viPose(fs[0].lm).role!==viRoleFamily(r.role))continue;
     const img=await refCropUp(r.key,(c.refBoxes||{})[r.key]||await faceBoxOf(b)).catch(()=>null);
-    if(img)return {img,name:'approved angle',txt:'an explicitly approved reference of the same fictional character at a similar angle. Use facial geometry only, not scene or clothing.',lbl:'reper aprobat '+VI_ROLES[r.role]};
+    if(img)return {img,name:'approved angle',txt:'an explicitly approved reference of the same fictional character at a similar angle. Use facial geometry only, not scene or clothing.',lbl:'reper aprobat '+VI_ROLES[role]};
   }return null;
 }
 function viBodyKeys(c){return [...new Set([c.photoFull,...(c.visualIdentity?.refs||[]).filter(r=>r.approved&&r.role==='body').map(r=>r.key)].filter(Boolean))];}
@@ -4831,12 +4844,11 @@ async function idDistance(c, blob){
   let poseRefs=0;
   if(got.length===1 && pose.role!=='unknown' && pose.role!=='front'){
     const g=got[0];
-    for(const r of viApproved(c, '').filter(r=>viRoleFamily(r.role)===pose.role)){
-      const b=await DB.get(r.key).catch(()=>null);if(!b)continue;
-      const fs=await faceDescs(b).catch(()=>[]);if(fs.length!==1 || !viPoseCompatible(pose,viPose(fs[0].lm)))continue;
-      const h=fs[0]; if(g.d.length!==h.d.length || (g.j||'f')!==(h.j||'f'))continue;
+    for(const r of await viScanAngles(c)){
+      if(!viPoseCompatible(pose,r.pose))continue;
+      const h=r.face; if(g.d.length!==h.d.length || (g.j||'f')!==(h.j||'f'))continue;
       poseRefs++;const d=fdist(g.d,h.d);
-      if(Number.isFinite(d)&&(best==null||d<best)){best=d;via='reper aprobat '+VI_ROLES[r.role];}
+      if(Number.isFinite(d)&&(best==null||d<best)){best=d;via='reper aprobat '+VI_ROLES[r.pose.role];}
     }
   }
   return {d:best == null ? null : Math.round(best * 1000) / 1000, n:got.length, via, pose, poseRefs, j:got[0]?.j || 'f'};
@@ -5282,10 +5294,10 @@ async function checkPhotoOnce(c, blob, shot, signal, together, asked, opt = {}){
   const meta=opt.visualMeta||{};
   const anatomyRequired = !together && !opt.partner && (opt.requestedExposure || exposureMode(shot)) === 'clothed';
   const anatomyPrompt = anatomyRequired ? `Independent anatomy audit of image 2 only. Camera mode: ${photoCameraMode(shot)}. Count visible arms (including partial camera arm), hands, phones and hands holding non-camera objects. Trace every hand to its arm; count disconnected hands too. A direct selfie has no visible phone and at most one object-holding hand. Do not let aesthetic quality override anatomy. A forbidden prop or wrong framing is request noncompliance, not a camera conflict. One camera arm and one object-holding hand are physically compatible. Report anatomy: {"arms":null,"hands":null,"visiblePhones":null,"objectHands":null,"extraLimbs":null,"cameraConflict":null,"evidence":""}. Counts are integers or null if uncertain; flags true/false/null. Evidence briefly describes actual visible geometry. For a tight facial portrait with no visible limbs, report arms:0, hands:0, extraLimbs:false if no extra limbs are visible; do not invent hidden anatomy.` : '';
-  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Judge requested pose and objects as part of scene. ${asked?.length ? `Also score asked (0–10); absence requirements pass when forbidden items are absent. List only unmet requested details: ${asked.join("; ")}. Include asked and missing keys.` : ""} Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
+  const compact = `Compare image 2 with reference image 1${fb?' and body reference image 3':''}. Requested scene: ${cleanPhotoScene(shot,{asked})}. Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Score face, scene, framing from 0 to 10. Check camera viewpoint, visible phone, mirror, extra arms and hands. Optional scores may be null. Judge requested pose and objects as part of scene. For explicit side profile, a three-quarter view is not compliant. Check visible ear size, neck proportions and duplicate facial features; do not infer defects in hidden areas. Unrequested eyewear absent from reference is identity drift. ${asked?.length ? `Also score asked (0–10); absence requirements pass when forbidden items are absent. List only unmet requested details: ${asked.join("; ")}. Include asked and missing keys.` : ""} Return only JSON: {"face":0,"scene":0,"framing":0,"body":null,"hair":null,"hands":null,"limbIntegrity":"unknown","fix":""}. Use bad for definite extra limbs, ok for coherent anatomy, unknown if obscured.`;
   const out = await stream(opt.visualRetry ? 'Return one complete JSON object only. No markdown. Required numeric keys: face, scene, framing. Use null for unknown optional scores.' : 'You are a strict photo checker. Answer with JSON only.', [{role:'user', images:imgs, text:(opt.visualRetry ? compact :
 `${fb ? 'Image 3 is the same character\'s full-body reference: it defines the exact body (build, weight, bust, waist, belly, hips, arms, legs). ' : ''}Image 1 is the character's profile reference. Image 2 must depict that exact same individual in this scene: "${cleanPhotoScene(shot,{asked})}". Required framing: ${framingOf(cleanPhotoScene(shot,{asked})).p}. Identity is more important than artistic variation. Compare facial geometry, eye spacing, nose, lips, jaw, skin tone, hairline and hairstyle; if the body is visible in both images, also compare overall build and proportions. Do not penalize legitimate changes in clothing, pose, expression, lighting, camera angle or location when those follow the scene description.${together ? ' Image 2 must show exactly two people together in one natural photo (not a collage or split screen); score the character from image 1 for identity.' : ''}
-Score strictly from 0 to 10:
+Check visible ear size, neck proportions and duplicate facial features; do not infer defects in hidden areas. Unrequested eyewear absent from reference is identity drift. For explicit side profile, a three-quarter view is not compliant. Score strictly from 0 to 10:
 - "face": is this unmistakably the same person, not merely a similar-looking person? 10 = strong match, 5 = noticeable identity drift, 0 = different person.
 - "scene": does the generated photo match the requested place, activity, clothing and pose?
 - "framing": does the camera framing match the requested selfie / mirror / full-body / close-up view?
@@ -5525,6 +5537,18 @@ async function boundedScene(c, shot, signal, opt){
   result.fd ??= (await localFace(result.blob, c)).d;
   const measureBody = async blob => bodyMatch(c, await measuredBody(blob).catch(() => null), await photoBodySigs(c,opt).catch(() => [])).catch(() => null);
   if(c.photoFull && framingOf(shot).k !== 'close' && result.bd == null) result.bd = await measureBody(result.blob);
+  const requestedAngle=viExplicitAngle(shot);
+  if(requestedAngle && framingOf(shot).k==='close' && exposureMode(shot)==='clothed' && fixBudget()){
+    const measured=await localFace(result.blob,c);
+    if(measured.pose?.role && measured.pose.role!=='unknown' && measured.pose.role!==requestedAngle){
+      try{const candidate=await scenePhoto(c,shot,signal,[corrections,viAngleInstruction(shot)].filter(Boolean).join('. '),{...mode,n:1,multi:0});
+        addUsage(c.id,imgPrice(),'img',null,opt.tag||'poze');
+        const m=await localFace(candidate.blob,c);
+        if(m.pose?.role===requestedAngle && m.d!=null && m.d<=idMax(c))return {...candidate,fd:m.d,bounded:true,retried:true};
+      }catch(e){if(stopPhotoRetry(e))throw e;}
+      return result; // no second paid correction for the same angle failure
+    }
+  }
   const fixFace = result.fd != null && result.fd > idMax(c);
   const fixBody = !opt.usePortraitBody && result.bd != null && result.bd > bodyGate(c);
   if(!fixBudget() || (!fixFace && !fixBody)) return result;
