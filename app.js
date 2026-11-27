@@ -1,5 +1,5 @@
 window.__taifas = true;   // 8.20.1: semn pentru index.html că app.js s-a încărcat
-const APP_VER = '16.0.6.2';
+const APP_VER = '16.0.6.3';
 
 /* ───────── utilitare ───────── */
 const $ = s => document.querySelector(s);
@@ -906,7 +906,7 @@ function unpState(gc,ms,now=Date.now()){
  return ms.map(c=>{const w=world?.rows.find(r=>r.id===c.id);return {id:c.id,name:c.name,activity:w?.activity||'necunoscut',availability:w?.availability??null,mood:emRead(gc,c.id,now),commitments:unpCommitments(gc,c,now),pending:social172Pending(gc,c,now).filter(p=>ms.some(m=>m.id===p.from)).map(p=>({from:ms.find(m=>m.id===(p.from===c.id?p.to:p.from))?.name||'—',category:p.category,check:unpConflict(gc,ms,p,now)}))};});
 }
 function unpContext(gc,c,ms){const row=unpState(gc,ms).find(r=>r.id===c.id);if(!row)return '';return social171Context(gc,c,ms)+' Recent elapsed simulated social slots (not proof of attendance): '+(gc.living15?.journal||[]).filter(e=>e.from===c.id||e.to===c.id).slice(-2).map(e=>e.category+' '+new Date(e.ts).toLocaleDateString('ro-RO')).join('; ')+'. Unified presence (local estimates, not facts): '+row.pending.slice(-2).map(p=>p.from+' / '+p.check.state).join('; ')+'. Upcoming agreed approximate slots: '+row.commitments.slice(0,3).map(p=>p.category+' '+new Date(p.window.start).toLocaleString('ro-RO')).join('; ')+'. If an invitation conflicts with a plan, suggest another time. Unknown schedule is not a confirmed reservation. Never invent agreement or physical presence. If a topic is exhausted, consider memories, news from the village, personal hopes or leisure, without inventing confirmed events.';}
-function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.6.2</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
+function living15InspectorHtml(gc,members){const ms=[...new Map(members.map(c=>[c.id,c])).values()];return `<h4>Living Characters Inspector · 16.0.6.3</h4><div class="pad"><p>Stare locală simulată; intervalele sunt orientative, nu rezervări.</p>${[...new Map(unpState(gc,ms).map(r=>[r.id,r])).values()].map(r=>`<p><b>${esc(r.name)}</b><br>${esc(r.activity)} · disponibilitate ${r.availability??'—'}<br>${esc(Object.entries(r.mood).map(([k,v])=>({joy:'Bucurie',energy:'Energie',concern:'Grijă',tension:'Tensiune',warmth:'Căldură'}[k]||k)+': '+v).join(' · '))}<br>Angajamente cu interval orientativ: ${r.commitments.length}${r.commitments.map(p=>`<br>${esc(p.category)} · ${esc(new Date(p.window.start).toLocaleString('ro-RO'))}`).join('')}<br>Invitații în așteptare: ${r.pending.length}${r.pending.map(p=>`<br>${esc(p.from)} · ${esc(p.category)} · ${esc(p.check.reason)}`).join('')}</p>`).join('')}<h4>Continuitate socială simulată</h4>${[...new Map((gc.living15?.journal||[]).map(e=>[e.id,e])).values()].slice(-8).reverse().map(e=>`<p>${esc(ms.find(c=>c.id===e.from)?.name||'—')} → ${esc(ms.find(c=>c.id===e.to)?.name||'—')} · ${esc(e.category)} · ${esc(e.status)} · ${esc(new Date(e.ts).toLocaleString('ro-RO'))}</p>`).join('')||'Niciun interval încheiat.'}<h4>Subiect repetat</h4><p>${esc(social172Topic(gc)||'—')}</p><h4>Memorie socială</h4><p>${(gc.social171?.items||[]).length} inițiative · ${(gc.social17?.events||[]).length} observații</p></div>`;}
 // 15.1: derived, bounded group-only behavioral tendencies; no mutation of canon.
 function deep151Profile(gc,c,now=Date.now()){
  const rows=(gc.social17?.events||[]).filter(e=>e.from===c.id&&Number.isFinite(e.ts)&&e.ts<=now&&now-e.ts<=30*86400000);
@@ -1425,7 +1425,7 @@ const nineFits = () => rwFor('ancorat') || !Number.isFinite(capLeft()) || capLef
 const sceneModel = (opt = {}) => { const m = isAuto(opt) && S.autoModel === 'eco' ? 'eco' : (S.wkChat || 'eco'); return m === 'ancorat' && S.imgProv === 'worker' && !nineFits() ? 'eco' : m; };
 const BUST_FIDELITY = 'Preserve the established bust volume, projection and width relative to this character’s ribcage, shoulders and waist, including under the requested clothes. A prominent bust stays equally prominent. Let the garment fit the same body naturally. Do not shrink, average out, flatten or exaggerate the reference proportions.';
 const CHAT_PHOTO_CONTINUITY = 'The reference portrait fixes facial identity, apparent age, hair and distinguishing marks. The body reference fixes the same build, proportions and silhouette with or without clothing. Take clothing and coverage only from the current scene. Keep lower-body clothing for a topless scene and preserve the requested framing. Do not transfer the reference outfit or change anatomy when clothing changes.';
-// 16.0.6.2: explicit canonical age, never inferred from unrelated numbers.
+// 16.0.6.3: explicit canonical age, never inferred from unrelated numbers.
 function canonicalPhotoAge(c){
   const fields=[c?.persona,c?.aspect,c?.look,c?.physEn];
   for(const field of fields){
@@ -1435,9 +1435,9 @@ function canonicalPhotoAge(c){
   }
   return null;
 }
-function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. ';}
+function ageIdentityLead(c){const a=canonicalPhotoAge(c);return 'PERMANENT IDENTITY: preserve the reference facial features, natural skin texture, hair color and body proportions. '+(a==null?'Keep the reference apparent age. ':`The character is ${a} years old; preserve this exact adult age appearance without aging or rejuvenating. `)+'Scene, clothing, pose and lighting must not change identity. Preserve the reference hair pigmentation even when wet or backlit; highlights are not a change of hair color. Do not introduce gray or white strands unless present in the canonical reference. ';}
 function ageReviewNeeded(r){return !!(r?.lk?.bad?.includes('age') || r?.lookWarn?.includes('vârsta aparentă') || (Number.isFinite(r?.lk?.age)&&Math.abs(r.lk.age)>=8));}
-function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(n):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.2')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere estimată: '+f(d.ageDelta),'Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
+function photoDetails62(m){const d=m.photoDiagnostic; if(!d)return '';const f=n=>Number.isFinite(n)?String(n):'—';const rw=d.runware;return ['Diagnostic '+(d.version||'16.0.6.3')+' · '+d.status,'Vârstă declarată: '+f(d.age)+' · abatere estimată: '+f(d.ageDelta),'Față: '+f(d.face)+' · prag '+f(d.faceLimit)+' · corp: '+f(d.body)+' · prag '+f(d.bodyLimit),rw?'Runware: '+rw.model+' · '+rw.refs+' repere · '+rw.w+'×'+rw.h:'Metadate Runware indisponibile pentru imaginea finală',rw?.prompt?'Prompt efectiv al cererii: '+rw.prompt:'',rw?.referenceManifest?'Repere efective (ordine, octeți, SHA-256): '+JSON.stringify(rw.referenceManifest):'',rw?.params?'Parametri: '+JSON.stringify(rw.params):'',d.visualStatus?'Comparație vizuală: '+d.visualStatus:'',d.calls?.length?'Cereri Runware din interval (pot include fundal): '+JSON.stringify(d.calls):''].filter(Boolean).join('\n');}
 function idPrompt(c, shot, fr, R, fix, two, opt = {}){
   const phys = physFull(c, R && R.id, shot) ? ` Permanent physical traits (exactly as in the reference): ${physFull(c, R && R.id, shot)}.` : '';
   const requestedBodyChange = !opt.sceneWardrobe && /(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)[^.!?]{0,45}(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)|(?:mai mare|larger|bigger|increase|mai mic|smaller|reduce|mai proeminent|more prominent)[^.!?]{0,45}(?:bust|breasts?|chest|s[âa]nii?|ț[âa]țele)/i.test(String(shot || ''));
@@ -2644,7 +2644,7 @@ function sheetPick(c, shot, n = 2){
   return v.slice().sort((a, b) => (sc[b.ang] || 0) - (sc[a.ang] || 0)).slice(0, n).map(x => ({...x, sc:sc[x.ang] || 0}));   // 10.6 (B): cât se potrivește scenei
 }
 // reperele 3 și 4 (fețe decupate): ale tale întâi, apoi fișa (după scenă), apoi unghiurile automate
-// 16.0.6.2 — explicit visual reference approval; legacy references remain compatible.
+// 16.0.6.3 — explicit visual reference approval; legacy references remain compatible.
 const VI_ROLES = {front:'Frontal',three:'Trei sferturi',side:'Profil lateral',body:'Corp întreg',other:'Alt unghi'};
 function viProfile(c){ return c.visualIdentity ||= {v:1, locked:false, refs:[], permanent:'', variable:''}; }
 function viSceneRole(shot){
@@ -5265,7 +5265,7 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
       diagnostic.visualStatus = !aiReady() ? 'API vizual indisponibil' : /credit|balance|payment/i.test(String(error.message)) ? 'credit API vizual insuficient' : /json|răspuns/i.test(String(error.message)) ? 'răspuns vizual invalid' : 'eroare API vizual / procesare';
       return null;
     });
-    diagnostic.visualStatus ||= checked ? 'evaluat' : 'fără rezultat';
+    if(checked) diagnostic.visualStatus = 'evaluat'; else if(diagnostic.visualStatus === 'neapelat') diagnostic.visualStatus = 'răspuns fără rezultat';
     diagnostic.visualFace = checked?.face ?? null;
     diagnostic.visualBody = checked?.body ?? null;
     diagnostic.visualBust = checked?.bust ?? null;
@@ -5277,8 +5277,9 @@ async function verifyStudioPhoto(c, blob, shot, signal, opt){
     if(bodyVisible && (face == null || bodyUnknown || fixed) && checked?.body != null && checked.body < 8) throw failure('Poza a rămas nepublicată: proporțiile vizibile diferă de reperul de corp.');
     if(fixed && (checked?.asked == null || checked.asked < 8)) throw failure('Poza a rămas nepublicată: ținuta fixă nu a trecut verificarea.');
     if(checked?.bust != null && checked.bust <= 5) return 'Volumul bustului diferă vizibil de reperul de corp.';
-    if(bodyUnknown && checked?.body == null) return 'Corpul nu a putut fi verificat în acest cadru.';
+    if(bodyUnknown && checked?.body == null){ if(opt.diagnosticOut) Object.assign(opt.diagnosticOut,diagnostic); return 'Corpul nu a putut fi verificat în acest cadru.'; }
   }
+  if(opt.diagnosticOut) Object.assign(opt.diagnosticOut,diagnostic);
 }
 function identityRank(c, result, bodyExpected){
   const face = result.fd == null ? 1 : result.fd > idMax(c) ? 3 : 0;
@@ -5464,7 +5465,7 @@ async function genImage(prompt, ref, signal, ref2, opt = {}){
       fd.append('seed', String(Math.floor(Math.random() * 1e9)));
       // 8.3: 2 repere = fața (image) + poza pătrată (image_1); reper unic = poza pătrată (ref2), sau ref dacă nu există
       const one = opt.one || (!st.two && ref2 ? ref2 : ref);
-      if(st.two && ref){ fd.append('image', await toJpeg(ref, opt.px1 || 512, .92), 'ref.jpg'); if(ref2) fd.append('image_1', await toJpeg(ref2, opt.px2 || 512, .92), 'face.jpg');
+      if(st.two && ref){ fd.append('image', await toJpeg(ref, opt.px1 || 768, .94), 'ref.jpg'); if(ref2) fd.append('image_1', await toJpeg(ref2, opt.px2 || 768, .94), 'face.jpg');
         for(const [i, x] of (opt.extra || []).slice(0, 2).entries()) fd.append('image_' + (i + 2), await toJpeg(x, 512, .92), 'ref' + (i + 2) + '.jpg'); }
       else if(one) fd.append('image', await toJpeg(one, st.px || 512, .92), 'ref.jpg');
       const r = await fetch(wkUrl() + '/images/generations?bin=1', {method:'POST', signal, body:fd,
@@ -5528,7 +5529,7 @@ function rwSize(size){ return String(size || S.wkSize || '768x1024').split('x').
 async function rwImage(prompt, ref, ref2, opt, signal, model){
   // aceleași repere ca pe Worker: 2 repere = fața (image) + poza de profil (image_1) + unghiurile; reper unic = poza de profil
   const two = opt.force ? !!opt.force.two && !!ref : !!(ref && ref2), refs = [];
-  if(two){ refs.push(await toJpegC(ref, opt.px1 || 512, .92)); if(ref2) refs.push(await toJpegC(ref2, opt.px2 || 512, .92)); for(const x of (opt.extra || []).slice(0, 2)) refs.push(await toJpegC(x, 512, .92)); }
+  if(two){ refs.push(await toJpegC(ref, opt.px1 || 512, .92)); if(ref2) refs.push(await toJpegC(ref2, opt.px2 || 512, .92)); for(const x of (opt.extra || []).slice(0, 2)) refs.push(await toJpegC(x, 768, .94)); }
   else { const one = opt.one || (ref2 || ref); if(one) refs.push(await toJpegC(one, (opt.force && opt.force.px) || 1024, .92)); }
   const p = two ? prompt : (opt.p1 || prompt.replace(/,? ?image 2 is a close-up of the same face\. ?/i, ' '));
   const [w, h] = rwSize(opt.size);
@@ -5641,6 +5642,9 @@ async function rwPoll(task, signal){
     }
   }
 }
+async function rwReferenceManifest(refs){
+  return Promise.all(refs.map(async (b,i)=>{let sha256=null;try{sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await b.arrayBuffer())),x=>x.toString(16).padStart(2,'0')).join('');}catch(e){} return {index:i+1,bytes:b.size,sha256};}));
+}
 async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
   const f3 = mdl === RW_F3;
   const task = f3 ? {taskType:'imageInference', taskUUID:crypto.randomUUID(), model:RW_F3, positivePrompt:String(prompt).slice(0, 30000),
@@ -5650,6 +5654,7 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
     seed:Math.floor(Math.random() * 4294967295)};   // 9.86: JPG (de ~5 ori mai puțin de descărcat); n rezultate într-o singură cerere
   if(rwDirect() && !window.__rwSync) task.deliveryMethod = 'async';   // 13.4: Runware o face mai departe și când telefonul pune aplicația pe pauză
   if(refs.length) task.inputs = {referenceImages: await Promise.all(refs.slice(0, f3 ? 10 : 4).map(async b => 'data:image/jpeg;base64,' + await b64C(b)))};
+  const referenceManifest = await rwReferenceManifest(refs.slice(0,f3 ? 10 : 4));
   const direct = rwDirect(), url = direct ? RW_URL : wkUrl() + '/proxy/runware/v1';
   const t0 = performance.now();
   const tac = new AbortController(), tT = setTimeout(() => tac.abort(), RW_TO.ms), onAb = () => tac.abort();   // 10.8: limită de timp
@@ -5687,7 +5692,7 @@ async function rwRun1(prompt, refs, w, h, signal, mdl = rwKlein(), n = 1){
   rwFails = 0; rwLastMdl = mdl;   // 13.3: fiecare cerere, cu timpul ei
   rwCalls.push({i:++rwCallN, ms:Math.round(performance.now() - t0), mdl, w, h, n:its.length, refs:refs.length}); if(rwCalls.length > 60) rwCalls.shift();
   const blobs = its.map(x => x.__blob || b64ToBlob(x.imageBase64Data || String(x.imageDataURI).split(',')[1], 'image/jpeg'));
-  for(const b of blobs) rwImageMeta.set(b,{model:mdl,refs:task.inputs?.referenceImages?.length || 0,w,h,prompt:task.positivePrompt,params:{seed:task.seed,numberResults:task.numberResults,outputFormat:task.outputFormat,outputQuality:task.outputQuality,settings:task.settings,acceleration:task.acceleration}});
+  for(const b of blobs) rwImageMeta.set(b,{model:mdl,refs:task.inputs?.referenceImages?.length || 0,w,h,referenceManifest,prompt:task.positivePrompt,params:{seed:task.seed,numberResults:task.numberResults,outputFormat:task.outputFormat,outputQuality:task.outputQuality,settings:task.settings,acceleration:task.acceleration}});
   return n > 1 ? blobs : blobs[0];
 }
 /* 13.3: ce rămâne din total după pașii numiți (salvare, pregătirea reperelor, raportul pozei) */
@@ -9768,7 +9773,7 @@ function msgHTML(m, i, lastAi, anim, g = ''){
   let inner, cls = me ? 'me' : 'ai';
   if(m.pendingImg){ const stg = live && live.ch === chat && live.stage || {t:'✨ Se pregătește', p:8, pv:0}, pcx = duoOn(cur) && m.who != null ? duoChar(cur, m.who) || cur : cur;   // 14.3
     inner = `<div class="picload">${pcx.photo ? `<img class="plbg" data-k="${esc(photoNow(pcx))}" alt="">` : ''}<div class="plgrain"></div><div class="plin"><span class="shut"><i></i></span><b>${esc(m.duoBoth ? duoNm(cur, 0) + ' și ' + duoNm(cur, 1) + ' îți fac' : pcx.name + ' îți face')} o poză</b><small>${esc(whereIn(chat.where) || 'se aranjează…')}</small><span class="plst">${esc(stg.t)}</span><span class="plbar"><i style="width:${stg.pv || 0}%"></i></span><span class="plpct">${Math.floor(stg.pv || 0)}%</span></div></div>`; cls += ' picm'; }
-  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
+  else if(m.err) inner = `<div class="bub err${m.errKind === 'flag' ? ' flag' : ''}">${m.errKind === 'flag' ? '🚫' : '⚠️'} ${esc(m.err)}${m.reviewImg ? `<div><small>Diagnostic local — fotografia nu este publicată.</small><img class="pic" style="max-width:100%;border-radius:8px" data-k="${esc(m.reviewImg)}" alt="Fotografie pentru verificare"><details><summary>Diagnostic complet</summary><p style="white-space:pre-wrap">${esc(photoDetails62(m))}</p></details><button class="btn sm" data-review-accept>Acceptă manual</button> <button class="btn sm" data-review-delete>Șterge fotografia</button></div>` : ''}</div>`;
   else if(m.img && !me){
     cls += ' picm';
     const fresh = !devDone.has(m.img) && m.ts && Date.now() - m.ts < 3 * 60e3;   // poza abia sosită „se developează”
@@ -12440,9 +12445,10 @@ async function askPhoto0(spont, target, mode, opt = {}){
       : await renderPerson(c, shot, busy.signal, {together, asked, miss:opt.miss || '', tm, kind:together ? 'together' : 'chat', ...sceneOpt, spont:!!spont, verifyIdentity:verifyIdentity && !together && !sceneOpt.partner, sceneWardrobe:true,usePortraitBody:chatBodyKey(c) === c.photo});
     const tVerify = performance.now();
     reviewScene = shot;
+    const studioDiagnostic = {};
     const bodyNotice = verifyIdentity
-      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
-    const ageDiag = {version:APP_VER,status:'acceptată automat',age:canonicalPhotoAge(c),ageDelta:R.lk?.age??null,face:R.fd??null,faceLimit:idMax(c),body:R.bd??null,bodyLimit:bodyGate(c),runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,visualStatus:R.check?'rezultat disponibil':'fără rezultat',calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
+      ? await verifyStudioPhoto(c,R.blob,shot,busy.signal,{...sceneOpt,diagnosticOut:studioDiagnostic,allowBodyUnknown:true,sceneWardrobe:true,spontaneous:!!spont,together,usePortraitBody:chatBodyKey(c) === c.photo,compareBust:!together && !sceneOpt.partner && S.imgCheck !== 'off'}) : '';
+    const ageDiag = {...studioDiagnostic,version:APP_VER,status:'acceptată automat',age:canonicalPhotoAge(c),ageDelta:R.lk?.age??null,face:R.fd??null,faceLimit:idMax(c),body:R.bd??null,bodyLimit:bodyGate(c),runware:rwImageMeta.get(R.blob)||R.runwareMeta||null,reference:studioDiagnostic.reference || 'corp neverificat',visualStatus:studioDiagnostic.visualStatus === 'evaluat' || R.check ? 'evaluat' : studioDiagnostic.visualStatus && studioDiagnostic.visualStatus !== 'neapelat' ? studioDiagnostic.visualStatus : S.imgCheck === 'off' ? 'dezactivat' : !aiReady() ? 'API vizual Anthropic indisponibil' : 'neapelat pentru acest cadru',calls:rwCalls.filter(x=>x.i>rwC0).map(({i,...x})=>x)};
     if(!together && !duoBoth && !peopleIn && c.photo && ageReviewNeeded(R)){
       ageDiag.status='nepublicată — vârstă aparentă';
       throw Object.assign(new Error('Poza a rămas nepublicată: vârsta aparentă diferă. Verifică manual fotografia.'),{photoKind:'local',photoDiagnostic:ageDiag,reviewBlob:R.blob});
@@ -12492,7 +12498,7 @@ async function askPhoto0(spont, target, mode, opt = {}){
       const visual = n => Number.isFinite(n) ? n + '/10' : '—';
       const details = d ? '\nDiagnostic foto ' + APP_VER + ' · ' + (d.spontaneous ? 'spontană' : 'la cerere')
         + ' · față ' + fmt(d.face) + ' (prag ' + fmt(d.faceLimit) + ')'
-        + ' · corp ' + fmt(d.body) + ' (prag ' + fmt(d.bodyLimit) + ', ' + d.reference + ')'
+        + ' · corp ' + fmt(d.body) + ' (prag ' + fmt(d.bodyLimit) + ', ' + (d.reference || 'corp neverificat') + ')'
         + (d.runware ? ' · Runware '+d.runware.model+' · '+d.runware.refs+' repere · '+d.runware.w+'×'+d.runware.h : '')
         + (d.visualStatus ? ' · verificare vizuală: '+d.visualStatus : '')
         + (Object.hasOwn(d,'visualFace') ? ' · vizual: față ' + visual(d.visualFace) + ', corp ' + visual(d.visualBody) + ', bust ' + visual(d.visualBust) : ' · fără comparație vizuală') : '';
